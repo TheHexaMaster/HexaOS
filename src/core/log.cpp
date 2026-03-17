@@ -306,6 +306,10 @@ size_t LogHistorySize() {
   return used;
 }
 
+size_t LogHistoryCapacity() {
+  return HX_LOG_HISTORY_BYTES;
+}
+
 size_t LogHistoryCopy(char* out, size_t out_size) {
   if (!out || (out_size == 0)) {
     return 0;

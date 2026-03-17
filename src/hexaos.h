@@ -36,6 +36,7 @@ void LogWarn(const char* fmt, ...);
 void LogError(const char* fmt, ...);
 void LogTagged(HxLogLevel level, const char* tag, const char* fmt, ...);
 size_t LogHistorySize();
+size_t LogHistoryCapacity();
 size_t LogHistoryCopy(char* out, size_t out_size);
 void LogHistoryClear();
 uint32_t LogDroppedLines();

@@ -1,6 +1,8 @@
 #include "hexaos.h"
 #include <esp_system.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 static constexpr size_t HX_CONSOLE_LINE_MAX = 128;
 
@@ -23,6 +25,42 @@ static void ConsoleClearLine() {
   g_console_overflow = false;
 }
 
+static void ConsolePrintLogHistory() {
+  size_t used = LogHistorySize();
+  if (used == 0) {
+    LogSinkWriteLineRaw("log history is empty");
+    ConsolePrompt();
+    return;
+  }
+
+  char* dump = (char*)malloc(used + 1);
+  if (!dump) {
+    LogSinkWriteLineRaw("log history dump failed: out of memory");
+    ConsolePrompt();
+    return;
+  }
+
+  size_t copied = LogHistoryCopy(dump, used + 1);
+  if (copied > 0) {
+    LogSinkWriteRaw(dump);
+  }
+
+  free(dump);
+  ConsolePrompt();
+}
+
+static void ConsolePrintLogStats() {
+  char line[160];
+  snprintf(line, sizeof(line),
+           "log: used=%lu capacity=%lu dropped_lines=%lu dropped_isr=%lu",
+           (unsigned long)LogHistorySize(),
+           (unsigned long)LogHistoryCapacity(),
+           (unsigned long)LogDroppedLines(),
+           (unsigned long)LogDroppedIsr());
+  LogSinkWriteLineRaw(line);
+  ConsolePrompt();
+}
+
 static void ConsoleExecuteCommand(const char* line) {
   if (!line || !line[0]) {
     ConsolePrompt();
@@ -33,6 +71,23 @@ static void ConsoleExecuteCommand(const char* line) {
     LogWarn("CON: soft restart requested");
     delay(100);
     esp_restart();
+    return;
+  }
+
+  if (strcmp(line, "log") == 0) {
+    ConsolePrintLogHistory();
+    return;
+  }
+
+  if (strcmp(line, "logclr") == 0) {
+    LogHistoryClear();
+    LogSinkWriteLineRaw("log history cleared");
+    ConsolePrompt();
+    return;
+  }
+
+  if (strcmp(line, "logstat") == 0) {
+    ConsolePrintLogStats();
     return;
   }
 
@@ -129,7 +184,7 @@ static bool ConsoleInit() {
 
 static void ConsoleStart() {
   LogInfo("CON: start");
-  LogInfo("CON: command available: reboot");
+  LogInfo("CON: commands available: reboot, log, logclr, logstat");
 }
 
 static void ConsoleLoop() {
