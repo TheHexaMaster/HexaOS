@@ -3,7 +3,7 @@
 #include <LittleFS.h>
 
 bool EspLittlefsMount() {
-  if (LittleFS.begin(true)) {
+  if (LittleFS.begin(true, "", 10, "littlefs")) {
     LogInfo("LittleFS mount OK");
     return true;
   }

@@ -27,10 +27,24 @@ void BootPrintBanner();
 void BootPrintResetInfo();
 
 void LogInit();
+void LogSetLevel(HxLogLevel level);
+HxLogLevel LogGetLevel();
 void LogRaw(const char* text);
+void LogDebug(const char* fmt, ...);
 void LogInfo(const char* fmt, ...);
 void LogWarn(const char* fmt, ...);
 void LogError(const char* fmt, ...);
+void LogTagged(HxLogLevel level, const char* tag, const char* fmt, ...);
+size_t LogHistorySize();
+size_t LogHistoryCopy(char* out, size_t out_size);
+void LogHistoryClear();
+uint32_t LogDroppedLines();
+uint32_t LogDroppedIsr();
+
+#define HX_LOGD(tag, fmt, ...) LogTagged(HX_LOG_DEBUG, tag, fmt, ##__VA_ARGS__)
+#define HX_LOGI(tag, fmt, ...) LogTagged(HX_LOG_INFO,  tag, fmt, ##__VA_ARGS__)
+#define HX_LOGW(tag, fmt, ...) LogTagged(HX_LOG_WARN,  tag, fmt, ##__VA_ARGS__)
+#define HX_LOGE(tag, fmt, ...) LogTagged(HX_LOG_ERROR, tag, fmt, ##__VA_ARGS__)
 
 void Panic(const char* reason);
 
