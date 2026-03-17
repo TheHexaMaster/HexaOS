@@ -1,0 +1,79 @@
+#pragma once
+
+#include <Arduino.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdarg.h>
+
+#include "headers/hx_build.h"
+#include "headers/hx_types.h"
+#include "headers/hx_module.h"
+#include "headers/hx_config_keys.h"
+
+struct HxRuntime {
+  bool safeboot;
+  bool config_loaded;
+  bool state_loaded;
+  bool littlefs_mounted;
+  uint32_t uptime_ms;
+  uint32_t boot_count;
+};
+
+extern HxRuntime Hx;
+
+// core
+void BootInit();
+void BootPrintBanner();
+void BootPrintResetInfo();
+
+void LogInit();
+void LogRaw(const char* text);
+void LogInfo(const char* fmt, ...);
+void LogWarn(const char* fmt, ...);
+void LogError(const char* fmt, ...);
+
+void Panic(const char* reason);
+
+// platform
+void EspPrintChipInfo();
+const char* EspResetReasonText(uint32_t reason);
+
+bool EspNvsInit();
+bool EspNvsOpenConfig();
+bool EspNvsOpenState();
+bool EspNvsOpenFactory();
+bool EspLittlefsMount();
+
+// services
+bool FactoryDataInit();
+
+bool ConfigInit();
+bool ConfigLoad();
+bool ConfigSave();
+bool ConfigGetBool(const char* key, bool defval);
+int32_t ConfigGetInt(const char* key, int32_t defval);
+String ConfigGetString(const char* key, const char* defval);
+bool ConfigSetBool(const char* key, bool value);
+bool ConfigSetInt(const char* key, int32_t value);
+bool ConfigSetString(const char* key, const char* value);
+
+bool StateInit();
+bool StateLoad();
+bool StateSave();
+bool StateGetBool(const char* key, bool defval);
+int32_t StateGetInt(const char* key, int32_t defval);
+bool StateSetBool(const char* key, bool value);
+bool StateSetInt(const char* key, int32_t value);
+
+bool FilesInit();
+bool FilesMount();
+bool FilesExists(const char* path);
+String FilesReadText(const char* path);
+bool FilesWriteText(const char* path, const char* text);
+
+// module system
+void ModuleInitAll();
+void ModuleStartAll();
+void ModuleLoopAll();
+void ModuleEvery100ms();
+void ModuleEverySecond();
