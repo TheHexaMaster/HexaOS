@@ -135,8 +135,10 @@ static void LogEmitLine(const char* line) {
   }
 
   if (LogTakeSinkLock()) {
+    ConsoleOnSinkLockedPreWriteLine();
     Serial.println(line);
     LogStoreLine(line);
+    ConsoleOnSinkLockedPostWriteLine();
     LogGiveSinkLock();
     return;
   }
@@ -184,7 +186,9 @@ void LogSinkWriteLineRaw(const char* text) {
   }
 
   if (LogTakeSinkLock()) {
+    ConsoleOnSinkLockedPreWriteLine();
     Serial.println(text);
+    ConsoleOnSinkLockedPostWriteLine();
     LogGiveSinkLock();
   }
 }

@@ -45,11 +45,15 @@ void LogSinkWriteRaw(const char* text);
 void LogSinkWriteChar(char ch);
 void LogSinkWriteLineRaw(const char* text);
 void ConsoleShowPrompt();
+void ConsoleOnSinkLockedPreWriteLine();
+void ConsoleOnSinkLockedPostWriteLine();
 
 #define HX_LOGD(tag, fmt, ...) LogTagged(HX_LOG_DEBUG, tag, fmt, ##__VA_ARGS__)
 #define HX_LOGI(tag, fmt, ...) LogTagged(HX_LOG_INFO,  tag, fmt, ##__VA_ARGS__)
 #define HX_LOGW(tag, fmt, ...) LogTagged(HX_LOG_WARN,  tag, fmt, ##__VA_ARGS__)
 #define HX_LOGE(tag, fmt, ...) LogTagged(HX_LOG_ERROR, tag, fmt, ##__VA_ARGS__)
+
+
 
 void Panic(const char* reason);
 
