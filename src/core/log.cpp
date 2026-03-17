@@ -145,6 +145,50 @@ static void LogEmitLine(const char* line) {
   LogStoreLine(line);
 }
 
+void LogSinkWriteRaw(const char* text) {
+  if (LogIsInIsr()) {
+    LogRecordIsrDrop();
+    return;
+  }
+
+  if (!text) {
+    text = "";
+  }
+
+  if (LogTakeSinkLock()) {
+    Serial.print(text);
+    LogGiveSinkLock();
+  }
+}
+
+void LogSinkWriteChar(char ch) {
+  if (LogIsInIsr()) {
+    LogRecordIsrDrop();
+    return;
+  }
+
+  if (LogTakeSinkLock()) {
+    Serial.write((uint8_t)ch);
+    LogGiveSinkLock();
+  }
+}
+
+void LogSinkWriteLineRaw(const char* text) {
+  if (LogIsInIsr()) {
+    LogRecordIsrDrop();
+    return;
+  }
+
+  if (!text) {
+    text = "";
+  }
+
+  if (LogTakeSinkLock()) {
+    Serial.println(text);
+    LogGiveSinkLock();
+  }
+}
+
 static void LogWriteV(HxLogLevel level, const char* tag, const char* fmt, va_list ap) {
   if (!fmt) {
     return;

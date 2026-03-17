@@ -10,7 +10,11 @@ static bool g_console_overflow = false;
 static bool g_last_was_cr = false;
 
 static void ConsolePrompt() {
-  Serial.print("hx> ");
+  LogSinkWriteRaw("hx> ");
+}
+
+void ConsoleShowPrompt() {
+  ConsolePrompt();
 }
 
 static void ConsoleClearLine() {
@@ -27,7 +31,6 @@ static void ConsoleExecuteCommand(const char* line) {
 
   if (strcmp(line, "reboot") == 0) {
     LogWarn("CON: soft restart requested");
-    Serial.flush();
     delay(100);
     esp_restart();
     return;
@@ -77,14 +80,14 @@ static void ConsoleReadSerial() {
         continue;
       }
 
-      Serial.println();
+      LogSinkWriteRaw("\r\n");
       ConsoleHandleLine();
       continue;
     }
 
     if (ch == '\r') {
       g_last_was_cr = true;
-      Serial.println();
+      LogSinkWriteRaw("\r\n");
       ConsoleHandleLine();
       continue;
     }
@@ -95,7 +98,7 @@ static void ConsoleReadSerial() {
       if (!g_console_overflow && (g_console_len > 0)) {
         g_console_len--;
         g_console_line[g_console_len] = '\0';
-        Serial.print("\b \b");
+        LogSinkWriteRaw("\b \b");
       }
       continue;
     }
@@ -114,7 +117,7 @@ static void ConsoleReadSerial() {
     }
 
     g_console_line[g_console_len++] = (char)ch;
-    Serial.write((char)ch);
+    LogSinkWriteChar((char)ch);
   }
 }
 

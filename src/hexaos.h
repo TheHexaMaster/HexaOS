@@ -40,6 +40,10 @@ size_t LogHistoryCopy(char* out, size_t out_size);
 void LogHistoryClear();
 uint32_t LogDroppedLines();
 uint32_t LogDroppedIsr();
+void LogSinkWriteRaw(const char* text);
+void LogSinkWriteChar(char ch);
+void LogSinkWriteLineRaw(const char* text);
+void ConsoleShowPrompt();
 
 #define HX_LOGD(tag, fmt, ...) LogTagged(HX_LOG_DEBUG, tag, fmt, ##__VA_ARGS__)
 #define HX_LOGI(tag, fmt, ...) LogTagged(HX_LOG_INFO,  tag, fmt, ##__VA_ARGS__)

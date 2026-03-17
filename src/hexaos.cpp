@@ -42,6 +42,7 @@ void setup() {
 
   ModuleInitAll();
   ModuleStartAll();
+  ConsoleShowPrompt();
 }
 
 void loop() {
