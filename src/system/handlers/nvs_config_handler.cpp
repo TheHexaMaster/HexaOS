@@ -208,17 +208,9 @@ static bool ConfigAssignValueFromString(HxConfig* config, const HxConfigKeyDef* 
     case HX_SCHEMA_VALUE_INT32: {
       int32_t parsed = 0;
 
-      if (strcmp(item->key, HX_CFG_LOG_LEVEL) == 0) {
-        HxLogLevel level;
-        if (!ConfigParseLogLevel(value, &level)) {
-          return false;
-        }
-        parsed = (int32_t)level;
-      } else {
         if (!ConfigParseInt32Text(value, item->min_i32, item->max_i32, &parsed)) {
           return false;
         }
-      }
 
       return ConfigAssignInt32Field(config, item, parsed);
     }
@@ -344,51 +336,6 @@ const HxConfigKeyDef* ConfigFindConfigKey(const char* key) {
   return nullptr;
 }
 
-const char* ConfigLogLevelText(HxLogLevel level) {
-  switch (level) {
-    case HX_LOG_ERROR: return "error";
-    case HX_LOG_WARN:  return "warn";
-    case HX_LOG_INFO:  return "info";
-    case HX_LOG_DEBUG: return "debug";
-    default:           return "unknown";
-  }
-}
-
-bool ConfigParseLogLevel(const char* text, HxLogLevel* level) {
-  if (!text || !text[0] || !level) {
-    return false;
-  }
-
-  if ((strcasecmp(text, "error") == 0) || (strcasecmp(text, "err") == 0)) {
-    *level = HX_LOG_ERROR;
-    return true;
-  }
-
-  if ((strcasecmp(text, "warn") == 0) || (strcasecmp(text, "warning") == 0) || (strcasecmp(text, "wrn") == 0)) {
-    *level = HX_LOG_WARN;
-    return true;
-  }
-
-  if ((strcasecmp(text, "info") == 0) || (strcasecmp(text, "inf") == 0)) {
-    *level = HX_LOG_INFO;
-    return true;
-  }
-
-  if ((strcasecmp(text, "debug") == 0) || (strcasecmp(text, "dbg") == 0)) {
-    *level = HX_LOG_DEBUG;
-    return true;
-  }
-
-  char* endptr = nullptr;
-  long raw = strtol(text, &endptr, 10);
-  if (endptr && (*endptr == '\0') && (raw >= (long)HX_LOG_ERROR) && (raw <= (long)HX_LOG_DEBUG)) {
-    *level = (HxLogLevel)raw;
-    return true;
-  }
-
-  return false;
-}
-
 void ConfigResetToDefaults(HxConfig* config) {
   if (!config) {
     return;
@@ -419,11 +366,7 @@ bool ConfigConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out
       return true;
 
     case HX_SCHEMA_VALUE_INT32:
-      if (strcmp(item->key, HX_CFG_LOG_LEVEL) == 0) {
-        snprintf(out, out_size, "%s", ConfigLogLevelText((HxLogLevel)(*static_cast<const int32_t*>(ptr))));
-      } else {
-        snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
-      }
+      snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
       return true;
 
     default:
@@ -453,11 +396,7 @@ bool ConfigConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t o
       return true;
 
     case HX_SCHEMA_VALUE_INT32:
-      if (strcmp(item->key, HX_CFG_LOG_LEVEL) == 0) {
-        snprintf(out, out_size, "%s", ConfigLogLevelText((HxLogLevel)(*static_cast<const int32_t*>(ptr))));
-      } else {
-        snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
-      }
+      snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
       return true;
 
     default:
