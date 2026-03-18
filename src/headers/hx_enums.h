@@ -22,15 +22,13 @@ enum HxLogLevel : uint8_t {
 };
 
 
-// RUNTIME DATA
-
 struct HxRuntime {
-  bool safeboot = false;
-  bool config_loaded = false;
-  bool state_loaded = false;
-  bool littlefs_mounted = false;
-  uint32_t uptime_ms = 0;
-  uint32_t boot_count = 0;
+  bool safeboot;
+  bool config_loaded;
+  bool state_loaded;
+  bool littlefs_mounted;
+  uint32_t uptime_ms;
+  uint32_t boot_count;
 };
 
-inline HxRuntime Hx{};
+extern HxRuntime Hx;
