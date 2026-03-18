@@ -79,15 +79,7 @@ bool StateValueToString(const HxStateKeyDef* item, char* out, size_t out_size) {
     }
 
     case HX_SCHEMA_VALUE_INT32:
-    case HX_SCHEMA_VALUE_LOG_LEVEL: {
-      int32_t value = 0;
-      if (!HxNvsGetInt(HX_NVS_STORE_STATE, item->key, &value)) {
-        return false;
-      }
 
-      snprintf(out, out_size, "%ld", (long)value);
-      return true;
-    }
 
     case HX_SCHEMA_VALUE_STRING: {
       String text;

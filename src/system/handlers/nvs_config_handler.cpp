@@ -13,28 +13,36 @@
 #include "system/adapters/nvs_adapter.h"
 
 #include <limits.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
-static_assert(sizeof(HX_BUILD_DEFAULT_DEVICE_NAME) <= (HX_CONFIG_DEVICE_NAME_MAX + 1),
-              "HX_BUILD_DEFAULT_DEVICE_NAME is too long");
-
 static bool g_config_ready = false;
+
+#define HX_CFG_TYPE_ENUM_STRING HX_SCHEMA_VALUE_STRING
+#define HX_CFG_TYPE_ENUM_BOOL HX_SCHEMA_VALUE_BOOL
+#define HX_CFG_TYPE_ENUM_INT32 HX_SCHEMA_VALUE_INT32
+
+#define HX_CFG_TYPE_ENUM_SELECT_(type_id) HX_CFG_TYPE_ENUM_##type_id
+#define HX_CFG_TYPE_ENUM_SELECT(type_id) HX_CFG_TYPE_ENUM_SELECT_(type_id)
 
 HxConfig HxConfigData = {};
 const HxConfig HxConfigDefaults = {
-  HX_BUILD_DEFAULT_DEVICE_NAME,
-  (HxLogLevel)HX_BUILD_DEFAULT_LOG_LEVEL,
-  (HX_BUILD_DEFAULT_SAFEBOOT_ENABLE != 0)
+#define HX_CONFIG_DEFAULT_ITEM(id, key_text, type_id, field_name, storage_size, max_len_value, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+  default_value,
+
+  HX_CONFIG_SCHEMA(HX_CONFIG_DEFAULT_ITEM)
+
+#undef HX_CONFIG_DEFAULT_ITEM
 };
 
 static const HxConfigKeyDef kHxConfigKeys[] = {
-#define HX_CONFIG_ITEM(id, key_text, type_id, field_name, max_len_value, min_i32_value, max_i32_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_ITEM(id, key_text, type_id, field_name, storage_size, max_len_value, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
   { \
     .key = key_text, \
-    .type = type_id, \
+    .type = HX_CFG_TYPE_ENUM_SELECT(type_id), \
     .config_offset = offsetof(HxConfig, field_name), \
     .value_size = sizeof(((HxConfig*)0)->field_name), \
     .min_i32 = (int32_t)(min_i32_value), \
@@ -49,9 +57,12 @@ static const HxConfigKeyDef kHxConfigKeys[] = {
 #undef HX_CONFIG_ITEM
 };
 
-static bool ConfigLogLevelIsValid(HxLogLevel level) {
-  return (level >= HX_LOG_ERROR) && (level <= HX_LOG_DEBUG);
-}
+#undef HX_CFG_TYPE_ENUM_SELECT
+#undef HX_CFG_TYPE_ENUM_SELECT_
+#undef HX_CFG_TYPE_ENUM_INT32
+#undef HX_CFG_TYPE_ENUM_BOOL
+#undef HX_CFG_TYPE_ENUM_STRING
+
 
 static void* ConfigFieldPtr(HxConfig* config, const HxConfigKeyDef* item) {
   if (!config || !item) {
@@ -156,39 +167,25 @@ static bool ConfigAssignInt32Field(HxConfig* config, const HxConfigKeyDef* item,
     return false;
   }
 
+  if (item->type != HX_SCHEMA_VALUE_INT32) {
+    return false;
+  }
+
   if ((value < item->min_i32) || (value > item->max_i32)) {
     return false;
   }
 
-  if (item->type == HX_SCHEMA_VALUE_INT32) {
-    if (item->value_size != sizeof(int32_t)) {
-      return false;
-    }
-
-    int32_t* field = static_cast<int32_t*>(ConfigFieldPtr(config, item));
-    if (!field) {
-      return false;
-    }
-
-    *field = value;
-    return true;
+  if (item->value_size != sizeof(int32_t)) {
+    return false;
   }
 
-  if (item->type == HX_SCHEMA_VALUE_LOG_LEVEL) {
-    if ((item->value_size != sizeof(HxLogLevel)) || !ConfigLogLevelIsValid((HxLogLevel)value)) {
-      return false;
-    }
-
-    HxLogLevel* field = static_cast<HxLogLevel*>(ConfigFieldPtr(config, item));
-    if (!field) {
-      return false;
-    }
-
-    *field = (HxLogLevel)value;
-    return true;
+  int32_t* field = static_cast<int32_t*>(ConfigFieldPtr(config, item));
+  if (!field) {
+    return false;
   }
 
-  return false;
+  *field = value;
+  return true;
 }
 
 static bool ConfigAssignValueFromString(HxConfig* config, const HxConfigKeyDef* item, const char* value) {
@@ -210,18 +207,20 @@ static bool ConfigAssignValueFromString(HxConfig* config, const HxConfigKeyDef* 
 
     case HX_SCHEMA_VALUE_INT32: {
       int32_t parsed = 0;
-      if (!ConfigParseInt32Text(value, item->min_i32, item->max_i32, &parsed)) {
-        return false;
-      }
-      return ConfigAssignInt32Field(config, item, parsed);
-    }
 
-    case HX_SCHEMA_VALUE_LOG_LEVEL: {
-      HxLogLevel level;
-      if (!ConfigParseLogLevel(value, &level)) {
-        return false;
+      if (strcmp(item->key, HX_CFG_LOG_LEVEL) == 0) {
+        HxLogLevel level;
+        if (!ConfigParseLogLevel(value, &level)) {
+          return false;
+        }
+        parsed = (int32_t)level;
+      } else {
+        if (!ConfigParseInt32Text(value, item->min_i32, item->max_i32, &parsed)) {
+          return false;
+        }
       }
-      return ConfigAssignInt32Field(config, item, (int32_t)level);
+
+      return ConfigAssignInt32Field(config, item, parsed);
     }
 
     default:
@@ -251,8 +250,7 @@ static bool ConfigReadItemFromNvs(const HxConfigKeyDef* item) {
       return ConfigAssignBoolField(&HxConfigData, item, bool_value);
     }
 
-    case HX_SCHEMA_VALUE_INT32:
-    case HX_SCHEMA_VALUE_LOG_LEVEL: {
+    case HX_SCHEMA_VALUE_INT32: {
       int32_t int_value = 0;
       if (!HxNvsGetInt(HX_NVS_STORE_CONFIG, item->key, &int_value)) {
         return true;
@@ -286,9 +284,6 @@ static bool ConfigItemEqualsDefault(const HxConfigKeyDef* item) {
     case HX_SCHEMA_VALUE_INT32:
       return (*static_cast<const int32_t*>(current_ptr) == *static_cast<const int32_t*>(default_ptr));
 
-    case HX_SCHEMA_VALUE_LOG_LEVEL:
-      return (*static_cast<const HxLogLevel*>(current_ptr) == *static_cast<const HxLogLevel*>(default_ptr));
-
     default:
       return false;
   }
@@ -317,9 +312,6 @@ static bool ConfigStoreItemOverride(const HxConfigKeyDef* item) {
 
     case HX_SCHEMA_VALUE_INT32:
       return HxNvsSetInt(HX_NVS_STORE_CONFIG, item->key, *static_cast<const int32_t*>(current_ptr));
-
-    case HX_SCHEMA_VALUE_LOG_LEVEL:
-      return HxNvsSetInt(HX_NVS_STORE_CONFIG, item->key, (int32_t)(*static_cast<const HxLogLevel*>(current_ptr)));
 
     default:
       return false;
@@ -427,11 +419,11 @@ bool ConfigConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out
       return true;
 
     case HX_SCHEMA_VALUE_INT32:
-      snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
-      return true;
-
-    case HX_SCHEMA_VALUE_LOG_LEVEL:
-      snprintf(out, out_size, "%s", ConfigLogLevelText(*static_cast<const HxLogLevel*>(ptr)));
+      if (strcmp(item->key, HX_CFG_LOG_LEVEL) == 0) {
+        snprintf(out, out_size, "%s", ConfigLogLevelText((HxLogLevel)(*static_cast<const int32_t*>(ptr))));
+      } else {
+        snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
+      }
       return true;
 
     default:
@@ -461,11 +453,11 @@ bool ConfigConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t o
       return true;
 
     case HX_SCHEMA_VALUE_INT32:
-      snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
-      return true;
-
-    case HX_SCHEMA_VALUE_LOG_LEVEL:
-      snprintf(out, out_size, "%s", ConfigLogLevelText(*static_cast<const HxLogLevel*>(ptr)));
+      if (strcmp(item->key, HX_CFG_LOG_LEVEL) == 0) {
+        snprintf(out, out_size, "%s", ConfigLogLevelText((HxLogLevel)(*static_cast<const int32_t*>(ptr))));
+      } else {
+        snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
+      }
       return true;
 
     default:
@@ -568,6 +560,6 @@ bool ConfigSave() {
 }
 
 void ConfigApply() {
-  LogSetLevel(HxConfigData.log_level);
+  LogSetLevel((HxLogLevel)HxConfigData.log_level);
   Hx.safeboot = HxConfigData.safeboot_enable;
 }
