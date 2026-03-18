@@ -1,6 +1,9 @@
 /*
-  HexaOS - <short file purpose>
-  Copyright (C) 2026 Martin Macak
+  HexaOS - <filename> 
 
+  Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
+
+  Description 
+  <extented file description and usecase> 
 */

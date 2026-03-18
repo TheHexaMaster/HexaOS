@@ -1,3 +1,14 @@
+/*
+  HexaOS - mod_console.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Interactive serial console module.
+  Implements the HexaOS shell prompt, line editing, command handling and prompt-preserving integration with the logging backend for debugging and service operations.
+*/
+
 #include "hexaos.h"
 
 #include <esp_system.h>

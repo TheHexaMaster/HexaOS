@@ -1,3 +1,15 @@
+/*
+  HexaOS - log.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Central logging backend for HexaOS.
+  Implements formatted log output, log level filtering, in-memory history buffering and synchronized console-safe printing so log lines do not break interactive shell input.
+*/
+
+
 #include "hexaos.h"
 #include <stdio.h>
 #include <string.h>

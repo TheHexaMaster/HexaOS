@@ -1,3 +1,14 @@
+/*
+  HexaOS - hx_module.h
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  HexaOS module interface contract.
+  Declares the lightweight module descriptor used by the core registry so optional subsystems can expose init, loop and timed lifecycle hooks in a uniform way.
+*/
+
 #pragma once
 
 typedef struct {

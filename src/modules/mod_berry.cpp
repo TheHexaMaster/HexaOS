@@ -1,3 +1,14 @@
+/*
+  HexaOS - mod_berry.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Berry scripting module stub.
+  Provides the module shell for future Berry runtime integration and currently reserves the lifecycle entry points needed to attach the scripting subsystem cleanly.
+*/
+
 #include "hexaos.h"
 
 #if HX_ENABLE_MODULE_BERRY

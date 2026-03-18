@@ -1,3 +1,14 @@
+/*
+  HexaOS - boot.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Boot sequence helpers for early system startup.
+  Provides boot banner output, reset reason decoding and other boot-time diagnostics used before the rest of the runtime is fully initialized.
+*/
+
 #include "hexaos.h"
 #include <esp_system.h>
 

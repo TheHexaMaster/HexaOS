@@ -1,3 +1,14 @@
+/*
+  HexaOS - mod_web.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Web service module stub.
+  Defines the lifecycle shell for future HTTP, web UI and remote service integration within the standard HexaOS module model.
+*/
+
 #include "hexaos.h"
 
 #if HX_ENABLE_MODULE_WEB

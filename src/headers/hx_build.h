@@ -1,3 +1,15 @@
+/*
+  HexaOS - hx_build.h
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Build-time system identity and target selection definitions.
+  Contains compile-time constants such as HexaOS name, version and active target platform so the firmware can expose a consistent identity at runtime.
+*/
+
+
 #pragma once
 
 #include "hx_types.h"

@@ -1,3 +1,14 @@
+/*
+  HexaOS - hexaos.h
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Primary public system header for HexaOS.
+  Aggregates common includes, shared runtime structures and the public prototypes used across core, services, platform adapters and modules.
+*/
+
 #pragma once
 
 #include <Arduino.h>

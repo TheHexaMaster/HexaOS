@@ -1,3 +1,14 @@
+/*
+  HexaOS - hx_platform_nvs.h
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Platform abstraction for NVS storage access.
+  Declares the low-level read, write and commit helpers used by higher-level services to persist configuration, runtime state and factory data.
+*/
+
 #pragma once
 
 #include <Arduino.h>

@@ -1,3 +1,14 @@
+/*
+  HexaOS - state.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Runtime state persistence service.
+  Maintains mutable non-configuration system state in NVS, including boot counters and other values that must survive reboots but are not treated as setup.
+*/
+
 #include "hexaos.h"
 #include "headers/hx_platform_nvs.h"
 

@@ -1,3 +1,14 @@
+/*
+  HexaOS - module_registry.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Static module registry and lifecycle dispatcher.
+  Owns the ordered list of compiled HexaOS modules and fans out init, start, loop and periodic callbacks to each registered module.
+*/
+
 #include "hexaos.h"
 
 static const HxModule* kModules[] = {

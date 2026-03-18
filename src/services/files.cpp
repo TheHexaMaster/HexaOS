@@ -1,3 +1,14 @@
+/*
+  HexaOS - files.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  High-level filesystem service.
+  Exposes simple file operations for mounted LittleFS storage and isolates file existence, read and write helpers from direct framework usage.
+*/
+
 #include "hexaos.h"
 #include <FS.h>
 #include <LittleFS.h>

@@ -1,3 +1,14 @@
+/*
+  HexaOS - mod_lvgl.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  LVGL graphics module stub.
+  Declares the lifecycle shell for future display and GUI integration so the graphics subsystem can be enabled as a normal HexaOS module.
+*/
+
 #include "hexaos.h"
 
 #if HX_ENABLE_MODULE_LVGL

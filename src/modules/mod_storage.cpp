@@ -1,3 +1,15 @@
+/*
+  HexaOS - mod_storage.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Storage coordination module stub.
+  Reserves the runtime lifecycle hooks for future storage orchestration tasks such as health checks, media management and persistence supervision.
+*/
+
+
 #include "hexaos.h"
 
 static bool StorageInit() {

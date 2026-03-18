@@ -1,3 +1,14 @@
+/*
+  HexaOS - hexaos.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Main Arduino entry point for HexaOS.
+  Coordinates core initialization, service startup, filesystem mounting, module startup and the main cooperative runtime loop executed by the firmware.
+*/
+
 #include "hexaos.h"
 
 void setup() {

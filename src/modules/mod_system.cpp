@@ -1,3 +1,14 @@
+/*
+  HexaOS - mod_system.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Core system status module.
+  Provides basic system-level runtime reporting and periodic telemetry such as uptime and boot counters to validate that the scheduler and runtime are alive.
+*/
+
 #include "hexaos.h"
 
 static bool SystemInit() {

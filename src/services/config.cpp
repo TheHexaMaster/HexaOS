@@ -1,3 +1,14 @@
+/*
+  HexaOS - config.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Runtime configuration service.
+  Provides the persistent key-value configuration layer stored in NVS and used to load, query and save mutable HexaOS setup values across reboots.
+*/
+
 #include "hexaos.h"
 #include "headers/hx_platform_nvs.h"
 

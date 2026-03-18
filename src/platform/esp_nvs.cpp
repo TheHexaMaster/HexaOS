@@ -1,3 +1,14 @@
+/*
+  HexaOS - esp_nvs.cpp
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  ESP NVS platform adapter.
+  Implements the concrete non-volatile storage backend used by HexaOS services to open namespaces and read, write or commit primitive persisted values.
+*/
+
 #include "hexaos.h"
 #include "headers/hx_platform_nvs.h"
 
