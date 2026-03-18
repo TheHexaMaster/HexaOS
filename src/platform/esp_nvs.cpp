@@ -6,7 +6,7 @@
 
   Description
   ESP NVS platform adapter.
-  Implements the concrete non-volatile storage backend used by HexaOS services to open namespaces and read, write or commit primitive persisted values.
+  Implements the concrete non-volatile storage backend used by HexaOS services to open dedicated NVS partitions and read, write or commit primitive persisted values.
 */
 
 #include "hexaos.h"
@@ -15,6 +15,11 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 #include <stdlib.h>
+
+static constexpr const char* HX_NVS_PARTITION_CONFIG = "nvs";
+static constexpr const char* HX_NVS_PARTITION_STATE = "nvs_state";
+static constexpr const char* HX_NVS_PARTITION_FACTORY = "nvs_factory";
+static constexpr const char* HX_NVS_NAMESPACE = "hx";
 
 static nvs_handle_t g_nvs_config = 0;
 static nvs_handle_t g_nvs_state = 0;
@@ -33,68 +38,87 @@ static bool IsHandleReady(nvs_handle_t handle) {
   return handle != 0;
 }
 
-bool EspNvsInit() {
-  esp_err_t err = nvs_flash_init();
-
-  if ((err == ESP_ERR_NVS_NO_FREE_PAGES) || (err == ESP_ERR_NVS_NEW_VERSION_FOUND)) {
-    err = nvs_flash_erase();
-    if (err != ESP_OK) {
-      LogError("NVS erase failed: %d", (int)err);
-      return false;
-    }
-
-    err = nvs_flash_init();
-  }
-
-  if (err != ESP_OK) {
-    LogError("NVS init failed: %d", (int)err);
+static bool InitPartition(const char* label) {
+  if (!label || !label[0]) {
     return false;
   }
 
-  LogInfo("NVS init OK");
+  esp_err_t err = nvs_flash_init_partition(label);
+
+  if ((err == ESP_ERR_NVS_NO_FREE_PAGES) || (err == ESP_ERR_NVS_NEW_VERSION_FOUND)) {
+    LogWarn("NVS partition '%s' requires erase: %d", label, (int)err);
+
+    err = nvs_flash_erase_partition(label);
+    if (err != ESP_OK) {
+      LogError("NVS partition '%s' erase failed: %d", label, (int)err);
+      return false;
+    }
+
+    err = nvs_flash_init_partition(label);
+  }
+
+  if (err != ESP_OK) {
+    LogError("NVS partition '%s' init failed: %d", label, (int)err);
+    return false;
+  }
+
+  return true;
+}
+
+static bool OpenPartitionHandle(const char* partition_label, nvs_handle_t* handle) {
+  if (!partition_label || !partition_label[0] || !handle) {
+    return false;
+  }
+
+  if (IsHandleReady(*handle)) {
+    return true;
+  }
+
+  esp_err_t err = nvs_open_from_partition(partition_label,
+                                          HX_NVS_NAMESPACE,
+                                          NVS_READWRITE,
+                                          handle);
+  if (err != ESP_OK) {
+    LogError("NVS open failed: partition='%s' namespace='%s' err=%d",
+             partition_label,
+             HX_NVS_NAMESPACE,
+             (int)err);
+    return false;
+  }
+
+  return true;
+}
+
+bool EspNvsInit() {
+  if (!InitPartition(HX_NVS_PARTITION_CONFIG)) {
+    return false;
+  }
+
+  if (!InitPartition(HX_NVS_PARTITION_STATE)) {
+    return false;
+  }
+
+  if (!InitPartition(HX_NVS_PARTITION_FACTORY)) {
+    return false;
+  }
+
+  LogInfo("NVS init OK (config=%s state=%s factory=%s)",
+          HX_NVS_PARTITION_CONFIG,
+          HX_NVS_PARTITION_STATE,
+          HX_NVS_PARTITION_FACTORY);
   return true;
 }
 
 bool EspNvsOpenConfig() {
-  if (IsHandleReady(g_nvs_config)) {
-    return true;
-  }
-
-  esp_err_t err = nvs_open("config", NVS_READWRITE, &g_nvs_config);
-  if (err != ESP_OK) {
-    LogError("NVS config open failed: %d", (int)err);
-    return false;
-  }
-
-  return true;
+  return OpenPartitionHandle(HX_NVS_PARTITION_CONFIG, &g_nvs_config);
 }
 
 bool EspNvsOpenState() {
-  if (IsHandleReady(g_nvs_state)) {
-    return true;
-  }
-
-  esp_err_t err = nvs_open("state", NVS_READWRITE, &g_nvs_state);
-  if (err != ESP_OK) {
-    LogError("NVS state open failed: %d", (int)err);
-    return false;
-  }
-
-  return true;
+  return OpenPartitionHandle(HX_NVS_PARTITION_STATE, &g_nvs_state);
 }
 
 bool EspNvsOpenFactory() {
-  if (IsHandleReady(g_nvs_factory)) {
-    return true;
-  }
-
-  esp_err_t err = nvs_open("factory", NVS_READWRITE, &g_nvs_factory);
-  if (err != ESP_OK) {
-    LogError("NVS factory open failed: %d", (int)err);
-    return false;
-  }
-
-  return true;
+  return OpenPartitionHandle(HX_NVS_PARTITION_FACTORY, &g_nvs_factory);
 }
 
 bool HxNvsGetBool(HxNvsStore store, const char* key, bool* value) {
