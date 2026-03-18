@@ -20,6 +20,7 @@ enum HxSchemaValueType : uint8_t {
   HX_SCHEMA_VALUE_STRING = 2
 };
 
+//   id                   key_text            type_id       field_name       storage size / max len / min I32 / max i32                      default value                            console - visible / writeable     
 #define HX_CONFIG_SCHEMA(X) \
   X(DEVICE_NAME,        "device.name",        STRING,       device_name,      33, 32, 0,                         0,                         HX_BUILD_DEFAULT_DEVICE_NAME,               true, true) \
   X(LOG_LEVEL,          "log.level",          INT32,        log_level,         0,  0, (int32_t)HX_LOG_ERROR,    (int32_t)HX_LOG_DEBUG,     (int32_t)HX_BUILD_DEFAULT_LOG_LEVEL,        true, true) \
