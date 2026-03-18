@@ -1,92 +1,218 @@
-# HexaOS Config / State Schema Manual
+# HexaOS Config and State Schema Manual
 
 ## Overview
 
-HexaOS currently uses two related but intentionally different persistent data systems:
+HexaOS currently uses **two related but intentionally different schema systems**:
 
-- **Config**: runtime configuration values that are loaded into RAM, can be edited, validated, applied, and saved back to Non-Volatile Storage (NVS).
-- **State**: persistent runtime state values that represent system status across reboots. These values are also described by a schema, but their operational model is not identical to config.
+- **Config schema** for runtime configuration values stored in RAM and persisted to NVS as overrides.
+- **State schema** for persistent runtime state stored directly in NVS.
 
-Even though both systems use schema macros and NVS, they are **not the same abstraction**.
+Although both systems use schema macros and the shared `HxSchemaValueType` enum, they do **not** currently behave the same way.
+
+This document describes the **actual behavior of the current codebase**.
 
 ---
 
-## 1. Config system
+## Shared Type Enum
 
-### Purpose
+Both systems use the same low-level value enum:
 
-The config system is designed for **user-editable or system-editable configuration**.
+```cpp
+enum HxSchemaValueType : uint8_t {
+  HX_SCHEMA_VALUE_BOOL = 0,
+  HX_SCHEMA_VALUE_INT32 = 1,
+  HX_SCHEMA_VALUE_STRING = 2
+};
+```
+
+This enum is the final runtime type identifier used by metadata tables and handlers.
+
+---
+
+# Config Schema
+
+## Purpose
+
+The config system is a **schema-driven runtime configuration model**.
+
+It is designed for values that:
+
+- have build-time defaults,
+- live in a RAM structure,
+- can be edited at runtime,
+- can be reset to defaults,
+- can be applied to the live system,
+- and are persisted to NVS only when they differ from defaults.
+
 Typical examples are:
 
-- device name
-- log level
-- safeboot enable flag
+- `device.name`
+- `log.level`
+- `safeboot.enable`
 
-These values:
+---
 
-- exist as strongly typed fields in RAM
-- have compile-time defaults
-- can be listed and edited through the console
-- can be validated before acceptance
-- can be applied to the running system
-- are persisted as NVS overrides
+## Schema Definition
 
-### Source of truth
+Config entries are declared with `HX_CONFIG_SCHEMA(X)`.
 
-The config system is defined by `HX_CONFIG_SCHEMA(X)`.
+Current format:
 
-Each config entry contains enough metadata to drive the whole config pipeline:
+```cpp
+X(id, key_text, type_id, field_name, storage_size, max_len, min_i32, max_i32, default_value, console_visible, console_writable)
+```
 
-- symbolic identifier
-- text key stored in NVS
-- schema type (`STRING`, `INT32`, `BOOL`)
-- target field name inside `HxConfig`
-- storage size
-- maximum string length
-- minimum and maximum `int32_t` range
-- default value
-- console visibility flag
-- console writability flag
+Meaning of each field:
 
-### Runtime model
+- `id` - symbolic identifier used to generate constants and metadata.
+- `key_text` - NVS key text such as `"device.name"`.
+- `type_id` - symbolic type token: `STRING`, `INT32`, or `BOOL`.
+- `field_name` - member name inside `struct HxConfig`.
+- `storage_size` - storage size for string fields; unused for scalar fields.
+- `max_len` - maximum allowed string length.
+- `min_i32` - minimum allowed `INT32` value.
+- `max_i32` - maximum allowed `INT32` value.
+- `default_value` - build-time default value.
+- `console_visible` - whether the key is shown in console listing.
+- `console_writable` - whether the key can be changed through generic console config commands.
 
-Config values are backed by two RAM objects:
+---
 
-- `HxConfigData` -> current active runtime config
-- `HxConfigDefaults` -> compile-time defaults generated from the schema
+## What the Config Schema Generates
 
-The schema is used to build:
+The config schema feeds multiple generated structures and constants.
 
-- the `HxConfig` struct
-- the defaults object
-- the key definition table `kHxConfigKeys[]`
-- generic read/write/parse/format helpers
+### 1. `struct HxConfig`
 
-### Storage strategy
+The schema builds the RAM-backed configuration structure.
 
-Config follows an **override model**:
+Each schema entry becomes a field inside:
 
-1. Defaults are loaded into RAM.
-2. NVS values override defaults when present.
-3. Saving writes only values that differ from defaults.
-4. If a value matches its default, the stored NVS override is removed.
+```cpp
+struct HxConfig
+```
 
-This means NVS stores only the delta from build defaults, not a full copy of the config object.
+This is the authoritative in-memory config object.
 
-### Validation
+---
 
-Config supports centralized validation through schema metadata:
+### 2. `const HxConfig HxConfigDefaults`
 
-- boolean text parsing
-- integer parsing with min/max range enforcement
-- string length enforcement
-- console visibility and writability control
+The schema builds a complete default object:
 
-### Console workflow
+```cpp
+extern const HxConfig HxConfigDefaults;
+```
 
-Config is a full console-editable subsystem.
+This object contains the build-time defaults for all config fields.
 
-Supported commands:
+---
+
+### 3. `HxConfig HxConfigData`
+
+This is the live mutable runtime config object:
+
+```cpp
+extern HxConfig HxConfigData;
+```
+
+It is the active RAM copy used by the system.
+
+---
+
+### 4. `HxConfigKeyDef`
+
+Each config item is described by metadata:
+
+```cpp
+struct HxConfigKeyDef {
+  const char* key;
+  HxSchemaValueType type;
+  size_t config_offset;
+  size_t value_size;
+  int32_t min_i32;
+  int32_t max_i32;
+  size_t max_len;
+  bool console_visible;
+  bool console_writable;
+};
+```
+
+Important notes:
+
+- `config_offset` points to the field inside `HxConfig`.
+- `value_size` stores the field size in RAM.
+- this metadata is enough to generically read, write, reset, and stringify config values.
+
+---
+
+### 5. `kHxConfigKeys[]`
+
+The schema feeds a static metadata table:
+
+```cpp
+static const HxConfigKeyDef kHxConfigKeys[]
+```
+
+This table is used for generic lookup and iteration.
+
+---
+
+### 6. Per-key text constants
+
+For every config entry, the schema generates a string constant such as:
+
+```cpp
+HX_CFG_DEVICE_NAME
+HX_CFG_LOG_LEVEL
+HX_CFG_SAFEBOOT_ENABLE
+```
+
+These constants hold the NVS key text.
+
+---
+
+## Config Runtime Model
+
+Config is **RAM-backed**.
+
+The main flow is:
+
+1. `ConfigInit()` resets `HxConfigData` to defaults and opens the config NVS namespace.
+2. `ConfigLoad()` resets `HxConfigData` to defaults again and then reads NVS overrides.
+3. `ConfigApply()` pushes selected values from `HxConfigData` into live runtime state.
+4. `ConfigSave()` stores only values that differ from `HxConfigDefaults`.
+
+This means:
+
+- RAM holds the full current configuration.
+- NVS stores only deviations from defaults.
+
+---
+
+## Config Validation Behavior
+
+Config validation is schema-driven.
+
+The handler uses the metadata table to enforce:
+
+- type correctness,
+- string maximum length,
+- integer range limits,
+- console writability,
+- and field size correctness.
+
+Examples:
+
+- strings longer than `max_len` are rejected,
+- integers outside `min_i32` / `max_i32` are rejected,
+- non-writable keys cannot be changed through generic config parsing.
+
+---
+
+## Config Console Workflow
+
+The console supports a full config workflow:
 
 - `listcfg`
 - `readcfg <key>`
@@ -97,309 +223,267 @@ Supported commands:
 
 Important behavior:
 
-- `setcfg` updates RAM first
-- `ConfigApply()` applies runtime effects
-- persistence happens through `savecfg`
+- `setcfg` updates `HxConfigData` in RAM.
+- `savecfg` persists overrides to NVS.
+- `loadcfg` reloads from NVS on top of defaults.
+- `defaultcfg` resets config values back to defaults.
 
-This gives config a staged workflow: **edit -> test/apply -> save**.
+This makes config suitable for editable user-facing or system-facing settings.
 
 ---
 
-## 2. State system
+# State Schema
 
-### Purpose
+## Purpose
 
-The state system is designed for **persistent runtime state**, not for normal configuration editing.
+The state system is a **persistent runtime state registry**, not a full RAM-backed config model.
+
+It is intended for values that:
+
+- represent operational state,
+- must survive reboot,
+- are usually stored immediately,
+- are not handled as configuration defaults,
+- and are not exposed through a full editable config workflow.
+
 Typical examples are:
 
-- boot counter
-- last reset reason string
+- `sys.boot_count`
+- `sys.last_reset`
 
-State exists to keep track of values that are part of system operation rather than user configuration.
+---
 
-### Source of truth
+## Schema Definition
 
-The state system is defined by `HX_STATE_SCHEMA(X)`.
+State entries are declared with `HX_STATE_SCHEMA(X)`.
 
-In the current codebase, the state schema uses the same style as config entries and currently includes:
+Current format:
 
-- symbolic identifier
-- text key stored in NVS
-- schema type (`STRING`, `INT32`, `BOOL`)
-- target field name inside `HxState`
-- storage size
-- maximum string length
-- minimum and maximum `int32_t` range
-- default value
-- console visibility flag
-- console writability flag
+```cpp
+X(id, key_text, type_id, min_i32, max_i32, max_len, console_visible)
+```
 
-### Runtime model
+Meaning of each field:
 
-State values are backed by two RAM objects:
+- `id` - symbolic identifier used to generate constants and metadata.
+- `key_text` - NVS key text such as `"sys.boot_count"`.
+- `type_id` - **direct low-level enum value**, for example `HX_SCHEMA_VALUE_INT32` or `HX_SCHEMA_VALUE_STRING`.
+- `min_i32` - minimum allowed integer value stored in metadata.
+- `max_i32` - maximum allowed integer value stored in metadata.
+- `max_len` - maximum string length stored in metadata.
+- `console_visible` - whether the key is shown in state console listing.
 
-- `HxStateData` -> current runtime state
-- `HxStateDefaults` -> schema-generated default state
+Important difference from config:
 
-The schema is used to build:
+The state schema currently does **not** include:
 
-- the `HxState` struct
-- the defaults object
-- the key definition table `kHxStateKeys[]`
-- generic formatting and parsing helpers
+- `field_name`
+- `storage_size`
+- `default_value`
+- `console_writable`
 
-In addition, the state handler tracks whether a schema-defined key is actually present in NVS through an internal presence table.
+It also does **not** use the symbolic config-style type tokens `STRING`, `INT32`, and `BOOL`.
+Instead, it uses the final enum values directly.
 
-### Storage strategy
+---
 
-State behaves as a **persistent runtime record** rather than a configuration overlay.
+## What the State Schema Generates
 
-Key characteristics:
+The current state schema generates much less infrastructure than config.
 
-- state values are loaded from NVS into RAM
-- each key can be tracked as present or absent in storage
-- state is meant to reflect operational values
-- state writes are generally immediate persistence operations
+### 1. `HxStateKeyDef`
 
-This is different from config's edit-and-save workflow.
+State metadata is described by:
 
-### Validation
+```cpp
+struct HxStateKeyDef {
+  const char* key;
+  HxSchemaValueType type;
+  int32_t min_i32;
+  int32_t max_i32;
+  size_t max_len;
+  bool console_visible;
+};
+```
 
-State supports schema-based type validation for:
+This metadata is descriptive only.
+It does not contain a RAM offset because state is not backed by a `struct HxState` object.
 
-- boolean parsing
-- integer parsing with min/max range enforcement
-- string max length enforcement
+---
 
-However, state is still conceptually different from config because it represents runtime information rather than operator-controlled settings.
+### 2. `kHxStateKeys[]`
 
-### Console workflow
+The schema feeds a static metadata table:
 
-State is currently exposed primarily as a read-oriented console subsystem.
+```cpp
+static const HxStateKeyDef kHxStateKeys[]
+```
 
-Supported commands:
+This table is used for lookup, iteration, and console display.
+
+---
+
+### 3. Per-key text constants
+
+For every state entry, the schema generates a string constant such as:
+
+```cpp
+HX_STATE_BOOT_COUNT
+HX_STATE_LAST_RESET
+```
+
+These constants hold the NVS key text.
+
+---
+
+## What the State Schema Does **Not** Generate
+
+The current codebase does **not** generate or provide any of the following:
+
+- `struct HxState`
+- `HxStateDefaults`
+- `HxStateData`
+
+This is the most important architectural difference compared with config.
+
+---
+
+## State Runtime Model
+
+State is **not RAM-backed as a unified struct**.
+
+Instead, the current implementation behaves like this:
+
+- `StateInit()` opens the state NVS namespace.
+- `StateLoad()` does not load a full RAM object.
+- `StateGetBool()` and `StateGetInt()` read directly from NVS.
+- `StateSetBool()` and `StateSetInt()` write directly to NVS and immediately commit.
+- `StateValueToString()` reads the value directly from NVS on demand.
+
+This means state is currently a **direct NVS-backed key-value layer** with schema metadata on the side.
+
+---
+
+## State Validation Behavior
+
+This is a critical difference.
+
+Although the state schema contains metadata such as:
+
+- type,
+- integer limits,
+- string max length,
+
+that metadata is **not currently used as the authoritative validation layer** for the public state API.
+
+The public API is currently:
+
+```cpp
+bool StateGetBool(const char* key, bool defval);
+int32_t StateGetInt(const char* key, int32_t defval);
+bool StateSetBool(const char* key, bool value);
+bool StateSetInt(const char* key, int32_t value);
+```
+
+These functions:
+
+- accept an arbitrary key string,
+- talk directly to NVS,
+- do not require the key to exist in `HX_STATE_SCHEMA`,
+- do not enforce schema range rules,
+- do not use a RAM state struct,
+- and do not provide a generic string setter.
+
+Therefore, state currently behaves as a **raw persistent key-value API plus metadata**, not as a fully enforced schema-driven model.
+
+---
+
+## State Load Side Effect
+
+`StateLoad()` has one built-in side effect:
+
+- it reads `sys.boot_count`,
+- increments it,
+- stores it back immediately.
+
+So state load is not just a passive load step.
+It also updates persistent operational state.
+
+---
+
+## State Console Workflow
+
+The console currently supports:
 
 - `liststate`
 - `readstate <key>`
 
-There is no equivalent public operator workflow matching config commands such as:
+There is no generic console workflow matching config.
 
-- staged edit in RAM
-- explicit save after editing
-- full interactive state editing pipeline
+There is currently no built-in equivalent of:
 
-This is intentional: state is treated as system runtime data first.
+- `setstate`
+- `savestate`
+- `loadstate`
+- `defaultstate`
 
----
-
-## 3. Schema field meaning
-
-Both schemas currently use the same field order:
-
-```cpp
-X(
-  ID,
-  "text.key",
-  TYPE_ID,
-  field_name,
-  storage_size,
-  max_len,
-  min_i32,
-  max_i32,
-  default_value,
-  console_visible,
-  console_writable
-)
-```
-
-### Field description
-
-#### `ID`
-Compile-time symbolic name used for internal declarations and generated constants.
-
-Example:
-
-```cpp
-DEVICE_NAME
-BOOT_COUNT
-```
-
-#### `"text.key"`
-Persistent text key used in NVS and console commands.
-
-Example:
-
-```cpp
-"device.name"
-"sys.boot_count"
-```
-
-#### `TYPE_ID`
-Schema type token:
-
-- `STRING`
-- `INT32`
-- `BOOL`
-
-These tokens are later mapped internally to `HxSchemaValueType`.
-
-#### `field_name`
-Name of the field in the generated RAM struct (`HxConfig` or `HxState`).
-
-Example:
-
-```cpp
-log_level
-boot_count
-```
-
-#### `storage_size`
-Allocated storage size in bytes for the field when applicable.
-For strings this includes room for the terminating null character.
-For scalar fields it is usually informational because `sizeof(field)` is used by the key table.
-
-#### `max_len`
-Maximum allowed string payload length excluding the null terminator.
-Used only for `STRING` entries.
-
-#### `min_i32`, `max_i32`
-Allowed numeric range for `INT32` entries.
-Ignored for other types.
-
-#### `default_value`
-Compile-time default written into the generated defaults object.
-
-Examples:
-
-```cpp
-HX_BUILD_DEFAULT_DEVICE_NAME
-(int32_t)HX_BUILD_DEFAULT_LOG_LEVEL
-0
-""
-```
-
-#### `console_visible`
-Controls whether the entry should appear in schema-driven console listing/output.
-
-#### `console_writable`
-Controls whether the entry is intended to be writable through schema-driven console workflows.
-In practice this matters much more for config than for state.
+This matches the current design: state is for internal persistent runtime values, not for full interactive config-style editing.
 
 ---
 
-## 4. Generated objects and metadata
+# Direct Comparison
 
-### Config side
+## Config
 
-The config schema generates:
+Config is:
 
-- `struct HxConfig`
-- `const HxConfig HxConfigDefaults`
-- `HxConfig HxConfigData`
-- `HxConfigKeyDef`
-- `kHxConfigKeys[]`
-- per-key text constants such as `HX_CFG_DEVICE_NAME`
+- schema-driven,
+- RAM-backed,
+- default-backed,
+- resettable,
+- apply-capable,
+- validated through schema metadata,
+- stored to NVS as overrides only.
 
-### State side
+## State
 
-The state schema generates:
+State is:
 
-- `struct HxState`
-- `const HxState HxStateDefaults`
-- `HxState HxStateData`
-- `HxStateKeyDef`
-- `kHxStateKeys[]`
-- per-key text constants such as `HX_STATE_BOOT_COUNT`
-
----
-
-## 5. Lifecycle difference
-
-### Config lifecycle
-
-Typical config flow:
-
-1. `ConfigInit()` initializes the subsystem.
-2. Defaults are prepared in RAM.
-3. `ConfigLoad()` overlays stored NVS values onto RAM.
-4. `ConfigApply()` applies active config to runtime services.
-5. Console edits modify RAM.
-6. `ConfigSave()` persists non-default overrides.
-
-This is a classic **configuration management workflow**.
-
-### State lifecycle
-
-Typical state flow:
-
-1. `StateInit()` initializes the subsystem.
-2. `StateLoad()` loads known schema state from NVS into RAM.
-3. Runtime logic updates state values as needed.
-4. State is persisted as operational data.
-
-State is therefore a **runtime continuity workflow**, not a full configuration management workflow.
+- metadata-described,
+- directly NVS-backed,
+- not backed by a `struct HxState`,
+- not backed by defaults,
+- not reset through a generic default model,
+- not fully validated through schema metadata in the public API,
+- committed immediately on setter calls.
 
 ---
 
-## 6. Practical behavioral difference
+# Summary
 
-### Config behavior in one sentence
+In the current HexaOS implementation:
 
-Config is a **schema-driven editable runtime configuration model with defaults, validation, apply logic, and selective NVS override storage**.
+- **Config** is a complete schema-driven configuration subsystem.
+- **State** is a lighter persistent runtime state subsystem with schema metadata, but without the same RAM-backed architecture or enforcement model.
 
-### State behavior in one sentence
-
-State is a **schema-described persistent runtime data model focused on preserving operational values across reboots, with a more conservative and read-oriented external workflow**.
-
----
-
-## 7. Current schema examples
-
-### Config example
-
-```cpp
-#define HX_CONFIG_SCHEMA(X) \
-  X(DEVICE_NAME,        "device.name",        STRING, device_name,      33, 32, 0,                      0,                      HX_BUILD_DEFAULT_DEVICE_NAME,            true, true) \
-  X(LOG_LEVEL,          "log.level",          INT32,  log_level,         0,  0, (int32_t)HX_LOG_ERROR, (int32_t)HX_LOG_DEBUG, (int32_t)HX_BUILD_DEFAULT_LOG_LEVEL, true, true) \
-  X(SAFEBOOT_ENABLE,    "safeboot.enable",    BOOL,   safeboot_enable,   0,  0, 0,                      1,                      (HX_BUILD_DEFAULT_SAFEBOOT_ENABLE != 0), true, true)
-```
-
-### State example
-
-```cpp
-#define HX_STATE_SCHEMA(X) \
-  X(BOOT_COUNT,         "sys.boot_count",     INT32,  boot_count,        0,  0, 0,         INT32_MAX, 0,  true, false) \
-  X(LAST_RESET,         "sys.last_reset",     STRING, last_reset,       33, 32, 0,         0,         "", true, false)
-```
+The two systems share naming patterns and type concepts, but they are **not currently symmetrical by design**.
 
 ---
 
-## 8. Design guidance
+# Practical Guidance
 
-Use **config** when a value:
+Use **config** for values that need:
 
-- has a meaningful default
-- should be editable by the operator or firmware logic
-- needs validation and range enforcement
-- may require runtime apply logic
-- belongs to device setup rather than runtime history
+- defaults,
+- structured RAM storage,
+- generic editable behavior,
+- validation,
+- and runtime apply logic.
 
-Use **state** when a value:
+Use **state** for values that need:
 
-- represents runtime history or operational continuity
-- should survive reboot as part of system status
-- is not part of ordinary user configuration
-- is mainly observed rather than interactively managed
+- persistence across reboot,
+- direct immediate storage,
+- simple lookup by key,
+- and lightweight metadata for browsing or introspection.
 
----
-
-## 9. Summary
-
-HexaOS uses two schema-backed persistent systems with different intent:
-
-- **Config** is for editable configuration management.
-- **State** is for persistent operational state.
-
-They share a common schema style and common type system, but they are used differently in the runtime architecture.
-
-That distinction is important and should remain clear when extending the platform.
