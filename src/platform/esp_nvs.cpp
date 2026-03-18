@@ -1,5 +1,6 @@
 #include "hexaos.h"
 #include "headers/hx_platform_nvs.h"
+
 #include <nvs.h>
 #include <nvs_flash.h>
 #include <stdlib.h>
@@ -24,7 +25,7 @@ static bool IsHandleReady(nvs_handle_t handle) {
 bool EspNvsInit() {
   esp_err_t err = nvs_flash_init();
 
-  if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+  if ((err == ESP_ERR_NVS_NO_FREE_PAGES) || (err == ESP_ERR_NVS_NEW_VERSION_FOUND)) {
     err = nvs_flash_erase();
     if (err != ESP_OK) {
       LogError("NVS erase failed: %d", (int)err);
@@ -44,29 +45,44 @@ bool EspNvsInit() {
 }
 
 bool EspNvsOpenConfig() {
+  if (IsHandleReady(g_nvs_config)) {
+    return true;
+  }
+
   esp_err_t err = nvs_open("config", NVS_READWRITE, &g_nvs_config);
   if (err != ESP_OK) {
     LogError("NVS config open failed: %d", (int)err);
     return false;
   }
+
   return true;
 }
 
 bool EspNvsOpenState() {
+  if (IsHandleReady(g_nvs_state)) {
+    return true;
+  }
+
   esp_err_t err = nvs_open("state", NVS_READWRITE, &g_nvs_state);
   if (err != ESP_OK) {
     LogError("NVS state open failed: %d", (int)err);
     return false;
   }
+
   return true;
 }
 
 bool EspNvsOpenFactory() {
+  if (IsHandleReady(g_nvs_factory)) {
+    return true;
+  }
+
   esp_err_t err = nvs_open("factory", NVS_READWRITE, &g_nvs_factory);
   if (err != ESP_OK) {
     LogError("NVS factory open failed: %d", (int)err);
     return false;
   }
+
   return true;
 }
 
@@ -116,7 +132,7 @@ bool HxNvsGetString(HxNvsStore store, const char* key, String& value) {
 
   size_t size = 0;
   esp_err_t err = nvs_get_str(handle, key, nullptr, &size);
-  if (err != ESP_OK || size == 0) {
+  if ((err != ESP_OK) || (size == 0)) {
     return false;
   }
 
@@ -176,6 +192,20 @@ bool HxNvsSetString(HxNvsStore store, const char* key, const char* value) {
 
   esp_err_t err = nvs_set_str(handle, key, value);
   return (err == ESP_OK);
+}
+
+bool HxNvsEraseKey(HxNvsStore store, const char* key) {
+  if (!key) {
+    return false;
+  }
+
+  nvs_handle_t handle = GetStoreHandle(store);
+  if (!IsHandleReady(handle)) {
+    return false;
+  }
+
+  esp_err_t err = nvs_erase_key(handle, key);
+  return (err == ESP_OK) || (err == ESP_ERR_NVS_NOT_FOUND);
 }
 
 bool HxNvsCommit(HxNvsStore store) {

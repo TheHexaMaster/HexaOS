@@ -9,6 +9,7 @@
 #include "headers/hx_types.h"
 #include "headers/hx_module.h"
 #include "headers/hx_config_keys.h"
+#include "headers/hx_setup.h"
 
 struct HxRuntime {
   bool safeboot;
@@ -53,8 +54,6 @@ void ConsoleOnSinkLockedPostWriteLine();
 #define HX_LOGW(tag, fmt, ...) LogTagged(HX_LOG_WARN,  tag, fmt, ##__VA_ARGS__)
 #define HX_LOGE(tag, fmt, ...) LogTagged(HX_LOG_ERROR, tag, fmt, ##__VA_ARGS__)
 
-
-
 void Panic(const char* reason);
 
 // platform
@@ -70,15 +69,10 @@ bool EspLittlefsMount();
 // services
 bool FactoryDataInit();
 
-bool ConfigInit();
-bool ConfigLoad();
-bool ConfigSave();
-bool ConfigGetBool(const char* key, bool defval);
-int32_t ConfigGetInt(const char* key, int32_t defval);
-String ConfigGetString(const char* key, const char* defval);
-bool ConfigSetBool(const char* key, bool value);
-bool ConfigSetInt(const char* key, int32_t value);
-bool ConfigSetString(const char* key, const char* value);
+bool SetupInit();
+bool SetupLoad();
+bool SetupSave();
+void SetupApply();
 
 bool StateInit();
 bool StateLoad();

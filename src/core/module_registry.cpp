@@ -1,16 +1,28 @@
 #include "hexaos.h"
 
 static const HxModule* kModules[] = {
+#if HX_ENABLE_MODULE_SYSTEM
   &ModuleSystem,
+#endif
+#if HX_ENABLE_MODULE_CONSOLE
   &ModuleConsole,
+#endif
+#if HX_ENABLE_MODULE_STORAGE
   &ModuleStorage,
+#endif
+#if HX_ENABLE_MODULE_BERRY
   &ModuleBerry,
+#endif
+#if HX_ENABLE_MODULE_WEB
   &ModuleWeb,
+#endif
+#if HX_ENABLE_MODULE_LVGL
   &ModuleLvgl,
+#endif
   nullptr
 };
 
-static constexpr size_t kModuleCount = (sizeof(kModules) / sizeof(kModules[0])) - 1;
+static constexpr size_t kModuleCount = sizeof(kModules) / sizeof(kModules[0]);
 static bool g_module_ready[kModuleCount] = { false };
 
 void ModuleInitAll() {

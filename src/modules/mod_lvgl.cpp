@@ -1,5 +1,7 @@
 #include "hexaos.h"
 
+#if HX_ENABLE_MODULE_LVGL
+
 static bool LvglInit() {
   LogInfo("LVG: init");
   return true;
@@ -26,3 +28,5 @@ const HxModule ModuleLvgl = {
   .every_100ms = LvglEvery100ms,
   .every_1s = LvglEverySecond
 };
+
+#endif

@@ -16,9 +16,15 @@ void setup() {
     LogWarn("FACT: init failed");
   }
 
-  if (!ConfigInit()) {
-    LogWarn("CFG: init failed");
+  if (!SetupInit()) {
+    LogWarn("SETUP: init failed");
   }
+
+  if (!SetupLoad()) {
+    LogWarn("SETUP: load failed");
+  }
+
+  SetupApply();
 
   if (!StateInit()) {
     LogWarn("STA: init failed");
@@ -26,10 +32,6 @@ void setup() {
 
   if (!FilesInit()) {
     LogWarn("FIL: init failed");
-  }
-
-  if (!ConfigLoad()) {
-    LogWarn("CFG: load failed");
   }
 
   if (!StateLoad()) {
@@ -42,7 +44,10 @@ void setup() {
 
   ModuleInitAll();
   ModuleStartAll();
+
+#if HX_ENABLE_MODULE_CONSOLE
   ConsoleShowPrompt();
+#endif
 }
 
 void loop() {

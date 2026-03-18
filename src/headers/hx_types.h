@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 enum HxLogLevel : uint8_t {
   HX_LOG_ERROR = 0,
   HX_LOG_WARN  = 1,

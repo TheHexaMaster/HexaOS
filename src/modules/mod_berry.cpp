@@ -1,5 +1,7 @@
 #include "hexaos.h"
 
+#if HX_ENABLE_MODULE_BERRY
+
 static bool BerryInit() {
   LogInfo("BRY: init");
   return true;
@@ -26,3 +28,5 @@ const HxModule ModuleBerry = {
   .every_100ms = BerryEvery100ms,
   .every_1s = BerryEverySecond
 };
+
+#endif

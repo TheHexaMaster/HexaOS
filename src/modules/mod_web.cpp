@@ -1,5 +1,7 @@
 #include "hexaos.h"
 
+#if HX_ENABLE_MODULE_WEB
+
 static bool WebInit() {
   LogInfo("WEB: init");
   return true;
@@ -26,3 +28,5 @@ const HxModule ModuleWeb = {
   .every_100ms = WebEvery100ms,
   .every_1s = WebEverySecond
 };
+
+#endif

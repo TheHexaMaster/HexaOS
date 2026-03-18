@@ -143,7 +143,6 @@ static void LogEmitLine(const char* line) {
     return;
   }
 
-  // Fallback: ak by mutex nebol dostupný, aspoň zachovaj históriu
   LogStoreLine(line);
 }
 
@@ -246,7 +245,13 @@ void LogInit() {
   }
 
   LogHistoryClear();
-  LogSetLevel(HX_LOG_INFO);
+
+  HxLogLevel level = (HxLogLevel)HX_BUILD_DEFAULT_LOG_LEVEL;
+  if ((level < HX_LOG_ERROR) || (level > HX_LOG_DEBUG)) {
+    level = HX_LOG_INFO;
+  }
+
+  LogSetLevel(level);
 }
 
 void LogSetLevel(HxLogLevel level) {

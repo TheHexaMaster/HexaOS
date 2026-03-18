@@ -1,9 +1,11 @@
 #include "hexaos.h"
+
 #include <esp_system.h>
 #include <freertos/FreeRTOS.h>
-#include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
 
 static constexpr size_t HX_CONSOLE_LINE_MAX = 128;
 static constexpr const char* HX_CONSOLE_PROMPT = "hx> ";
@@ -166,9 +168,133 @@ static void ConsolePrintLogStats() {
   ConsolePrompt();
 }
 
+static void ConsolePrintHelp() {
+  LogSinkWriteLineRaw("commands:");
+  LogSinkWriteLineRaw("  help");
+  LogSinkWriteLineRaw("  reboot");
+  LogSinkWriteLineRaw("  log");
+  LogSinkWriteLineRaw("  logclr");
+  LogSinkWriteLineRaw("  logstat");
+  LogSinkWriteLineRaw("  setup");
+  LogSinkWriteLineRaw("  setup save");
+  LogSinkWriteLineRaw("  setup load");
+  LogSinkWriteLineRaw("  setup defaults");
+  LogSinkWriteLineRaw("  set name <value>");
+  LogSinkWriteLineRaw("  set log <error|warn|info|debug|0..3>");
+  LogSinkWriteLineRaw("  set safeboot <on|off>");
+  ConsolePrompt();
+}
+
+static void ConsolePrintSetup() {
+  char line[160];
+
+  snprintf(line, sizeof(line), "setup.device_name=%s", HxSetupData.device_name);
+  LogSinkWriteLineRaw(line);
+
+  snprintf(line, sizeof(line), "setup.log_level=%s (%d)",
+           SetupLogLevelText(HxSetupData.log_level),
+           (int)HxSetupData.log_level);
+  LogSinkWriteLineRaw(line);
+
+  snprintf(line, sizeof(line), "setup.safeboot_enable=%s",
+           HxSetupData.safeboot_enable ? "true" : "false");
+  LogSinkWriteLineRaw(line);
+
+  snprintf(line, sizeof(line), "setup.config_loaded=%s",
+           Hx.config_loaded ? "true" : "false");
+  LogSinkWriteLineRaw(line);
+
+  ConsolePrompt();
+}
+
+static bool ConsoleParseBool(const char* text, bool* value) {
+  if (!text || !text[0] || !value) {
+    return false;
+  }
+
+  if ((strcasecmp(text, "1") == 0) ||
+      (strcasecmp(text, "on") == 0) ||
+      (strcasecmp(text, "true") == 0) ||
+      (strcasecmp(text, "yes") == 0)) {
+    *value = true;
+    return true;
+  }
+
+  if ((strcasecmp(text, "0") == 0) ||
+      (strcasecmp(text, "off") == 0) ||
+      (strcasecmp(text, "false") == 0) ||
+      (strcasecmp(text, "no") == 0)) {
+    *value = false;
+    return true;
+  }
+
+  return false;
+}
+
+static void ConsoleCommandSetName(const char* value) {
+  while (value && ((*value == ' ') || (*value == '\t'))) {
+    value++;
+  }
+
+  if (SetupSetDeviceName(value)) {
+    SetupApply();
+    LogSinkWriteLineRaw("setup.device_name updated");
+  } else {
+    LogSinkWriteLineRaw("invalid device name");
+  }
+
+  ConsolePrompt();
+}
+
+static void ConsoleCommandSetLog(const char* value) {
+  while (value && ((*value == ' ') || (*value == '\t'))) {
+    value++;
+  }
+
+  HxLogLevel level;
+  if (!SetupParseLogLevel(value, &level)) {
+    LogSinkWriteLineRaw("invalid log level");
+    ConsolePrompt();
+    return;
+  }
+
+  if (!SetupSetLogLevel(level)) {
+    LogSinkWriteLineRaw("failed to update log level");
+    ConsolePrompt();
+    return;
+  }
+
+  SetupApply();
+  LogSinkWriteLineRaw("setup.log_level updated");
+  ConsolePrompt();
+}
+
+static void ConsoleCommandSetSafeboot(const char* value) {
+  while (value && ((*value == ' ') || (*value == '\t'))) {
+    value++;
+  }
+
+  bool enabled = false;
+  if (!ConsoleParseBool(value, &enabled)) {
+    LogSinkWriteLineRaw("invalid safeboot value");
+    ConsolePrompt();
+    return;
+  }
+
+  SetupSetSafebootEnable(enabled);
+  SetupApply();
+  LogSinkWriteLineRaw("setup.safeboot_enable updated");
+  ConsolePrompt();
+}
+
 static void ConsoleExecuteCommand(const char* line) {
   if (!line || !line[0]) {
     ConsolePrompt();
+    return;
+  }
+
+  if ((strcmp(line, "help") == 0) || (strcmp(line, "?") == 0)) {
+    ConsolePrintHelp();
     return;
   }
 
@@ -193,6 +319,55 @@ static void ConsoleExecuteCommand(const char* line) {
 
   if (strcmp(line, "logstat") == 0) {
     ConsolePrintLogStats();
+    return;
+  }
+
+  if ((strcmp(line, "setup") == 0) || (strcmp(line, "show setup") == 0)) {
+    ConsolePrintSetup();
+    return;
+  }
+
+  if (strcmp(line, "setup save") == 0) {
+    if (SetupSave()) {
+      LogSinkWriteLineRaw("setup saved to NVS");
+    } else {
+      LogSinkWriteLineRaw("setup save failed");
+    }
+    ConsolePrompt();
+    return;
+  }
+
+  if (strcmp(line, "setup load") == 0) {
+    if (SetupLoad()) {
+      SetupApply();
+      LogSinkWriteLineRaw("setup loaded from NVS");
+    } else {
+      LogSinkWriteLineRaw("setup load failed");
+    }
+    ConsolePrompt();
+    return;
+  }
+
+  if (strcmp(line, "setup defaults") == 0) {
+    SetupResetToDefaults(&HxSetupData);
+    SetupApply();
+    LogSinkWriteLineRaw("setup reset to build defaults");
+    ConsolePrompt();
+    return;
+  }
+
+  if (strncmp(line, "set name ", 9) == 0) {
+    ConsoleCommandSetName(line + 9);
+    return;
+  }
+
+  if (strncmp(line, "set log ", 8) == 0) {
+    ConsoleCommandSetLog(line + 8);
+    return;
+  }
+
+  if (strncmp(line, "set safeboot ", 13) == 0) {
+    ConsoleCommandSetSafeboot(line + 13);
     return;
   }
 
@@ -292,7 +467,7 @@ static bool ConsoleInit() {
 
 static void ConsoleStart() {
   LogInfo("CON: start");
-  LogInfo("CON: commands available: reboot, log, logclr, logstat");
+  LogInfo("CON: commands available: help, reboot, log, logclr, logstat, setup, set");
 }
 
 static void ConsoleLoop() {
