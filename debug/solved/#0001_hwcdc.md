@@ -74,4 +74,4 @@ static void hw_cdc_isr_handler(void *arg)
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096 from 0
 
 # Solved?: 
-In process
+Solved by raising CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096. There might be a good readon not to move small buffers to PSRAM due memory violations and stack overflows. Possible lovering alwaysinternal only to really small mallocs <1024 in future when codebase / ram usage grows. But memory fragmentation...
