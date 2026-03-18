@@ -1,0 +1,39 @@
+HexaOS Copyright Notice
+=======================
+
+Copyright (C) 2026 Martin Macak
+All rights in HexaOS-owned source files are reserved by Martin Macak,
+except where a different copyright owner or license is explicitly noted.
+
+Scope of HexaOS-owned files
+---------------------------
+Unless otherwise noted in the file itself or in THIRD_PARTY_LICENSES.md,
+HexaOS-owned files include the project's own source and supporting files,
+including for example:
+
+- src/
+- include/
+- docs/
+- environment/
+- scripts and repository metadata maintained as part of HexaOS
+
+Third-party code
+----------------
+Code, libraries, assets, examples, or other materials originating from third
+parties retain their original copyright and license terms. Such materials must
+not be relicensed as HexaOS-owned code merely by being stored in this
+repository.
+
+Contributions to HexaOS core
+----------------------------
+By submitting a pull request or other contribution that modifies any file
+outside the lib/ directory, the contributor agrees to the Contributor
+Assignment terms described in CONTRIBUTING.md. For accepted contributions,
+all right, title, and interest in the contributed changes are assigned to
+Martin Macak to the maximum extent permitted by applicable law.
+
+No trademark license
+--------------------
+This copyright notice does not grant any right to use the name "HexaOS" or any
+associated logos, brands, or marks, except as necessary to describe the origin
+of the software or as separately authorized in writing.
