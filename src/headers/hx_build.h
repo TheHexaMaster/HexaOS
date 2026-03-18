@@ -12,8 +12,6 @@
 
 #pragma once
 
-#include "hx_types.h"
-
 #define HX_NAME    "HexaOS"
 #define HX_VERSION "0.0.1-alpha"
 

@@ -179,6 +179,44 @@ static void ConsolePrintLogStats() {
   ConsolePrompt();
 }
 
+static void ConsoleWriteConfigItemLine(const HxConfigKeyDef* item) {
+  if (!item) {
+    return;
+  }
+
+  char current[96];
+  char defaults[96];
+
+  if (!SetupConfigValueToString(item, current, sizeof(current))) {
+    snprintf(current, sizeof(current), "<error>");
+  }
+
+  if (!SetupConfigDefaultToString(item, defaults, sizeof(defaults))) {
+    snprintf(defaults, sizeof(defaults), "<error>");
+  }
+
+  char line[256];
+  snprintf(line, sizeof(line), "%s = %s (default=%s)", item->key, current, defaults);
+  LogSinkWriteLineRaw(line);
+}
+
+static void ConsoleWriteStateItemLine(const HxStateKeyDef* item) {
+  if (!item) {
+    return;
+  }
+
+  char value[96];
+  char line[256];
+
+  if (StateValueToString(item, value, sizeof(value))) {
+    snprintf(line, sizeof(line), "%s = %s", item->key, value);
+  } else {
+    snprintf(line, sizeof(line), "%s = <unset>", item->key);
+  }
+
+  LogSinkWriteLineRaw(line);
+}
+
 static void ConsolePrintHelp() {
   LogSinkWriteLineRaw("commands:");
   LogSinkWriteLineRaw("  help");
@@ -186,116 +224,170 @@ static void ConsolePrintHelp() {
   LogSinkWriteLineRaw("  log");
   LogSinkWriteLineRaw("  logclr");
   LogSinkWriteLineRaw("  logstat");
-  LogSinkWriteLineRaw("  setup");
-  LogSinkWriteLineRaw("  setup save");
-  LogSinkWriteLineRaw("  setup load");
-  LogSinkWriteLineRaw("  setup defaults");
-  LogSinkWriteLineRaw("  set name <value>");
-  LogSinkWriteLineRaw("  set log <error|warn|info|debug|0..3>");
-  LogSinkWriteLineRaw("  set safeboot <on|off>");
+  LogSinkWriteLineRaw("  listcfg");
+  LogSinkWriteLineRaw("  readcfg <key>");
+  LogSinkWriteLineRaw("  setcfg <key> <value>");
+  LogSinkWriteLineRaw("  savecfg");
+  LogSinkWriteLineRaw("  loadcfg");
+  LogSinkWriteLineRaw("  defaultcfg");
+  LogSinkWriteLineRaw("  liststate");
+  LogSinkWriteLineRaw("  readstate <key>");
   ConsolePrompt();
 }
 
-static void ConsolePrintSetup() {
-  char line[160];
+static void ConsolePrintConfigList() {
+  for (size_t i = 0; i < SetupConfigKeyCount(); i++) {
+    const HxConfigKeyDef* item = SetupConfigKeyAt(i);
+    if (!item || !item->console_visible) {
+      continue;
+    }
 
-  snprintf(line, sizeof(line), "setup.device_name=%s", HxSetupData.device_name);
-  LogSinkWriteLineRaw(line);
+    ConsoleWriteConfigItemLine(item);
+  }
 
-  snprintf(line, sizeof(line), "setup.log_level=%s (%d)",
-           SetupLogLevelText(HxSetupData.log_level),
-           (int)HxSetupData.log_level);
+  char line[96];
+  snprintf(line, sizeof(line), "config.loaded = %s", Hx.config_loaded ? "true" : "false");
   LogSinkWriteLineRaw(line);
+  ConsolePrompt();
+}
 
-  snprintf(line, sizeof(line), "setup.safeboot_enable=%s",
-           HxSetupData.safeboot_enable ? "true" : "false");
-  LogSinkWriteLineRaw(line);
+static void ConsolePrintStateList() {
+  for (size_t i = 0; i < StateKeyCount(); i++) {
+    const HxStateKeyDef* item = StateKeyAt(i);
+    if (!item || !item->console_visible) {
+      continue;
+    }
 
-  snprintf(line, sizeof(line), "setup.config_loaded=%s",
-           Hx.config_loaded ? "true" : "false");
-  LogSinkWriteLineRaw(line);
+    ConsoleWriteStateItemLine(item);
+  }
 
   ConsolePrompt();
 }
 
-static bool ConsoleParseBool(const char* text, bool* value) {
-  if (!text || !text[0] || !value) {
+static void ConsoleReadConfigKey(const char* key) {
+  const HxConfigKeyDef* item = SetupFindConfigKey(key);
+  if (!item) {
+    LogSinkWriteLineRaw("config key not found");
+    ConsolePrompt();
+    return;
+  }
+
+  ConsoleWriteConfigItemLine(item);
+  ConsolePrompt();
+}
+
+static void ConsoleReadStateKey(const char* key) {
+  const HxStateKeyDef* item = StateFindKey(key);
+  if (!item) {
+    LogSinkWriteLineRaw("state key not found");
+    ConsolePrompt();
+    return;
+  }
+
+  ConsoleWriteStateItemLine(item);
+  ConsolePrompt();
+}
+
+static void ConsoleSetConfigKey(const char* key, const char* value) {
+  const HxConfigKeyDef* item = SetupFindConfigKey(key);
+  if (!item) {
+    LogSinkWriteLineRaw("config key not found");
+    ConsolePrompt();
+    return;
+  }
+
+  if (!item->console_writable) {
+    LogSinkWriteLineRaw("config key is read-only");
+    ConsolePrompt();
+    return;
+  }
+
+  if (!SetupConfigSetValueFromString(item, value)) {
+    LogSinkWriteLineRaw("invalid config value");
+    ConsolePrompt();
+    return;
+  }
+
+  SetupApply();
+
+  char line[192];
+  snprintf(line, sizeof(line), "%s updated", item->key);
+  LogSinkWriteLineRaw(line);
+  ConsolePrompt();
+}
+
+static bool ConsoleSplitKeyValue(const char* text, char* key_out, size_t key_size, const char** value_out) {
+  if (!text || !key_out || (key_size == 0) || !value_out) {
     return false;
   }
 
-  if ((strcasecmp(text, "1") == 0) ||
-      (strcasecmp(text, "on") == 0) ||
-      (strcasecmp(text, "true") == 0) ||
-      (strcasecmp(text, "yes") == 0)) {
-    *value = true;
-    return true;
+  while ((*text == ' ') || (*text == '\t')) {
+    text++;
   }
 
-  if ((strcasecmp(text, "0") == 0) ||
-      (strcasecmp(text, "off") == 0) ||
-      (strcasecmp(text, "false") == 0) ||
-      (strcasecmp(text, "no") == 0)) {
-    *value = false;
-    return true;
+  if (!text[0]) {
+    return false;
   }
 
-  return false;
+  const char* sep = text;
+  while (*sep && (*sep != ' ') && (*sep != '\t')) {
+    sep++;
+  }
+
+  size_t key_len = (size_t)(sep - text);
+  if ((key_len == 0) || (key_len >= key_size)) {
+    return false;
+  }
+
+  memcpy(key_out, text, key_len);
+  key_out[key_len] = '\0';
+
+  while ((*sep == ' ') || (*sep == '\t')) {
+    sep++;
+  }
+
+  *value_out = sep;
+  return (sep[0] != '\0');
 }
 
-static void ConsoleCommandSetName(const char* value) {
-  while (value && ((*value == ' ') || (*value == '\t'))) {
-    value++;
+static bool ConsoleExtractSingleKey(const char* text, char* key_out, size_t key_size) {
+  if (!text || !key_out || (key_size == 0)) {
+    return false;
   }
 
-  if (SetupSetDeviceName(value)) {
-    SetupApply();
-    LogSinkWriteLineRaw("setup.device_name updated");
-  } else {
-    LogSinkWriteLineRaw("invalid device name");
+  while ((*text == ' ') || (*text == '\t')) {
+    text++;
   }
 
-  ConsolePrompt();
-}
-
-static void ConsoleCommandSetLog(const char* value) {
-  while (value && ((*value == ' ') || (*value == '\t'))) {
-    value++;
+  if (!text[0]) {
+    return false;
   }
 
-  HxLogLevel level;
-  if (!SetupParseLogLevel(value, &level)) {
-    LogSinkWriteLineRaw("invalid log level");
-    ConsolePrompt();
-    return;
+  const char* end = text;
+  while (*end && (*end != ' ') && (*end != '\t')) {
+    end++;
   }
 
-  if (!SetupSetLogLevel(level)) {
-    LogSinkWriteLineRaw("failed to update log level");
-    ConsolePrompt();
-    return;
+  while ((*end == ' ') || (*end == '\t')) {
+    end++;
   }
 
-  SetupApply();
-  LogSinkWriteLineRaw("setup.log_level updated");
-  ConsolePrompt();
-}
-
-static void ConsoleCommandSetSafeboot(const char* value) {
-  while (value && ((*value == ' ') || (*value == '\t'))) {
-    value++;
+  if (*end != '\0') {
+    return false;
   }
 
-  bool enabled = false;
-  if (!ConsoleParseBool(value, &enabled)) {
-    LogSinkWriteLineRaw("invalid safeboot value");
-    ConsolePrompt();
-    return;
+  size_t len = (size_t)(end - text);
+  while ((len > 0) && ((text[len - 1] == ' ') || (text[len - 1] == '\t'))) {
+    len--;
   }
 
-  SetupSetSafebootEnable(enabled);
-  SetupApply();
-  LogSinkWriteLineRaw("setup.safeboot_enable updated");
-  ConsolePrompt();
+  if ((len == 0) || (len >= key_size)) {
+    return false;
+  }
+
+  memcpy(key_out, text, len);
+  key_out[len] = '\0';
+  return true;
 }
 
 static void ConsoleExecuteCommand(const char* line) {
@@ -333,52 +425,81 @@ static void ConsoleExecuteCommand(const char* line) {
     return;
   }
 
-  if ((strcmp(line, "setup") == 0) || (strcmp(line, "show setup") == 0)) {
-    ConsolePrintSetup();
+  if ((strcmp(line, "listcfg") == 0) ||
+      (strcmp(line, "setup") == 0) ||
+      (strcmp(line, "show setup") == 0)) {
+    ConsolePrintConfigList();
     return;
   }
 
-  if (strcmp(line, "setup save") == 0) {
+  if ((strcmp(line, "savecfg") == 0) || (strcmp(line, "setup save") == 0)) {
     if (SetupSave()) {
-      LogSinkWriteLineRaw("setup saved to NVS");
+      LogSinkWriteLineRaw("config saved to NVS");
     } else {
-      LogSinkWriteLineRaw("setup save failed");
+      LogSinkWriteLineRaw("config save failed");
     }
     ConsolePrompt();
     return;
   }
 
-  if (strcmp(line, "setup load") == 0) {
+  if ((strcmp(line, "loadcfg") == 0) || (strcmp(line, "setup load") == 0)) {
     if (SetupLoad()) {
       SetupApply();
-      LogSinkWriteLineRaw("setup loaded from NVS");
+      LogSinkWriteLineRaw("config loaded from NVS");
     } else {
-      LogSinkWriteLineRaw("setup load failed");
+      LogSinkWriteLineRaw("config load failed");
     }
     ConsolePrompt();
     return;
   }
 
-  if (strcmp(line, "setup defaults") == 0) {
+  if ((strcmp(line, "defaultcfg") == 0) || (strcmp(line, "setup defaults") == 0)) {
     SetupResetToDefaults(&HxSetupData);
     SetupApply();
-    LogSinkWriteLineRaw("setup reset to build defaults");
+    LogSinkWriteLineRaw("config reset to build defaults");
     ConsolePrompt();
     return;
   }
 
-  if (strncmp(line, "set name ", 9) == 0) {
-    ConsoleCommandSetName(line + 9);
+  if (strncmp(line, "readcfg ", 8) == 0) {
+    char key[64];
+    if (!ConsoleExtractSingleKey(line + 8, key, sizeof(key))) {
+      LogSinkWriteLineRaw("usage: readcfg <key>");
+      ConsolePrompt();
+      return;
+    }
+
+    ConsoleReadConfigKey(key);
     return;
   }
 
-  if (strncmp(line, "set log ", 8) == 0) {
-    ConsoleCommandSetLog(line + 8);
+  if (strncmp(line, "setcfg ", 7) == 0) {
+    char key[64];
+    const char* value = nullptr;
+    if (!ConsoleSplitKeyValue(line + 7, key, sizeof(key), &value)) {
+      LogSinkWriteLineRaw("usage: setcfg <key> <value>");
+      ConsolePrompt();
+      return;
+    }
+
+    ConsoleSetConfigKey(key, value);
     return;
   }
 
-  if (strncmp(line, "set safeboot ", 13) == 0) {
-    ConsoleCommandSetSafeboot(line + 13);
+  if (strcmp(line, "liststate") == 0) {
+    ConsolePrintStateList();
+    return;
+  }
+
+  if (strncmp(line, "readstate ", 10) == 0) {
+    char key[64];
+    if (!ConsoleExtractSingleKey(line + 10, key, sizeof(key))) {
+      LogSinkWriteLineRaw("usage: readstate <key>");
+      ConsolePrompt();
+      return;
+    }
+
+    ConsoleReadStateKey(key);
     return;
   }
 
@@ -478,7 +599,7 @@ static bool ConsoleInit() {
 
 static void ConsoleStart() {
   LogInfo("CON: start");
-  LogInfo("CON: commands available: help, reboot, log, logclr, logstat, setup, set");
+  LogInfo("CON: commands available: help, reboot, log, logclr, logstat, listcfg, readcfg, setcfg, savecfg, loadcfg, defaultcfg, liststate, readstate");
 }
 
 static void ConsoleLoop() {

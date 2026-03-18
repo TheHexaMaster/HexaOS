@@ -1,5 +1,5 @@
 /*
-  HexaOS - hx_platform_nvs.h
+  HexaOS - esp_nvs.h
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only

@@ -80,11 +80,6 @@ bool EspLittlefsMount();
 // services
 bool FactoryDataInit();
 
-bool SetupInit();
-bool SetupLoad();
-bool SetupSave();
-void SetupApply();
-
 bool StateInit();
 bool StateLoad();
 bool StateSave();

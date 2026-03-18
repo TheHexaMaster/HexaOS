@@ -10,9 +10,102 @@
 */
 
 #include "hexaos.h"
-#include "headers/hx_platform_nvs.h"
+#include "platform/esp_nvs.h"
+
+#include <limits.h>
+#include <stdio.h>
+#include <string.h>
 
 static bool g_state_ready = false;
+
+static const HxStateKeyDef kHxStateKeys[] = {
+  {
+    .key = HX_STATE_BOOT_COUNT,
+    .type = HX_SCHEMA_VALUE_INT32,
+    .min_i32 = 0,
+    .max_i32 = INT32_MAX,
+    .max_len = 0,
+    .console_visible = true
+  },
+  {
+    .key = HX_STATE_LAST_RESET,
+    .type = HX_SCHEMA_VALUE_STRING,
+    .min_i32 = 0,
+    .max_i32 = 0,
+    .max_len = 32,
+    .console_visible = true
+  }
+};
+
+size_t StateKeyCount() {
+  return sizeof(kHxStateKeys) / sizeof(kHxStateKeys[0]);
+}
+
+const HxStateKeyDef* StateKeyAt(size_t index) {
+  if (index >= StateKeyCount()) {
+    return nullptr;
+  }
+
+  return &kHxStateKeys[index];
+}
+
+const HxStateKeyDef* StateFindKey(const char* key) {
+  if (!key || !key[0]) {
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < StateKeyCount(); i++) {
+    if (strcmp(kHxStateKeys[i].key, key) == 0) {
+      return &kHxStateKeys[i];
+    }
+  }
+
+  return nullptr;
+}
+
+bool StateValueToString(const HxStateKeyDef* item, char* out, size_t out_size) {
+  if (!item || !out || (out_size == 0) || !g_state_ready) {
+    return false;
+  }
+
+  out[0] = '\0';
+
+  switch (item->type) {
+    case HX_SCHEMA_VALUE_BOOL: {
+      bool value = false;
+      if (!HxNvsGetBool(HX_NVS_STORE_STATE, item->key, &value)) {
+        return false;
+      }
+
+      snprintf(out, out_size, "%s", value ? "true" : "false");
+      return true;
+    }
+
+    case HX_SCHEMA_VALUE_INT32:
+    case HX_SCHEMA_VALUE_LOG_LEVEL: {
+      int32_t value = 0;
+      if (!HxNvsGetInt(HX_NVS_STORE_STATE, item->key, &value)) {
+        return false;
+      }
+
+      snprintf(out, out_size, "%ld", (long)value);
+      return true;
+    }
+
+    case HX_SCHEMA_VALUE_STRING: {
+      String text;
+      if (!HxNvsGetString(HX_NVS_STORE_STATE, item->key, text)) {
+        return false;
+      }
+
+      snprintf(out, out_size, "%s", text.c_str());
+      return true;
+    }
+
+    default:
+      return false;
+  }
+}
 
 bool StateInit() {
   g_state_ready = EspNvsOpenState();
