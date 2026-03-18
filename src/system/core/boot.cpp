@@ -31,7 +31,7 @@ const char* EspResetReasonText(uint32_t reason) {
 
 void BootPrintBanner() {
   LogRaw("========================================");
-  LogInfo("%s boot start", HX_NAME);
+  LogInfo("%s boot start", HX_SYSTEM_NAME);
   LogInfo("Version: %s", HX_VERSION);
   LogInfo("Board:   %s", HX_TARGET_NAME);
   LogRaw("========================================");

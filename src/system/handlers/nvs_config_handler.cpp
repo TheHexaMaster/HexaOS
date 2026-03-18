@@ -31,39 +31,22 @@ const HxConfig HxConfigDefaults = {
 };
 
 static const HxConfigKeyDef kHxConfigKeys[] = {
-  {
-    .key = HX_CFG_DEVICE_NAME,
-    .type = HX_SCHEMA_VALUE_STRING,
-    .config_offset = offsetof(HxConfig, device_name),
-    .value_size = sizeof(((HxConfig*)0)->device_name),
-    .min_i32 = 0,
-    .max_i32 = 0,
-    .max_len = HX_CONFIG_DEVICE_NAME_MAX,
-    .console_visible = true,
-    .console_writable = true
+#define HX_CONFIG_ITEM(id, key_text, type_id, field_name, max_len_value, min_i32_value, max_i32_value, console_visible_value, console_writable_value) \
+  { \
+    .key = key_text, \
+    .type = type_id, \
+    .config_offset = offsetof(HxConfig, field_name), \
+    .value_size = sizeof(((HxConfig*)0)->field_name), \
+    .min_i32 = (int32_t)(min_i32_value), \
+    .max_i32 = (int32_t)(max_i32_value), \
+    .max_len = (size_t)(max_len_value), \
+    .console_visible = (console_visible_value), \
+    .console_writable = (console_writable_value) \
   },
-  {
-    .key = HX_CFG_LOG_LEVEL,
-    .type = HX_SCHEMA_VALUE_LOG_LEVEL,
-    .config_offset = offsetof(HxConfig, log_level),
-    .value_size = sizeof(((HxConfig*)0)->log_level),
-    .min_i32 = (int32_t)HX_LOG_ERROR,
-    .max_i32 = (int32_t)HX_LOG_DEBUG,
-    .max_len = 0,
-    .console_visible = true,
-    .console_writable = true
-  },
-  {
-    .key = HX_CFG_SAFEBOOT_ENABLE,
-    .type = HX_SCHEMA_VALUE_BOOL,
-    .config_offset = offsetof(HxConfig, safeboot_enable),
-    .value_size = sizeof(((HxConfig*)0)->safeboot_enable),
-    .min_i32 = 0,
-    .max_i32 = 1,
-    .max_len = 0,
-    .console_visible = true,
-    .console_writable = true
-  }
+
+  HX_CONFIG_SCHEMA(HX_CONFIG_ITEM)
+
+#undef HX_CONFIG_ITEM
 };
 
 static bool ConfigLogLevelIsValid(HxLogLevel level) {

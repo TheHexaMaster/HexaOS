@@ -17,21 +17,13 @@
 #include <stdarg.h>
 
 #include "headers/hx_build.h"
-#include "headers/hx_types.h"
+#include "headers/hx_enums.h"
 #include "headers/hx_module.h"
-#include "headers/hx_config_keys.h"
 #include "headers/hx_config.h"
+#include "headers/hx_config_keys.h"
 
-struct HxRuntime {
-  bool safeboot;
-  bool config_loaded;
-  bool state_loaded;
-  bool littlefs_mounted;
-  uint32_t uptime_ms;
-  uint32_t boot_count;
-};
 
-extern HxRuntime Hx;
+
 
 // core
 void BootInit();

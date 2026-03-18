@@ -19,22 +19,19 @@
 static bool g_state_ready = false;
 
 static const HxStateKeyDef kHxStateKeys[] = {
-  {
-    .key = HX_STATE_BOOT_COUNT,
-    .type = HX_SCHEMA_VALUE_INT32,
-    .min_i32 = 0,
-    .max_i32 = INT32_MAX,
-    .max_len = 0,
-    .console_visible = true
+#define HX_STATE_ITEM(id, key_text, type_id, min_i32_value, max_i32_value, max_len_value, console_visible_value) \
+  { \
+    .key = key_text, \
+    .type = type_id, \
+    .min_i32 = (int32_t)(min_i32_value), \
+    .max_i32 = (int32_t)(max_i32_value), \
+    .max_len = (size_t)(max_len_value), \
+    .console_visible = (console_visible_value) \
   },
-  {
-    .key = HX_STATE_LAST_RESET,
-    .type = HX_SCHEMA_VALUE_STRING,
-    .min_i32 = 0,
-    .max_i32 = 0,
-    .max_len = 32,
-    .console_visible = true
-  }
+
+  HX_STATE_SCHEMA(HX_STATE_ITEM)
+
+#undef HX_STATE_ITEM
 };
 
 size_t StateKeyCount() {
