@@ -18,7 +18,14 @@ bool FilesInit() {
 }
 
 bool FilesMount() {
-  Hx.littlefs_mounted = EspLittlefsMount();
+  Hx.littlefs_mounted = LittleFS.begin(true, "", 10, "littlefs");
+
+  if (Hx.littlefs_mounted) {
+    LogInfo("LittleFS mount OK");
+  } else {
+    LogError("LittleFS mount failed");
+  }
+
   return Hx.littlefs_mounted;
 }
 

@@ -75,7 +75,6 @@ bool EspNvsInit();
 bool EspNvsOpenConfig();
 bool EspNvsOpenState();
 bool EspNvsOpenFactory();
-bool EspLittlefsMount();
 
 // services
 bool FactoryDataInit();
