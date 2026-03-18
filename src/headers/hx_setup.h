@@ -1,3 +1,22 @@
+/*
+  HexaOS - hx_setup.h
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Defines the HexaOS runtime setup schema stored in RAM and synchronized
+  with persistent configuration storage. This header provides the typed
+  setup structure, default setup access, and the public API for loading,
+  saving, resetting, applying, and updating runtime configuration values.
+
+  Use case
+  Used as the central runtime configuration contract for system-wide setup
+  values such as device identity, log level, safeboot behavior, and other
+  configurable options that are loaded from NVS and applied during boot
+  or updated later from the console or other management interfaces.
+*/
+
 #pragma once
 
 #include <stddef.h>
