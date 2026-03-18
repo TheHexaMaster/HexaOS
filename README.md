@@ -108,6 +108,6 @@ In the long run, HexaOS aims to become:
 - a practical development platform for advanced embedded projects
 - a clean bridge between low-level embedded power and approachable application development
 
-## License
+## 📄 Licenses
 
-License information will be added as the project structure is finalized.
+This project is released under [GPL-3.0 license](./LICENSE)
