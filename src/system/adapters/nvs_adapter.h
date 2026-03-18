@@ -1,5 +1,5 @@
 /*
-  HexaOS - esp_nvs.h
+  HexaOS - nvs_adapter.h
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
@@ -19,6 +19,11 @@ enum HxNvsStore : uint8_t {
   HX_NVS_STORE_STATE = 1,
   HX_NVS_STORE_FACTORY = 2
 };
+
+
+bool EspNvsOpenConfig();
+bool EspNvsOpenState();
+bool EspNvsOpenFactory();
 
 bool HxNvsGetBool(HxNvsStore store, const char* key, bool* value);
 bool HxNvsGetInt(HxNvsStore store, const char* key, int32_t* value);

@@ -1,5 +1,5 @@
 /*
-  HexaOS - files.cpp
+  HexaOS - littlefs_handler.cpp
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only

@@ -1,5 +1,5 @@
 /*
-  HexaOS - esp_nvs.cpp
+  HexaOS - nvs_adapter.cpp
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
@@ -9,7 +9,7 @@
   Implements the concrete non-volatile storage backend used by HexaOS services to open dedicated NVS partitions and read, write or commit primitive persisted values.
 */
 
-#include "esp_nvs.h"
+#include "nvs_adapter.h"
 #include "hexaos.h"
 
 #include <nvs.h>
@@ -89,35 +89,40 @@ static bool OpenPartitionHandle(const char* partition_label, nvs_handle_t* handl
   return true;
 }
 
-bool EspNvsInit() {
-  if (!InitPartition(HX_NVS_PARTITION_CONFIG)) {
-    return false;
-  }
-
-  if (!InitPartition(HX_NVS_PARTITION_STATE)) {
-    return false;
-  }
-
-  if (!InitPartition(HX_NVS_PARTITION_FACTORY)) {
-    return false;
-  }
-
-  LogInfo("NVS init OK (config=%s state=%s factory=%s)",
-          HX_NVS_PARTITION_CONFIG,
-          HX_NVS_PARTITION_STATE,
-          HX_NVS_PARTITION_FACTORY);
-  return true;
-}
 
 bool EspNvsOpenConfig() {
+
+  if (!InitPartition(HX_NVS_PARTITION_CONFIG)) {
+    Panic("Config NVS init failed");
+    return false;
+  }
+
+  LogInfo("Config NVS init OK (%s)", HX_NVS_PARTITION_CONFIG);
+
   return OpenPartitionHandle(HX_NVS_PARTITION_CONFIG, &g_nvs_config);
 }
 
 bool EspNvsOpenState() {
+
+  if (!InitPartition(HX_NVS_PARTITION_STATE)) {
+    Panic("State NVS init failed");
+    return false;
+  }
+
+  LogInfo("State NVS init OK (%s)", HX_NVS_PARTITION_STATE);
+  
   return OpenPartitionHandle(HX_NVS_PARTITION_STATE, &g_nvs_state);
 }
 
 bool EspNvsOpenFactory() {
+
+  if (!InitPartition(HX_NVS_PARTITION_FACTORY)) {
+    Panic("Factory NVS init failed");
+    return false;
+  }
+
+  LogInfo("Factory NVS init OK (%s)", HX_NVS_PARTITION_FACTORY);
+
   return OpenPartitionHandle(HX_NVS_PARTITION_FACTORY, &g_nvs_factory);
 }
 

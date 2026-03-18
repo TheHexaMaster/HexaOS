@@ -1,16 +1,16 @@
 /*
-  HexaOS - config.cpp
+  HexaOS - nvs_config_handler.cpp
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
   Runtime configuration service.
-  Provides the persistent key-value configuration layer stored in NVS and used to load, query and save mutable HexaOS setup values across reboots.
+  Provides the persistent key-value configuration layer stored in NVS and used to load, query and save mutable HexaOS config values across reboots.
 */
 
 #include "hexaos.h"
-#include "platform/esp_nvs.h"
+#include "system/adapters/nvs_adapter.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -18,13 +18,13 @@
 #include <string.h>
 #include <strings.h>
 
-static_assert(sizeof(HX_BUILD_DEFAULT_DEVICE_NAME) <= (HX_SETUP_DEVICE_NAME_MAX + 1),
+static_assert(sizeof(HX_BUILD_DEFAULT_DEVICE_NAME) <= (HX_CONFIG_DEVICE_NAME_MAX + 1),
               "HX_BUILD_DEFAULT_DEVICE_NAME is too long");
 
-static bool g_setup_ready = false;
+static bool g_config_ready = false;
 
-HxSetup HxSetupData = {};
-const HxSetup HxSetupDefaults = {
+HxConfig HxConfigData = {};
+const HxConfig HxConfigDefaults = {
   HX_BUILD_DEFAULT_DEVICE_NAME,
   (HxLogLevel)HX_BUILD_DEFAULT_LOG_LEVEL,
   (HX_BUILD_DEFAULT_SAFEBOOT_ENABLE != 0)
@@ -34,19 +34,19 @@ static const HxConfigKeyDef kHxConfigKeys[] = {
   {
     .key = HX_CFG_DEVICE_NAME,
     .type = HX_SCHEMA_VALUE_STRING,
-    .setup_offset = offsetof(HxSetup, device_name),
-    .value_size = sizeof(((HxSetup*)0)->device_name),
+    .config_offset = offsetof(HxConfig, device_name),
+    .value_size = sizeof(((HxConfig*)0)->device_name),
     .min_i32 = 0,
     .max_i32 = 0,
-    .max_len = HX_SETUP_DEVICE_NAME_MAX,
+    .max_len = HX_CONFIG_DEVICE_NAME_MAX,
     .console_visible = true,
     .console_writable = true
   },
   {
     .key = HX_CFG_LOG_LEVEL,
     .type = HX_SCHEMA_VALUE_LOG_LEVEL,
-    .setup_offset = offsetof(HxSetup, log_level),
-    .value_size = sizeof(((HxSetup*)0)->log_level),
+    .config_offset = offsetof(HxConfig, log_level),
+    .value_size = sizeof(((HxConfig*)0)->log_level),
     .min_i32 = (int32_t)HX_LOG_ERROR,
     .max_i32 = (int32_t)HX_LOG_DEBUG,
     .max_len = 0,
@@ -56,8 +56,8 @@ static const HxConfigKeyDef kHxConfigKeys[] = {
   {
     .key = HX_CFG_SAFEBOOT_ENABLE,
     .type = HX_SCHEMA_VALUE_BOOL,
-    .setup_offset = offsetof(HxSetup, safeboot_enable),
-    .value_size = sizeof(((HxSetup*)0)->safeboot_enable),
+    .config_offset = offsetof(HxConfig, safeboot_enable),
+    .value_size = sizeof(((HxConfig*)0)->safeboot_enable),
     .min_i32 = 0,
     .max_i32 = 1,
     .max_len = 0,
@@ -66,27 +66,27 @@ static const HxConfigKeyDef kHxConfigKeys[] = {
   }
 };
 
-static bool SetupLogLevelIsValid(HxLogLevel level) {
+static bool ConfigLogLevelIsValid(HxLogLevel level) {
   return (level >= HX_LOG_ERROR) && (level <= HX_LOG_DEBUG);
 }
 
-static void* SetupFieldPtr(HxSetup* setup, const HxConfigKeyDef* item) {
-  if (!setup || !item) {
+static void* ConfigFieldPtr(HxConfig* config, const HxConfigKeyDef* item) {
+  if (!config || !item) {
     return nullptr;
   }
 
-  return (void*)(reinterpret_cast<uint8_t*>(setup) + item->setup_offset);
+  return (void*)(reinterpret_cast<uint8_t*>(config) + item->config_offset);
 }
 
-static const void* SetupFieldPtrConst(const HxSetup* setup, const HxConfigKeyDef* item) {
-  if (!setup || !item) {
+static const void* ConfigFieldPtrConst(const HxConfig* config, const HxConfigKeyDef* item) {
+  if (!config || !item) {
     return nullptr;
   }
 
-  return (const void*)(reinterpret_cast<const uint8_t*>(setup) + item->setup_offset);
+  return (const void*)(reinterpret_cast<const uint8_t*>(config) + item->config_offset);
 }
 
-static bool SetupParseBoolText(const char* text, bool* value) {
+static bool ConfigParseBoolText(const char* text, bool* value) {
   if (!text || !text[0] || !value) {
     return false;
   }
@@ -110,7 +110,7 @@ static bool SetupParseBoolText(const char* text, bool* value) {
   return false;
 }
 
-static bool SetupParseInt32Text(const char* text, int32_t min_value, int32_t max_value, int32_t* value) {
+static bool ConfigParseInt32Text(const char* text, int32_t min_value, int32_t max_value, int32_t* value) {
   if (!text || !text[0] || !value) {
     return false;
   }
@@ -129,8 +129,8 @@ static bool SetupParseInt32Text(const char* text, int32_t min_value, int32_t max
   return true;
 }
 
-static bool SetupAssignStringField(HxSetup* setup, const HxConfigKeyDef* item, const char* value) {
-  if (!setup || !item || !value) {
+static bool ConfigAssignStringField(HxConfig* config, const HxConfigKeyDef* item, const char* value) {
+  if (!config || !item || !value) {
     return false;
   }
 
@@ -143,7 +143,7 @@ static bool SetupAssignStringField(HxSetup* setup, const HxConfigKeyDef* item, c
     return false;
   }
 
-  char* field = static_cast<char*>(SetupFieldPtr(setup, item));
+  char* field = static_cast<char*>(ConfigFieldPtr(config, item));
   if (!field) {
     return false;
   }
@@ -154,12 +154,12 @@ static bool SetupAssignStringField(HxSetup* setup, const HxConfigKeyDef* item, c
   return true;
 }
 
-static bool SetupAssignBoolField(HxSetup* setup, const HxConfigKeyDef* item, bool value) {
-  if (!setup || !item || (item->type != HX_SCHEMA_VALUE_BOOL) || (item->value_size != sizeof(bool))) {
+static bool ConfigAssignBoolField(HxConfig* config, const HxConfigKeyDef* item, bool value) {
+  if (!config || !item || (item->type != HX_SCHEMA_VALUE_BOOL) || (item->value_size != sizeof(bool))) {
     return false;
   }
 
-  bool* field = static_cast<bool*>(SetupFieldPtr(setup, item));
+  bool* field = static_cast<bool*>(ConfigFieldPtr(config, item));
   if (!field) {
     return false;
   }
@@ -168,8 +168,8 @@ static bool SetupAssignBoolField(HxSetup* setup, const HxConfigKeyDef* item, boo
   return true;
 }
 
-static bool SetupAssignInt32Field(HxSetup* setup, const HxConfigKeyDef* item, int32_t value) {
-  if (!setup || !item) {
+static bool ConfigAssignInt32Field(HxConfig* config, const HxConfigKeyDef* item, int32_t value) {
+  if (!config || !item) {
     return false;
   }
 
@@ -182,7 +182,7 @@ static bool SetupAssignInt32Field(HxSetup* setup, const HxConfigKeyDef* item, in
       return false;
     }
 
-    int32_t* field = static_cast<int32_t*>(SetupFieldPtr(setup, item));
+    int32_t* field = static_cast<int32_t*>(ConfigFieldPtr(config, item));
     if (!field) {
       return false;
     }
@@ -192,11 +192,11 @@ static bool SetupAssignInt32Field(HxSetup* setup, const HxConfigKeyDef* item, in
   }
 
   if (item->type == HX_SCHEMA_VALUE_LOG_LEVEL) {
-    if ((item->value_size != sizeof(HxLogLevel)) || !SetupLogLevelIsValid((HxLogLevel)value)) {
+    if ((item->value_size != sizeof(HxLogLevel)) || !ConfigLogLevelIsValid((HxLogLevel)value)) {
       return false;
     }
 
-    HxLogLevel* field = static_cast<HxLogLevel*>(SetupFieldPtr(setup, item));
+    HxLogLevel* field = static_cast<HxLogLevel*>(ConfigFieldPtr(config, item));
     if (!field) {
       return false;
     }
@@ -208,37 +208,37 @@ static bool SetupAssignInt32Field(HxSetup* setup, const HxConfigKeyDef* item, in
   return false;
 }
 
-static bool SetupAssignValueFromString(HxSetup* setup, const HxConfigKeyDef* item, const char* value) {
-  if (!setup || !item || !value) {
+static bool ConfigAssignValueFromString(HxConfig* config, const HxConfigKeyDef* item, const char* value) {
+  if (!config || !item || !value) {
     return false;
   }
 
   switch (item->type) {
     case HX_SCHEMA_VALUE_STRING:
-      return SetupAssignStringField(setup, item, value);
+      return ConfigAssignStringField(config, item, value);
 
     case HX_SCHEMA_VALUE_BOOL: {
       bool parsed = false;
-      if (!SetupParseBoolText(value, &parsed)) {
+      if (!ConfigParseBoolText(value, &parsed)) {
         return false;
       }
-      return SetupAssignBoolField(setup, item, parsed);
+      return ConfigAssignBoolField(config, item, parsed);
     }
 
     case HX_SCHEMA_VALUE_INT32: {
       int32_t parsed = 0;
-      if (!SetupParseInt32Text(value, item->min_i32, item->max_i32, &parsed)) {
+      if (!ConfigParseInt32Text(value, item->min_i32, item->max_i32, &parsed)) {
         return false;
       }
-      return SetupAssignInt32Field(setup, item, parsed);
+      return ConfigAssignInt32Field(config, item, parsed);
     }
 
     case HX_SCHEMA_VALUE_LOG_LEVEL: {
       HxLogLevel level;
-      if (!SetupParseLogLevel(value, &level)) {
+      if (!ConfigParseLogLevel(value, &level)) {
         return false;
       }
-      return SetupAssignInt32Field(setup, item, (int32_t)level);
+      return ConfigAssignInt32Field(config, item, (int32_t)level);
     }
 
     default:
@@ -246,7 +246,7 @@ static bool SetupAssignValueFromString(HxSetup* setup, const HxConfigKeyDef* ite
   }
 }
 
-static bool SetupReadItemFromNvs(const HxConfigKeyDef* item) {
+static bool ConfigReadItemFromNvs(const HxConfigKeyDef* item) {
   if (!item) {
     return false;
   }
@@ -257,7 +257,7 @@ static bool SetupReadItemFromNvs(const HxConfigKeyDef* item) {
       if (!HxNvsGetString(HX_NVS_STORE_CONFIG, item->key, text_value)) {
         return true;
       }
-      return SetupAssignStringField(&HxSetupData, item, text_value.c_str());
+      return ConfigAssignStringField(&HxConfigData, item, text_value.c_str());
     }
 
     case HX_SCHEMA_VALUE_BOOL: {
@@ -265,7 +265,7 @@ static bool SetupReadItemFromNvs(const HxConfigKeyDef* item) {
       if (!HxNvsGetBool(HX_NVS_STORE_CONFIG, item->key, &bool_value)) {
         return true;
       }
-      return SetupAssignBoolField(&HxSetupData, item, bool_value);
+      return ConfigAssignBoolField(&HxConfigData, item, bool_value);
     }
 
     case HX_SCHEMA_VALUE_INT32:
@@ -274,7 +274,7 @@ static bool SetupReadItemFromNvs(const HxConfigKeyDef* item) {
       if (!HxNvsGetInt(HX_NVS_STORE_CONFIG, item->key, &int_value)) {
         return true;
       }
-      return SetupAssignInt32Field(&HxSetupData, item, int_value);
+      return ConfigAssignInt32Field(&HxConfigData, item, int_value);
     }
 
     default:
@@ -282,13 +282,13 @@ static bool SetupReadItemFromNvs(const HxConfigKeyDef* item) {
   }
 }
 
-static bool SetupItemEqualsDefault(const HxConfigKeyDef* item) {
+static bool ConfigItemEqualsDefault(const HxConfigKeyDef* item) {
   if (!item) {
     return false;
   }
 
-  const void* current_ptr = SetupFieldPtrConst(&HxSetupData, item);
-  const void* default_ptr = SetupFieldPtrConst(&HxSetupDefaults, item);
+  const void* current_ptr = ConfigFieldPtrConst(&HxConfigData, item);
+  const void* default_ptr = ConfigFieldPtrConst(&HxConfigDefaults, item);
   if (!current_ptr || !default_ptr) {
     return false;
   }
@@ -311,16 +311,16 @@ static bool SetupItemEqualsDefault(const HxConfigKeyDef* item) {
   }
 }
 
-static bool SetupStoreItemOverride(const HxConfigKeyDef* item) {
+static bool ConfigStoreItemOverride(const HxConfigKeyDef* item) {
   if (!item) {
     return false;
   }
 
-  if (SetupItemEqualsDefault(item)) {
+  if (ConfigItemEqualsDefault(item)) {
     return HxNvsEraseKey(HX_NVS_STORE_CONFIG, item->key);
   }
 
-  const void* current_ptr = SetupFieldPtrConst(&HxSetupData, item);
+  const void* current_ptr = ConfigFieldPtrConst(&HxConfigData, item);
   if (!current_ptr) {
     return false;
   }
@@ -343,24 +343,24 @@ static bool SetupStoreItemOverride(const HxConfigKeyDef* item) {
   }
 }
 
-size_t SetupConfigKeyCount() {
+size_t ConfigConfigKeyCount() {
   return sizeof(kHxConfigKeys) / sizeof(kHxConfigKeys[0]);
 }
 
-const HxConfigKeyDef* SetupConfigKeyAt(size_t index) {
-  if (index >= SetupConfigKeyCount()) {
+const HxConfigKeyDef* ConfigConfigKeyAt(size_t index) {
+  if (index >= ConfigConfigKeyCount()) {
     return nullptr;
   }
 
   return &kHxConfigKeys[index];
 }
 
-const HxConfigKeyDef* SetupFindConfigKey(const char* key) {
+const HxConfigKeyDef* ConfigFindConfigKey(const char* key) {
   if (!key || !key[0]) {
     return nullptr;
   }
 
-  for (size_t i = 0; i < SetupConfigKeyCount(); i++) {
+  for (size_t i = 0; i < ConfigConfigKeyCount(); i++) {
     if (strcmp(kHxConfigKeys[i].key, key) == 0) {
       return &kHxConfigKeys[i];
     }
@@ -369,7 +369,7 @@ const HxConfigKeyDef* SetupFindConfigKey(const char* key) {
   return nullptr;
 }
 
-const char* SetupLogLevelText(HxLogLevel level) {
+const char* ConfigLogLevelText(HxLogLevel level) {
   switch (level) {
     case HX_LOG_ERROR: return "error";
     case HX_LOG_WARN:  return "warn";
@@ -379,7 +379,7 @@ const char* SetupLogLevelText(HxLogLevel level) {
   }
 }
 
-bool SetupParseLogLevel(const char* text, HxLogLevel* level) {
+bool ConfigParseLogLevel(const char* text, HxLogLevel* level) {
   if (!text || !text[0] || !level) {
     return false;
   }
@@ -414,22 +414,22 @@ bool SetupParseLogLevel(const char* text, HxLogLevel* level) {
   return false;
 }
 
-void SetupResetToDefaults(HxSetup* setup) {
-  if (!setup) {
+void ConfigResetToDefaults(HxConfig* config) {
+  if (!config) {
     return;
   }
 
-  *setup = HxSetupDefaults;
+  *config = HxConfigDefaults;
 }
 
-bool SetupConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size) {
+bool ConfigConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size) {
   if (!item || !out || (out_size == 0)) {
     return false;
   }
 
   out[0] = '\0';
 
-  const void* ptr = SetupFieldPtrConst(&HxSetupData, item);
+  const void* ptr = ConfigFieldPtrConst(&HxConfigData, item);
   if (!ptr) {
     return false;
   }
@@ -448,7 +448,7 @@ bool SetupConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_
       return true;
 
     case HX_SCHEMA_VALUE_LOG_LEVEL:
-      snprintf(out, out_size, "%s", SetupLogLevelText(*static_cast<const HxLogLevel*>(ptr)));
+      snprintf(out, out_size, "%s", ConfigLogLevelText(*static_cast<const HxLogLevel*>(ptr)));
       return true;
 
     default:
@@ -456,14 +456,14 @@ bool SetupConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_
   }
 }
 
-bool SetupConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_size) {
+bool ConfigConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_size) {
   if (!item || !out || (out_size == 0)) {
     return false;
   }
 
   out[0] = '\0';
 
-  const void* ptr = SetupFieldPtrConst(&HxSetupDefaults, item);
+  const void* ptr = ConfigFieldPtrConst(&HxConfigDefaults, item);
   if (!ptr) {
     return false;
   }
@@ -482,7 +482,7 @@ bool SetupConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t ou
       return true;
 
     case HX_SCHEMA_VALUE_LOG_LEVEL:
-      snprintf(out, out_size, "%s", SetupLogLevelText(*static_cast<const HxLogLevel*>(ptr)));
+      snprintf(out, out_size, "%s", ConfigLogLevelText(*static_cast<const HxLogLevel*>(ptr)));
       return true;
 
     default:
@@ -490,21 +490,21 @@ bool SetupConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t ou
   }
 }
 
-bool SetupConfigSetValueFromString(const HxConfigKeyDef* item, const char* value) {
+bool ConfigConfigSetValueFromString(const HxConfigKeyDef* item, const char* value) {
   if (!item || !value || !item->console_writable) {
     return false;
   }
 
-  return SetupAssignValueFromString(&HxSetupData, item, value);
+  return ConfigAssignValueFromString(&HxConfigData, item, value);
 }
 
-bool SetupConfigResetValue(const HxConfigKeyDef* item) {
+bool ConfigConfigResetValue(const HxConfigKeyDef* item) {
   if (!item) {
     return false;
   }
 
-  const void* default_ptr = SetupFieldPtrConst(&HxSetupDefaults, item);
-  void* current_ptr = SetupFieldPtr(&HxSetupData, item);
+  const void* default_ptr = ConfigFieldPtrConst(&HxConfigDefaults, item);
+  void* current_ptr = ConfigFieldPtr(&HxConfigData, item);
   if (!default_ptr || !current_ptr || (item->value_size == 0)) {
     return false;
   }
@@ -513,49 +513,49 @@ bool SetupConfigResetValue(const HxConfigKeyDef* item) {
   return true;
 }
 
-bool SetupSetDeviceName(const char* value) {
-  const HxConfigKeyDef* item = SetupFindConfigKey(HX_CFG_DEVICE_NAME);
+bool ConfigSetDeviceName(const char* value) {
+  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_DEVICE_NAME);
   if (!item) {
     return false;
   }
 
-  return SetupAssignStringField(&HxSetupData, item, value);
+  return ConfigAssignStringField(&HxConfigData, item, value);
 }
 
-bool SetupSetLogLevel(HxLogLevel value) {
-  const HxConfigKeyDef* item = SetupFindConfigKey(HX_CFG_LOG_LEVEL);
+bool ConfigSetLogLevel(HxLogLevel value) {
+  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_LOG_LEVEL);
   if (!item) {
     return false;
   }
 
-  return SetupAssignInt32Field(&HxSetupData, item, (int32_t)value);
+  return ConfigAssignInt32Field(&HxConfigData, item, (int32_t)value);
 }
 
-bool SetupSetSafebootEnable(bool value) {
-  const HxConfigKeyDef* item = SetupFindConfigKey(HX_CFG_SAFEBOOT_ENABLE);
+bool ConfigSetSafebootEnable(bool value) {
+  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_SAFEBOOT_ENABLE);
   if (!item) {
     return false;
   }
 
-  return SetupAssignBoolField(&HxSetupData, item, value);
+  return ConfigAssignBoolField(&HxConfigData, item, value);
 }
 
-bool SetupInit() {
-  SetupResetToDefaults(&HxSetupData);
-  g_setup_ready = EspNvsOpenConfig();
-  return g_setup_ready;
+bool ConfigInit() {
+  ConfigResetToDefaults(&HxConfigData);
+  g_config_ready = EspNvsOpenConfig();
+  return g_config_ready;
 }
 
-bool SetupLoad() {
-  SetupResetToDefaults(&HxSetupData);
+bool ConfigLoad() {
+  ConfigResetToDefaults(&HxConfigData);
 
-  if (!g_setup_ready) {
+  if (!g_config_ready) {
     Hx.config_loaded = false;
     return false;
   }
 
-  for (size_t i = 0; i < SetupConfigKeyCount(); i++) {
-    if (!SetupReadItemFromNvs(&kHxConfigKeys[i])) {
+  for (size_t i = 0; i < ConfigConfigKeyCount(); i++) {
+    if (!ConfigReadItemFromNvs(&kHxConfigKeys[i])) {
       Hx.config_loaded = false;
       return false;
     }
@@ -565,13 +565,13 @@ bool SetupLoad() {
   return true;
 }
 
-bool SetupSave() {
-  if (!g_setup_ready) {
+bool ConfigSave() {
+  if (!g_config_ready) {
     return false;
   }
 
-  for (size_t i = 0; i < SetupConfigKeyCount(); i++) {
-    if (!SetupStoreItemOverride(&kHxConfigKeys[i])) {
+  for (size_t i = 0; i < ConfigConfigKeyCount(); i++) {
+    if (!ConfigStoreItemOverride(&kHxConfigKeys[i])) {
       return false;
     }
   }
@@ -584,7 +584,7 @@ bool SetupSave() {
   return true;
 }
 
-void SetupApply() {
-  LogSetLevel(HxSetupData.log_level);
-  Hx.safeboot = HxSetupData.safeboot_enable;
+void ConfigApply() {
+  LogSetLevel(HxConfigData.log_level);
+  Hx.safeboot = HxConfigData.safeboot_enable;
 }

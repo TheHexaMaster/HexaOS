@@ -12,30 +12,30 @@
 #include "hexaos.h"
 
 void setup() {
-  BootInit();
+
+  // We need log system first for debug
   LogInit();
+
+  // Standard boot procedure
+  BootInit();
 
   BootPrintBanner();
   BootPrintResetInfo();
   EspPrintChipInfo();
 
-  if (!EspNvsInit()) {
-    Panic("NVS init failed");
-  }
-
   if (!FactoryDataInit()) {
     LogWarn("FACT: init failed");
   }
 
-  if (!SetupInit()) {
-    LogWarn("SETUP: init failed");
+  if (!ConfigInit()) {
+    LogWarn("Config: init failed");
   }
 
-  if (!SetupLoad()) {
-    LogWarn("SETUP: load failed");
+  if (!ConfigLoad()) {
+    LogWarn("Config: load failed");
   }
 
-  SetupApply();
+  ConfigApply();
 
   if (!StateInit()) {
     LogWarn("STA: init failed");

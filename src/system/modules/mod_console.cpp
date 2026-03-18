@@ -187,11 +187,11 @@ static void ConsoleWriteConfigItemLine(const HxConfigKeyDef* item) {
   char current[96];
   char defaults[96];
 
-  if (!SetupConfigValueToString(item, current, sizeof(current))) {
+  if (!ConfigConfigValueToString(item, current, sizeof(current))) {
     snprintf(current, sizeof(current), "<error>");
   }
 
-  if (!SetupConfigDefaultToString(item, defaults, sizeof(defaults))) {
+  if (!ConfigConfigDefaultToString(item, defaults, sizeof(defaults))) {
     snprintf(defaults, sizeof(defaults), "<error>");
   }
 
@@ -236,8 +236,8 @@ static void ConsolePrintHelp() {
 }
 
 static void ConsolePrintConfigList() {
-  for (size_t i = 0; i < SetupConfigKeyCount(); i++) {
-    const HxConfigKeyDef* item = SetupConfigKeyAt(i);
+  for (size_t i = 0; i < ConfigConfigKeyCount(); i++) {
+    const HxConfigKeyDef* item = ConfigConfigKeyAt(i);
     if (!item || !item->console_visible) {
       continue;
     }
@@ -265,7 +265,7 @@ static void ConsolePrintStateList() {
 }
 
 static void ConsoleReadConfigKey(const char* key) {
-  const HxConfigKeyDef* item = SetupFindConfigKey(key);
+  const HxConfigKeyDef* item = ConfigFindConfigKey(key);
   if (!item) {
     LogSinkWriteLineRaw("config key not found");
     ConsolePrompt();
@@ -289,7 +289,7 @@ static void ConsoleReadStateKey(const char* key) {
 }
 
 static void ConsoleSetConfigKey(const char* key, const char* value) {
-  const HxConfigKeyDef* item = SetupFindConfigKey(key);
+  const HxConfigKeyDef* item = ConfigFindConfigKey(key);
   if (!item) {
     LogSinkWriteLineRaw("config key not found");
     ConsolePrompt();
@@ -302,13 +302,13 @@ static void ConsoleSetConfigKey(const char* key, const char* value) {
     return;
   }
 
-  if (!SetupConfigSetValueFromString(item, value)) {
+  if (!ConfigConfigSetValueFromString(item, value)) {
     LogSinkWriteLineRaw("invalid config value");
     ConsolePrompt();
     return;
   }
 
-  SetupApply();
+  ConfigApply();
 
   char line[192];
   snprintf(line, sizeof(line), "%s updated", item->key);
@@ -426,14 +426,14 @@ static void ConsoleExecuteCommand(const char* line) {
   }
 
   if ((strcmp(line, "listcfg") == 0) ||
-      (strcmp(line, "setup") == 0) ||
-      (strcmp(line, "show setup") == 0)) {
+      (strcmp(line, "config") == 0) ||
+      (strcmp(line, "show config") == 0)) {
     ConsolePrintConfigList();
     return;
   }
 
-  if ((strcmp(line, "savecfg") == 0) || (strcmp(line, "setup save") == 0)) {
-    if (SetupSave()) {
+  if ((strcmp(line, "savecfg") == 0) || (strcmp(line, "config save") == 0)) {
+    if (ConfigSave()) {
       LogSinkWriteLineRaw("config saved to NVS");
     } else {
       LogSinkWriteLineRaw("config save failed");
@@ -442,9 +442,9 @@ static void ConsoleExecuteCommand(const char* line) {
     return;
   }
 
-  if ((strcmp(line, "loadcfg") == 0) || (strcmp(line, "setup load") == 0)) {
-    if (SetupLoad()) {
-      SetupApply();
+  if ((strcmp(line, "loadcfg") == 0) || (strcmp(line, "config load") == 0)) {
+    if (ConfigLoad()) {
+      ConfigApply();
       LogSinkWriteLineRaw("config loaded from NVS");
     } else {
       LogSinkWriteLineRaw("config load failed");
@@ -453,9 +453,9 @@ static void ConsoleExecuteCommand(const char* line) {
     return;
   }
 
-  if ((strcmp(line, "defaultcfg") == 0) || (strcmp(line, "setup defaults") == 0)) {
-    SetupResetToDefaults(&HxSetupData);
-    SetupApply();
+  if ((strcmp(line, "defaultcfg") == 0) || (strcmp(line, "config defaults") == 0)) {
+    ConfigResetToDefaults(&HxConfigData);
+    ConfigApply();
     LogSinkWriteLineRaw("config reset to build defaults");
     ConsolePrompt();
     return;

@@ -27,8 +27,7 @@ const char* EspResetReasonText(uint32_t reason) {
   }
 }
 
-void BootInit() {
-}
+
 
 void BootPrintBanner() {
   LogRaw("========================================");
@@ -41,4 +40,12 @@ void BootPrintBanner() {
 void BootPrintResetInfo() {
   uint32_t reason = (uint32_t)esp_reset_reason();
   LogInfo("Reset reason: %s (%lu)", EspResetReasonText(reason), (unsigned long)reason);
+}
+
+
+void BootInit() {
+
+
+  
+
 }

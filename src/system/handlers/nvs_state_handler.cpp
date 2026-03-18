@@ -6,11 +6,11 @@
 
   Description
   Runtime state persistence service.
-  Maintains mutable non-configuration system state in NVS, including boot counters and other values that must survive reboots but are not treated as setup.
+  Maintains mutable non-configuration system state in NVS, including boot counters and other values that must survive reboots but are not treated as config.
 */
 
 #include "hexaos.h"
-#include "platform/esp_nvs.h"
+#include "system/adapters/nvs_adapter.h"
 
 #include <limits.h>
 #include <stdio.h>

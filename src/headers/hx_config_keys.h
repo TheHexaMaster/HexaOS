@@ -30,7 +30,7 @@ enum HxSchemaValueType : uint8_t {
 struct HxConfigKeyDef {
   const char* key;
   HxSchemaValueType type;
-  size_t setup_offset;
+  size_t config_offset;
   size_t value_size;
   int32_t min_i32;
   int32_t max_i32;
@@ -48,13 +48,13 @@ struct HxStateKeyDef {
   bool console_visible;
 };
 
-size_t SetupConfigKeyCount();
-const HxConfigKeyDef* SetupConfigKeyAt(size_t index);
-const HxConfigKeyDef* SetupFindConfigKey(const char* key);
-bool SetupConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size);
-bool SetupConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_size);
-bool SetupConfigSetValueFromString(const HxConfigKeyDef* item, const char* value);
-bool SetupConfigResetValue(const HxConfigKeyDef* item);
+size_t ConfigConfigKeyCount();
+const HxConfigKeyDef* ConfigConfigKeyAt(size_t index);
+const HxConfigKeyDef* ConfigFindConfigKey(const char* key);
+bool ConfigConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size);
+bool ConfigConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_size);
+bool ConfigConfigSetValueFromString(const HxConfigKeyDef* item, const char* value);
+bool ConfigConfigResetValue(const HxConfigKeyDef* item);
 
 size_t StateKeyCount();
 const HxStateKeyDef* StateKeyAt(size_t index);

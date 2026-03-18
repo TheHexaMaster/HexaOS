@@ -1,5 +1,5 @@
 /*
-  HexaOS - factory_data.cpp
+  HexaOS - nvs_state_handler.cpp
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
@@ -10,8 +10,8 @@
 */
 
 #include "hexaos.h"
+#include "system/adapters/nvs_adapter.h"
 
 bool FactoryDataInit() {
-  LogInfo("FACT: init");
   return EspNvsOpenFactory();
 }

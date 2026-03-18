@@ -20,7 +20,7 @@
 #include "headers/hx_types.h"
 #include "headers/hx_module.h"
 #include "headers/hx_config_keys.h"
-#include "headers/hx_setup.h"
+#include "headers/hx_config.h"
 
 struct HxRuntime {
   bool safeboot;
@@ -70,11 +70,6 @@ void Panic(const char* reason);
 // platform
 void EspPrintChipInfo();
 const char* EspResetReasonText(uint32_t reason);
-
-bool EspNvsInit();
-bool EspNvsOpenConfig();
-bool EspNvsOpenState();
-bool EspNvsOpenFactory();
 
 // services
 bool FactoryDataInit();
