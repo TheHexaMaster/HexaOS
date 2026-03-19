@@ -148,7 +148,9 @@ static void LogEmitLine(const char* line) {
 
   if (LogTakeSinkLock()) {
     ConsoleOnSinkLockedPreWriteLine();
-    Serial.println(line);
+    ConsoleAdapterWriteText(line);
+    ConsoleAdapterWriteText("\r\n");
+    ConsoleAdapterFlush();
     LogStoreLine(line);
     ConsoleOnSinkLockedPostWriteLine();
     LogGiveSinkLock();
@@ -169,7 +171,7 @@ void LogSinkWriteRaw(const char* text) {
   }
 
   if (LogTakeSinkLock()) {
-    Serial.print(text);
+    ConsoleAdapterWriteText(text);
     LogGiveSinkLock();
   }
 }
@@ -181,7 +183,7 @@ void LogSinkWriteChar(char ch) {
   }
 
   if (LogTakeSinkLock()) {
-    Serial.write((uint8_t)ch);
+    ConsoleAdapterWriteChar(ch);
     LogGiveSinkLock();
   }
 }
@@ -198,7 +200,9 @@ void LogSinkWriteLineRaw(const char* text) {
 
   if (LogTakeSinkLock()) {
     ConsoleOnSinkLockedPreWriteLine();
-    Serial.println(text);
+    ConsoleAdapterWriteText(text);
+    ConsoleAdapterWriteText("\r\n");
+    ConsoleAdapterFlush();
     ConsoleOnSinkLockedPostWriteLine();
     LogGiveSinkLock();
   }
@@ -249,8 +253,7 @@ static void LogWriteV(HxLogLevel level, const char* tag, const char* fmt, va_lis
 }
 
 void LogInit() {
-  Serial.begin(115200);
-  delay(50);
+  ConsoleAdapterInit();
 
   if (!g_log_sink_mutex) {
     g_log_sink_mutex = xSemaphoreCreateMutexStatic(&g_log_sink_mutex_buf);

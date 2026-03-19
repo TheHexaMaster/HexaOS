@@ -19,46 +19,7 @@ void setup() {
   // Standard boot procedure
   BootInit();
 
-  BootPrintBanner();
-  BootPrintResetInfo();
-  EspPrintChipInfo();
 
-  if (!FactoryDataInit()) {
-    LogWarn("FACT: init failed");
-  }
-
-  if (!ConfigInit()) {
-    LogWarn("Config: init failed");
-  }
-
-  if (!ConfigLoad()) {
-    LogWarn("Config: load failed");
-  }
-
-  ConfigApply();
-
-  if (!StateInit()) {
-    LogWarn("STA: init failed");
-  }
-
-  if (!FilesInit()) {
-    LogWarn("FIL: init failed");
-  }
-
-  if (!StateLoad()) {
-    LogWarn("STA: load failed");
-  }
-
-  if (!FilesMount()) {
-    LogWarn("FIL: mount failed");
-  }
-
-  ModuleInitAll();
-  ModuleStartAll();
-
-#if HX_ENABLE_MODULE_CONSOLE
-  ConsoleShowPrompt();
-#endif
 }
 
 void loop() {

@@ -8,8 +8,10 @@
   High-level filesystem service.
   Exposes simple file operations for mounted LittleFS storage and isolates file existence, read and write helpers from direct framework usage.
 */
-
 #include "hexaos.h"
+
+#if HX_ENABLE_HANDLER_LITTLEFS
+
 #include <FS.h>
 #include <LittleFS.h>
 
@@ -66,3 +68,7 @@ bool FilesWriteText(const char* path, const char* text) {
   f.close();
   return true;
 }
+
+
+
+#endif // HX_ENABLE_HANDLER_LITTLEFS

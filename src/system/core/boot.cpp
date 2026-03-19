@@ -11,8 +11,9 @@
 
 #include "hexaos.h"
 #include <esp_system.h>
+#include "esp_chip_info.h"
 
-const char* EspResetReasonText(uint32_t reason) {
+static const char* EspResetReasonText(uint32_t reason) {
   switch ((esp_reset_reason_t)reason) {
     case ESP_RST_POWERON:   return "POWERON";
     case ESP_RST_EXT:       return "EXT";
@@ -42,10 +43,58 @@ void BootPrintResetInfo() {
   LogInfo("Reset reason: %s (%lu)", EspResetReasonText(reason), (unsigned long)reason);
 }
 
+void BootPrintChipInfo() {
+  esp_chip_info_t info;
+  esp_chip_info(&info);
+
+  LogInfo("Chip model: %s", CONFIG_IDF_TARGET);
+  LogInfo("Chip rev:   %d", info.revision);
+  LogInfo("CPU cores:  %d", info.cores);
+  LogInfo("Flash size: %u KB", ESP.getFlashChipSize() / 1024);
+}
 
 void BootInit() {
 
+  BootPrintBanner();
+  BootPrintResetInfo();
+  BootPrintChipInfo();
 
+  if (!FactoryDataInit()) {
+    LogWarn("FACT: init failed");
+  }
+
+  if (!ConfigInit()) {
+    LogWarn("Config: init failed");
+  }
+
+  if (!ConfigLoad()) {
+    LogWarn("Config: load failed");
+  }
+
+  ConfigApply();
+
+  if (!StateInit()) {
+    LogWarn("STA: init failed");
+  }
+
+  if (!FilesInit()) {
+    LogWarn("FIL: init failed");
+  }
+
+  if (!StateLoad()) {
+    LogWarn("STA: load failed");
+  }
+
+  if (!FilesMount()) {
+    LogWarn("FIL: mount failed");
+  }
+
+  ModuleInitAll();
+  ModuleStartAll();
+
+#if HX_ENABLE_MODULE_CONSOLE
+  ConsoleShowPrompt();
+#endif
   
 
 }

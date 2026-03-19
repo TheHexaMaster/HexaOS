@@ -9,8 +9,8 @@
   Implements the concrete non-volatile storage backend used by HexaOS services to open dedicated NVS partitions and read, write or commit primitive persisted values.
 */
 
-#include "nvs_adapter.h"
 #include "hexaos.h"
+#include "nvs_adapter.h"
 
 #include <nvs.h>
 #include <nvs_flash.h>

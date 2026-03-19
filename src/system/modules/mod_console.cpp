@@ -121,11 +121,11 @@ void ConsoleOnSinkLockedPreWriteLine() {
     return;
   }
 
-  Serial.write('\r');
+  ConsoleAdapterWriteChar('\r');
   for (size_t i = 0; i < (HX_CONSOLE_PROMPT_LEN + len); i++) {
-    Serial.write(' ');
+    ConsoleAdapterWriteChar(' ');
   }
-  Serial.write('\r');
+  ConsoleAdapterWriteChar('\r');
 }
 
 void ConsoleOnSinkLockedPostWriteLine() {
@@ -137,9 +137,9 @@ void ConsoleOnSinkLockedPostWriteLine() {
     return;
   }
 
-  Serial.print(HX_CONSOLE_PROMPT);
+  ConsoleAdapterWriteText(HX_CONSOLE_PROMPT);
   if (len > 0) {
-    Serial.write((const uint8_t*)snapshot, len);
+    ConsoleAdapterWriteData((const uint8_t*)snapshot, len);
   }
 }
 
@@ -545,8 +545,8 @@ static void ConsoleHandleLine() {
 }
 
 static void ConsoleReadSerial() {
-  while (Serial.available() > 0) {
-    int ch = Serial.read();
+  while (true) {
+    int ch = ConsoleAdapterReadByte();
     if (ch < 0) {
       break;
     }

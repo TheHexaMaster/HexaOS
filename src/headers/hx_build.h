@@ -9,17 +9,13 @@
   Contains compile-time constants such as HexaOS name, version and active target platform so the firmware can expose a consistent identity at runtime.
 */
 
-
 #pragma once
 
-// ENV Definition
-#if defined(CONFIG_IDF_TARGET_ESP32P4)
-  #define HX_TARGET_NAME "esp32p4"
-#elif defined(CONFIG_IDF_TARGET_ESP32S3)
-  #define HX_TARGET_NAME "esp32s3"
-#else
-  #define HX_TARGET_NAME "esp32"
-#endif
+// PRE-BUILD Macros
+#include "include/pre_build.h"
+
+
+
 
 // SYSTEM BUILD DEF
 
@@ -30,12 +26,17 @@
 #define HX_BUILD_DEFAULT_DEVICE_NAME  "HexaOS Device"
 
 // MODULES
-#define HX_ENABLE_MODULE_SYSTEM       true
-#define HX_ENABLE_MODULE_CONSOLE      true
-#define HX_ENABLE_MODULE_STORAGE      true
-#define HX_ENABLE_MODULE_BERRY        true
-#define HX_ENABLE_MODULE_WEB          true
-#define HX_ENABLE_MODULE_LVGL         true
+#define HX_ENABLE_MODULE_SYSTEM       true                                    // System module
+#define HX_ENABLE_MODULE_CONSOLE      true                                    // Console module (in actual stage of developemnt, its mandatory to stay TRUE)
+  #define HX_BUILD_CONSOLE_ADAPTER    HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC
+#define HX_ENABLE_MODULE_STORAGE      false
+#define HX_ENABLE_MODULE_BERRY        false
+#define HX_ENABLE_MODULE_WEB          false
+#define HX_ENABLE_MODULE_LVGL         false
+
+// HANDLERS
+
+#define HX_ENABLE_HANDLER_LITTLEFS    true   
 
 // FEATURES
 
@@ -43,8 +44,9 @@
 #define HX_ENABLE_FEATURE_ETH         true
 #define HX_ENABLE_FEATURE_LITTLEFS    true
 #define HX_BUILD_DEFAULT_LOG_LEVEL    HX_LOG_INFO
+#define HX_BUILD_DEFAULT_SAFEBOOT_ENABLE false
 
 
-#ifndef HX_BUILD_DEFAULT_SAFEBOOT_ENABLE
-  #define HX_BUILD_DEFAULT_SAFEBOOT_ENABLE 1
-#endif
+
+// POS-BUILD Macros
+#include "include/pos_build.h"

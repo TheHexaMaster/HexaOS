@@ -12,7 +12,7 @@
 #include "hexaos.h"
 
 void Panic(const char* reason) {
-  Serial.begin(115200);
+  ConsoleAdapterInit();
   delay(10);
 
   LogError("PANIC: %s", reason ? reason : "unknown");
