@@ -613,11 +613,11 @@ static HxCmdStatus CmdStateErase(const char* args, HxCmdOutput* out) {
   return HX_CMD_OK;
 }
 
-static HxCmdStatus CmdStateUnregister(const char* args, HxCmdOutput* out) {
+static HxCmdStatus CmdStateDelete(const char* args, HxCmdOutput* out) {
   char key[96];
 
   if (!CmdExtractSingleKey(args, key, sizeof(key))) {
-    CmdOutWriteLine(out, "usage: state unreg <key>");
+    CmdOutWriteLine(out, "usage: state delete <key>");
     return HX_CMD_USAGE;
   }
 
@@ -632,12 +632,12 @@ static HxCmdStatus CmdStateUnregister(const char* args, HxCmdOutput* out) {
     return HX_CMD_ERROR;
   }
 
-  if (!StateUnregister(key)) {
-    CmdOutWriteLine(out, "state unregister failed");
+  if (!StateDelete(key)) {
+    CmdOutWriteLine(out, "state delete failed");
     return HX_CMD_ERROR;
   }
 
-  CmdOutPrintfLine(out, "%s unregistered", key);
+  CmdOutPrintfLine(out, "%s deleted", key);
   return HX_CMD_OK;
 }
 
@@ -749,11 +749,12 @@ static const HxCmdDef kBuiltinCommands[] = {
   { "state list",      CmdStateList,      "List visible states" },
   { "state read",      CmdStateRead,      "Read state key" },
   { "state exist",     CmdStateExist,     "Check whether state exists" },
-  { "state create",    CmdStateCreate,    "Create runtime state" },
-  { "state write",     CmdStateWrite,     "Write value to state" },
-  { "state erase",     CmdStateErase,     "Erase persisted state value" },
-  { "state unreg",     CmdStateUnregister,  "Unregister runtime state" },
-  { "state increment", CmdStateIncrement, "Increment integer state" },
+  { "state create",    CmdStateCreate,      "Create persistent runtime state" },
+  { "state write",     CmdStateWrite,       "Write value to state" },
+  { "state erase",     CmdStateErase,       "Erase persisted state value" },
+  { "state delete",    CmdStateDelete,      "Delete runtime state" },
+  { "state unreg",     CmdStateDelete,      nullptr },
+  { "state increment", CmdStateIncrement,   "Increment integer state" },
   { "state decrement", CmdStateDecrement, "Decrement integer state" },
   { "state toggle",    CmdStateToggle,    "Toggle boolean state" }
 };

@@ -24,12 +24,15 @@
 
 static constexpr const char* HX_STATE_OWNER_STATIC = "system";
 static constexpr const char* HX_STATE_OWNER_RUNTIME = "runtime";
+static constexpr const char* HX_STATE_CATALOG_KEY = "CATALOG_STATE";
 
 static constexpr size_t HX_STATE_RUNTIME_MAX = 64;
 static constexpr size_t HX_STATE_LOGICAL_KEY_MAX = 96;
 static constexpr size_t HX_STATE_OWNER_MAX = 48;
 static constexpr size_t HX_STATE_STRING_MAX = 256;
 static constexpr size_t HX_STATE_STORAGE_KEY_SIZE = 15;
+static constexpr size_t HX_STATE_CATALOG_LINE_MAX = 256;
+static constexpr size_t HX_STATE_CATALOG_RESERVE = 4096;
 
 struct HxRuntimeStateSlot {
   bool used;
@@ -93,7 +96,18 @@ static bool StateValidateOwner(const char* owner) {
     return true;
   }
 
-  return strlen(owner) <= HX_STATE_OWNER_MAX;
+  size_t len = strlen(owner);
+  if ((len == 0) || (len > HX_STATE_OWNER_MAX)) {
+    return false;
+  }
+
+  for (size_t i = 0; i < len; i++) {
+    if (!StateIsValidKeyChar(owner[i])) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 static bool StateValidateDef(const HxStateKeyDef* def) {
@@ -318,6 +332,350 @@ static bool StateParseIntText(const char* text, int32_t* value_out) {
   return true;
 }
 
+static bool StateSaveRuntimeCatalog();
+
+static bool StateDefsCompatible(const HxStateKeyDef* existing, const HxStateKeyDef* requested) {
+  if (!existing || !requested) {
+    return false;
+  }
+
+  if (strcmp(existing->key, requested->key) != 0) {
+    return false;
+  }
+
+  if (existing->type != requested->type) {
+    return false;
+  }
+
+  switch (existing->type) {
+    case HX_SCHEMA_VALUE_BOOL:
+      return true;
+
+    case HX_SCHEMA_VALUE_INT32:
+      return (existing->min_i32 == requested->min_i32) &&
+             (existing->max_i32 == requested->max_i32);
+
+    case HX_SCHEMA_VALUE_STRING:
+      return existing->max_len == requested->max_len;
+
+    default:
+      return false;
+  }
+}
+
+static void StateRemoveRuntimeSlotLocked(int index) {
+  if ((index < 0) || (index >= (int)HX_STATE_RUNTIME_MAX)) {
+    return;
+  }
+
+  HxRuntimeStateSlot* slot = &g_runtime_states[index];
+
+  if (slot->owned_key) {
+    free(slot->owned_key);
+  }
+
+  if (slot->owned_owner) {
+    free(slot->owned_owner);
+  }
+
+  memset(slot, 0, sizeof(*slot));
+}
+
+static bool StateInsertRuntimeDef(const HxStateKeyDef* def, bool persist_catalog) {
+  if (!StateValidateDef(def)) {
+    return false;
+  }
+
+  if (StateFindStaticKey(def->key)) {
+    return false;
+  }
+
+  if (StateFindRuntimeKey(def->key)) {
+    return false;
+  }
+
+  char* key_copy = (char*)malloc(strlen(def->key) + 1);
+  if (!key_copy) {
+    return false;
+  }
+
+  strcpy(key_copy, def->key);
+
+  const char* owner_text = (def->owner && def->owner[0]) ? def->owner : HX_STATE_OWNER_RUNTIME;
+  char* owner_copy = (char*)malloc(strlen(owner_text) + 1);
+  if (!owner_copy) {
+    free(key_copy);
+    return false;
+  }
+
+  strcpy(owner_copy, owner_text);
+
+  int slot_index = -1;
+
+  taskENTER_CRITICAL(&g_state_registry_mux);
+
+  if (StateFindRuntimeSlotIndexLocked(def->key) >= 0) {
+    taskEXIT_CRITICAL(&g_state_registry_mux);
+    free(key_copy);
+    free(owner_copy);
+    return false;
+  }
+
+  slot_index = StateFindFreeRuntimeSlotLocked();
+  if (slot_index < 0) {
+    taskEXIT_CRITICAL(&g_state_registry_mux);
+    free(key_copy);
+    free(owner_copy);
+    return false;
+  }
+
+  HxRuntimeStateSlot* slot = &g_runtime_states[slot_index];
+  memset(slot, 0, sizeof(*slot));
+
+  slot->used = true;
+  slot->owned_key = key_copy;
+  slot->owned_owner = owner_copy;
+  slot->def = *def;
+  slot->def.key = slot->owned_key;
+  slot->def.owner = slot->owned_owner;
+  slot->def.flags |= (HX_STATE_FLAG_RUNTIME | HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE);
+
+  if (slot->def.console_visible || (slot->def.flags & HX_STATE_FLAG_CONSOLE_VISIBLE)) {
+    slot->def.console_visible = true;
+    slot->def.flags |= HX_STATE_FLAG_CONSOLE_VISIBLE;
+  } else {
+    slot->def.console_visible = false;
+    slot->def.flags &= ~HX_STATE_FLAG_CONSOLE_VISIBLE;
+  }
+
+  taskEXIT_CRITICAL(&g_state_registry_mux);
+
+  if (persist_catalog && !StateSaveRuntimeCatalog()) {
+    taskENTER_CRITICAL(&g_state_registry_mux);
+    int rollback_index = StateFindRuntimeSlotIndexLocked(def->key);
+    if (rollback_index >= 0) {
+      StateRemoveRuntimeSlotLocked(rollback_index);
+    }
+    taskEXIT_CRITICAL(&g_state_registry_mux);
+    return false;
+  }
+
+  return true;
+}
+
+static bool StateBuildRuntimeCatalog(String& manifest) {
+  manifest = "";
+  manifest.reserve(HX_STATE_CATALOG_RESERVE);
+
+  for (size_t i = 0; i < HX_STATE_RUNTIME_MAX; i++) {
+    bool used = false;
+    HxStateKeyDef def_copy{};
+    char key_copy[HX_STATE_LOGICAL_KEY_MAX + 1];
+    char owner_copy[HX_STATE_OWNER_MAX + 1];
+
+    taskENTER_CRITICAL(&g_state_registry_mux);
+
+    if (g_runtime_states[i].used) {
+      used = true;
+      def_copy = g_runtime_states[i].def;
+
+      key_copy[0] = '\0';
+      owner_copy[0] = '\0';
+
+      if (g_runtime_states[i].def.key) {
+        strncpy(key_copy, g_runtime_states[i].def.key, sizeof(key_copy) - 1);
+        key_copy[sizeof(key_copy) - 1] = '\0';
+      }
+
+      if (g_runtime_states[i].def.owner) {
+        strncpy(owner_copy, g_runtime_states[i].def.owner, sizeof(owner_copy) - 1);
+        owner_copy[sizeof(owner_copy) - 1] = '\0';
+      }
+    }
+
+    taskEXIT_CRITICAL(&g_state_registry_mux);
+
+    if (!used) {
+      continue;
+    }
+
+    const char* owner_text = owner_copy[0] ? owner_copy : "-";
+
+    char line[HX_STATE_CATALOG_LINE_MAX];
+    int written = snprintf(line,
+                           sizeof(line),
+                           "%s|%d|%ld|%ld|%lu|%u|%u|%s\n",
+                           key_copy,
+                           (int)def_copy.type,
+                           (long)def_copy.min_i32,
+                           (long)def_copy.max_i32,
+                           (unsigned long)def_copy.max_len,
+                           (unsigned int)def_copy.flags,
+                           def_copy.console_visible ? 1U : 0U,
+                           owner_text);
+
+    if ((written <= 0) || ((size_t)written >= sizeof(line))) {
+      return false;
+    }
+
+    manifest += line;
+  }
+
+  return true;
+}
+
+static bool StateWriteRuntimeCatalog(bool commit) {
+  if (!g_state_ready) {
+    return false;
+  }
+
+  String manifest;
+  if (!StateBuildRuntimeCatalog(manifest)) {
+    return false;
+  }
+
+  bool ok = false;
+
+  if (manifest.length() == 0) {
+    ok = HxNvsEraseKey(HX_NVS_STORE_STATE, HX_STATE_CATALOG_KEY);
+  } else {
+    ok = HxNvsSetString(HX_NVS_STORE_STATE, HX_STATE_CATALOG_KEY, manifest.c_str());
+  }
+
+  if (!ok) {
+    return false;
+  }
+
+  if (commit) {
+    return HxNvsCommit(HX_NVS_STORE_STATE);
+  }
+
+  return true;
+}
+
+static bool StateSaveRuntimeCatalog() {
+  return StateWriteRuntimeCatalog(true);
+}
+
+static bool StateLoadRuntimeCatalog() {
+  if (!g_state_ready) {
+    return false;
+  }
+
+  String manifest;
+  if (!HxNvsGetString(HX_NVS_STORE_STATE, HX_STATE_CATALOG_KEY, manifest)) {
+    return true;
+  }
+
+  char* buffer = (char*)malloc(manifest.length() + 1);
+  if (!buffer) {
+    return false;
+  }
+
+  memcpy(buffer, manifest.c_str(), manifest.length() + 1);
+
+  bool dirty = false;
+  char* line_ctx = nullptr;
+
+  for (char* line = strtok_r(buffer, "\n", &line_ctx);
+       line != nullptr;
+       line = strtok_r(nullptr, "\n", &line_ctx)) {
+
+    size_t len = strlen(line);
+    while ((len > 0) && ((line[len - 1] == '\r') || (line[len - 1] == '\n'))) {
+      line[--len] = '\0';
+    }
+
+    if (!line[0]) {
+      continue;
+    }
+
+    char* fields[8] = { nullptr };
+    size_t field_count = 0;
+    char* field_ctx = nullptr;
+
+    for (char* tok = strtok_r(line, "|", &field_ctx);
+         tok != nullptr && field_count < 8;
+         tok = strtok_r(nullptr, "|", &field_ctx)) {
+      fields[field_count++] = tok;
+    }
+
+    if (field_count < 7) {
+      dirty = true;
+      continue;
+    }
+
+    int32_t type_i32 = 0;
+    int32_t min_i32 = 0;
+    int32_t max_i32 = 0;
+    int32_t max_len_i32 = 0;
+    int32_t flags_i32 = 0;
+    int32_t console_visible_i32 = 0;
+
+    if (!StateParseIntText(fields[1], &type_i32) ||
+        !StateParseIntText(fields[2], &min_i32) ||
+        !StateParseIntText(fields[3], &max_i32) ||
+        !StateParseIntText(fields[4], &max_len_i32) ||
+        !StateParseIntText(fields[5], &flags_i32) ||
+        !StateParseIntText(fields[6], &console_visible_i32)) {
+      dirty = true;
+      continue;
+    }
+
+    const char* owner = HX_STATE_OWNER_RUNTIME;
+    if ((field_count >= 8) && fields[7] && fields[7][0] && (strcmp(fields[7], "-") != 0)) {
+      owner = fields[7];
+    }
+
+    HxStateKeyDef def = {
+      .key = fields[0],
+      .type = (HxSchemaValueType)type_i32,
+      .min_i32 = min_i32,
+      .max_i32 = max_i32,
+      .max_len = (size_t)max_len_i32,
+      .flags = (uint16_t)flags_i32,
+      .console_visible = (console_visible_i32 != 0),
+      .owner = owner
+    };
+
+    def.flags |= (HX_STATE_FLAG_RUNTIME | HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE);
+
+    if (def.console_visible) {
+      def.flags |= HX_STATE_FLAG_CONSOLE_VISIBLE;
+    } else {
+      def.flags &= ~HX_STATE_FLAG_CONSOLE_VISIBLE;
+    }
+
+    if (!StateValidateDef(&def)) {
+      dirty = true;
+      continue;
+    }
+
+    if (StateFindStaticKey(def.key)) {
+      dirty = true;
+      continue;
+    }
+
+    if (StateFindRuntimeKey(def.key)) {
+      dirty = true;
+      continue;
+    }
+
+    if (!StateInsertRuntimeDef(&def, false)) {
+      dirty = true;
+      continue;
+    }
+  }
+
+  free(buffer);
+
+  if (dirty) {
+    return StateSaveRuntimeCatalog();
+  }
+
+  return true;
+}
+
 size_t StateKeyCount() {
   size_t runtime_count = 0;
 
@@ -366,97 +724,11 @@ const HxStateKeyDef* StateFindKey(const char* key) {
 }
 
 bool StateRegister(const HxStateKeyDef* def) {
-  if (!StateValidateDef(def)) {
-    return false;
-  }
-
-  if (StateFindKey(def->key)) {
-    return false;
-  }
-
-  char* key_copy = (char*)malloc(strlen(def->key) + 1);
-  if (!key_copy) {
-    return false;
-  }
-
-  strcpy(key_copy, def->key);
-
-  const char* owner_text = (def->owner && def->owner[0]) ? def->owner : HX_STATE_OWNER_RUNTIME;
-  char* owner_copy = (char*)malloc(strlen(owner_text) + 1);
-  if (!owner_copy) {
-    free(key_copy);
-    return false;
-  }
-
-  strcpy(owner_copy, owner_text);
-
-  taskENTER_CRITICAL(&g_state_registry_mux);
-
-  if (StateFindRuntimeSlotIndexLocked(def->key) >= 0) {
-    taskEXIT_CRITICAL(&g_state_registry_mux);
-    free(key_copy);
-    free(owner_copy);
-    return false;
-  }
-
-  int slot_index = StateFindFreeRuntimeSlotLocked();
-  if (slot_index < 0) {
-    taskEXIT_CRITICAL(&g_state_registry_mux);
-    free(key_copy);
-    free(owner_copy);
-    return false;
-  }
-
-  HxRuntimeStateSlot* slot = &g_runtime_states[slot_index];
-  memset(slot, 0, sizeof(*slot));
-
-  slot->used = true;
-  slot->owned_key = key_copy;
-  slot->owned_owner = owner_copy;
-  slot->def = *def;
-  slot->def.key = slot->owned_key;
-  slot->def.owner = slot->owned_owner;
-  slot->def.flags |= (HX_STATE_FLAG_RUNTIME | HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE);
-
-  if (slot->def.console_visible || (slot->def.flags & HX_STATE_FLAG_CONSOLE_VISIBLE)) {
-    slot->def.console_visible = true;
-    slot->def.flags |= HX_STATE_FLAG_CONSOLE_VISIBLE;
-  } else {
-    slot->def.console_visible = false;
-    slot->def.flags &= ~HX_STATE_FLAG_CONSOLE_VISIBLE;
-  }
-
-  taskEXIT_CRITICAL(&g_state_registry_mux);
-  return true;
+  return StateInsertRuntimeDef(def, true);
 }
 
 bool StateUnregister(const char* key) {
-  if (!key || !key[0]) {
-    return false;
-  }
-
-  bool removed = false;
-
-  taskENTER_CRITICAL(&g_state_registry_mux);
-
-  int index = StateFindRuntimeSlotIndexLocked(key);
-  if (index >= 0) {
-    HxRuntimeStateSlot* slot = &g_runtime_states[index];
-
-    if (slot->owned_key) {
-      free(slot->owned_key);
-    }
-
-    if (slot->owned_owner) {
-      free(slot->owned_owner);
-    }
-
-    memset(slot, 0, sizeof(*slot));
-    removed = true;
-  }
-
-  taskEXIT_CRITICAL(&g_state_registry_mux);
-  return removed;
+  return StateDelete(key);
 }
 
 bool StateCreate(const char* key,
@@ -491,7 +763,7 @@ bool StateCreate(const char* key,
       bool current = false;
       if (!StateReadBool(key, &current)) {
         if (!StateSetBool(key, false)) {
-          StateUnregister(key);
+          StateDelete(key);
           return false;
         }
       }
@@ -502,7 +774,7 @@ bool StateCreate(const char* key,
       int32_t current = 0;
       if (!StateReadInt(key, &current)) {
         if (!StateSetInt(key, 0)) {
-          StateUnregister(key);
+          StateDelete(key);
           return false;
         }
       }
@@ -513,7 +785,7 @@ bool StateCreate(const char* key,
       char current[2];
       if (!StateReadString(key, current, sizeof(current))) {
         if (!StateSetString(key, "")) {
-          StateUnregister(key);
+          StateDelete(key);
           return false;
         }
       }
@@ -521,9 +793,75 @@ bool StateCreate(const char* key,
     }
 
     default:
-      StateUnregister(key);
+      StateDelete(key);
       return false;
   }
+}
+
+bool StateEnsure(const char* key,
+                 HxSchemaValueType type,
+                 int32_t min_i32,
+                 int32_t max_i32,
+                 size_t max_len,
+                 uint16_t flags,
+                 bool console_visible,
+                 const char* owner) {
+  HxStateKeyDef requested = {
+    .key = key,
+    .type = type,
+    .min_i32 = min_i32,
+    .max_i32 = max_i32,
+    .max_len = max_len,
+    .flags = flags,
+    .console_visible = console_visible,
+    .owner = owner
+  };
+
+  const HxStateKeyDef* existing = StateFindKey(key);
+  if (existing) {
+    return StateDefsCompatible(existing, &requested);
+  }
+
+  return StateCreate(key, type, min_i32, max_i32, max_len, flags, console_visible, owner);
+}
+
+bool StateDelete(const char* key) {
+  if (!g_state_ready || !key || !key[0]) {
+    return false;
+  }
+
+  const HxStateKeyDef* item = StateFindKey(key);
+  if (!item) {
+    return false;
+  }
+
+  if ((item->flags & HX_STATE_FLAG_RUNTIME) == 0) {
+    return false;
+  }
+
+  char storage_key[HX_STATE_STORAGE_KEY_SIZE];
+  if (!StateMakeStorageKey(item->key, storage_key, sizeof(storage_key))) {
+    return false;
+  }
+
+  if (!HxNvsEraseKey(HX_NVS_STORE_STATE, storage_key)) {
+    return false;
+  }
+
+  if (!HxNvsCommit(HX_NVS_STORE_STATE)) {
+    return false;
+  }
+
+  taskENTER_CRITICAL(&g_state_registry_mux);
+
+  int index = StateFindRuntimeSlotIndexLocked(key);
+  if (index >= 0) {
+    StateRemoveRuntimeSlotLocked(index);
+  }
+
+  taskEXIT_CRITICAL(&g_state_registry_mux);
+
+  return StateSaveRuntimeCatalog();
 }
 
 bool StateExists(const char* key) {
@@ -632,8 +970,17 @@ bool StateWriteFromString(const char* key, const char* value) {
 
 bool StateInit() {
   StateResetRuntimeRegistry();
+
   g_state_ready = EspNvsOpenState();
-  return g_state_ready;
+  if (!g_state_ready) {
+    return false;
+  }
+
+  if (!StateLoadRuntimeCatalog()) {
+    return false;
+  }
+
+  return true;
 }
 
 bool StateLoad() {

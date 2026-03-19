@@ -78,6 +78,17 @@ bool StateCreate(const char* key,
                  bool console_visible,
                  const char* owner);
 
+bool StateEnsure(const char* key,
+                 HxSchemaValueType type,
+                 int32_t min_i32,
+                 int32_t max_i32,
+                 size_t max_len,
+                 uint16_t flags,
+                 bool console_visible,
+                 const char* owner);
+
+bool StateDelete(const char* key);
+
 bool StateExists(const char* key);
 bool StateErase(const char* key);
 
