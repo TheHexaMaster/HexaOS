@@ -24,7 +24,6 @@ extern const HxModule ModuleSystem;
 
 #if HX_ENABLE_MODULE_CONSOLE
   extern const HxModule ModuleConsole;
-  #include "system/modules/mod_console.h"
 #endif
 
 extern const HxModule ModuleStorage;

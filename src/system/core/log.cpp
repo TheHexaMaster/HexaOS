@@ -31,6 +31,22 @@ static size_t g_log_tail = 0;
 static size_t g_log_used = 0;
 static uint32_t g_log_dropped_lines = 0;
 static uint32_t g_log_dropped_isr = 0;
+static HxLogSinkLineHook g_log_sink_pre_line_hook = nullptr;
+static HxLogSinkLineHook g_log_sink_post_line_hook = nullptr;
+
+static void LogGetSinkLineHooks(HxLogSinkLineHook* pre_write_line, HxLogSinkLineHook* post_write_line) {
+  taskENTER_CRITICAL(&g_log_state_mux);
+
+  if (pre_write_line) {
+    *pre_write_line = g_log_sink_pre_line_hook;
+  }
+
+  if (post_write_line) {
+    *post_write_line = g_log_sink_post_line_hook;
+  }
+
+  taskEXIT_CRITICAL(&g_log_state_mux);
+}
 
 static const char* LogLevelText(HxLogLevel level) {
   switch (level) {
@@ -147,12 +163,24 @@ static void LogEmitLine(const char* line) {
   }
 
   if (LogTakeSinkLock()) {
-    ConsoleOnSinkLockedPreWriteLine();
+    HxLogSinkLineHook pre_hook = nullptr;
+    HxLogSinkLineHook post_hook = nullptr;
+
+    LogGetSinkLineHooks(&pre_hook, &post_hook);
+
+    if (pre_hook) {
+      pre_hook();
+    }
+
     ConsoleAdapterWriteText(line);
     ConsoleAdapterWriteText("\r\n");
     ConsoleAdapterFlush();
     LogStoreLine(line);
-    ConsoleOnSinkLockedPostWriteLine();
+
+    if (post_hook) {
+      post_hook();
+    }
+
     LogGiveSinkLock();
     return;
   }
@@ -199,11 +227,23 @@ void LogSinkWriteLineRaw(const char* text) {
   }
 
   if (LogTakeSinkLock()) {
-    ConsoleOnSinkLockedPreWriteLine();
+    HxLogSinkLineHook pre_hook = nullptr;
+    HxLogSinkLineHook post_hook = nullptr;
+
+    LogGetSinkLineHooks(&pre_hook, &post_hook);
+
+    if (pre_hook) {
+      pre_hook();
+    }
+
     ConsoleAdapterWriteText(text);
     ConsoleAdapterWriteText("\r\n");
     ConsoleAdapterFlush();
-    ConsoleOnSinkLockedPostWriteLine();
+
+    if (post_hook) {
+      post_hook();
+    }
+
     LogGiveSinkLock();
   }
 }
@@ -267,6 +307,13 @@ void LogInit() {
   }
 
   LogSetLevel(level);
+}
+
+void LogSetSinkLineHooks(HxLogSinkLineHook pre_write_line, HxLogSinkLineHook post_write_line) {
+  taskENTER_CRITICAL(&g_log_state_mux);
+  g_log_sink_pre_line_hook = pre_write_line;
+  g_log_sink_post_line_hook = post_write_line;
+  taskEXIT_CRITICAL(&g_log_state_mux);
 }
 
 void LogSetLevel(HxLogLevel level) {

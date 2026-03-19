@@ -18,21 +18,28 @@ enum HxLogLevel : uint8_t {
   HX_LOG_DEBUG = 3
 };
 
+typedef void (*HxLogSinkLineHook)();
+
 void LogInit();
 void LogSetLevel(HxLogLevel level);
 HxLogLevel LogGetLevel();
+
+void LogSetSinkLineHooks(HxLogSinkLineHook pre_write_line, HxLogSinkLineHook post_write_line);
+
 void LogRaw(const char* text);
 void LogDebug(const char* fmt, ...);
 void LogInfo(const char* fmt, ...);
 void LogWarn(const char* fmt, ...);
 void LogError(const char* fmt, ...);
 void LogTagged(HxLogLevel level, const char* tag, const char* fmt, ...);
+
 size_t LogHistorySize();
 size_t LogHistoryCapacity();
 size_t LogHistoryCopy(char* out, size_t out_size);
 void LogHistoryClear();
 uint32_t LogDroppedLines();
 uint32_t LogDroppedIsr();
+
 void LogSinkWriteRaw(const char* text);
 void LogSinkWriteChar(char ch);
 void LogSinkWriteLineRaw(const char* text);

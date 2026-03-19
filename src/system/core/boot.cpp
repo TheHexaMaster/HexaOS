@@ -92,9 +92,4 @@ void BootInit() {
   ModuleInitAll();
   ModuleStartAll();
 
-#if HX_ENABLE_MODULE_CONSOLE
-  ConsoleShowPrompt();
-#endif
-  
-
 }

@@ -108,11 +108,7 @@ static void ConsolePrompt() {
   ConsoleSetEditingActive(true);
 }
 
-void ConsoleShowPrompt() {
-  ConsolePrompt();
-}
-
-void ConsoleOnSinkLockedPreWriteLine() {
+static void ConsoleOnSinkLockedPreWriteLine() {
   char snapshot[HX_CONSOLE_LINE_MAX];
   size_t len = 0;
   bool active = ConsoleSnapshotLine(snapshot, sizeof(snapshot), &len);
@@ -128,7 +124,7 @@ void ConsoleOnSinkLockedPreWriteLine() {
   ConsoleAdapterWriteChar('\r');
 }
 
-void ConsoleOnSinkLockedPostWriteLine() {
+static void ConsoleOnSinkLockedPostWriteLine() {
   char snapshot[HX_CONSOLE_LINE_MAX];
   size_t len = 0;
   bool active = ConsoleSnapshotLine(snapshot, sizeof(snapshot), &len);
@@ -593,6 +589,7 @@ static void ConsoleReadSerial() {
 static bool ConsoleInit() {
   ConsoleClearLine();
   ConsoleSetEditingActive(false);
+  LogSetSinkLineHooks(ConsoleOnSinkLockedPreWriteLine, ConsoleOnSinkLockedPostWriteLine);
   LogInfo("CON: init");
   return true;
 }
@@ -600,6 +597,7 @@ static bool ConsoleInit() {
 static void ConsoleStart() {
   LogInfo("CON: start");
   LogInfo("CON: commands available: help, reboot, log, logclr, logstat, listcfg, readcfg, setcfg, savecfg, loadcfg, defaultcfg, liststate, readstate");
+  ConsolePrompt();
 }
 
 static void ConsoleLoop() {
