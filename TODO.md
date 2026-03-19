@@ -6,7 +6,7 @@
 - [x] STATES - We need to finish engine to be ready to work with internal / externally defined states (modules, drivers, user-defined scripted states from scripting engine / console engine in future etc)
 - [x] STATES - Console command handling for states, updated handler for increment / decrement for integers, toggle for booleans
 - [x] STATES - Console / module persistence question to solve
-- [ ] STATES - Cashing handler / save delay, settable in config settings (to protect NVS from too-fast write cycles, suggested minimum - 1s). Per value / per whole nvs?
+- [x] STATES - Cashing handler / save delay, settable in config settings (to protect NVS from too-fast write cycles, suggested minimum - 1s). Per value / per whole nvs?
 - [ ] CONFIG - Full review of mechanism for future usage
 - [ ] CONFIG - Refactor of console commands to config xxx
 - [ ] CONFIG - Authority / ownership model. 
@@ -28,4 +28,4 @@
 - Wifi / Ethernet implementation
 - Webserver (start of development)
 - OTA handling
-- 
+- DEBUG - We need console based LOW-LEVEL debugger, capable to call introspect <read/write> <iram/psram/flash/pointer> at selected <hex address> and return/write selected bytes <1,2,4,8,16,32,64...>. Return bytes in HEX. It shall be RAW debugger without any protection (in debug mode, crashes are acceptable.)

@@ -127,6 +127,7 @@ bool StateInit();
 bool StateLoad();
 bool StateSave();
 bool StateCommit();
+void StateLoop();
 
 // FACTORY HANDLER
 bool FactoryDataInit();

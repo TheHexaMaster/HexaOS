@@ -33,6 +33,15 @@ static constexpr size_t HX_STATE_STRING_MAX = 256;
 static constexpr size_t HX_STATE_STORAGE_KEY_SIZE = 15;
 static constexpr size_t HX_STATE_CATALOG_LINE_MAX = 256;
 static constexpr size_t HX_STATE_CATALOG_RESERVE = 4096;
+static constexpr size_t HX_STATE_PENDING_MAX = 96;
+
+enum HxStatePendingKind : uint8_t {
+  HX_STATE_PENDING_NONE = 0,
+  HX_STATE_PENDING_ERASE = 1,
+  HX_STATE_PENDING_BOOL = 2,
+  HX_STATE_PENDING_INT32 = 3,
+  HX_STATE_PENDING_STRING = 4
+};
 
 struct HxRuntimeStateSlot {
   bool used;
@@ -41,9 +50,60 @@ struct HxRuntimeStateSlot {
   char* owned_owner;
 };
 
+struct HxStatePendingSlot {
+  bool used;
+  char storage_key[HX_STATE_STORAGE_KEY_SIZE];
+  HxStatePendingKind kind;
+  uint32_t seq;
+  bool bool_value;
+  int32_t int_value;
+  char* string_value;
+};
+
+struct HxStatePendingCommitItem {
+  char storage_key[HX_STATE_STORAGE_KEY_SIZE];
+  HxStatePendingKind kind;
+  uint32_t seq;
+  bool bool_value;
+  int32_t int_value;
+  char* string_value;
+};
+
 static bool g_state_ready = false;
 static portMUX_TYPE g_state_registry_mux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE g_state_pending_mux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE g_state_commit_mux = portMUX_INITIALIZER_UNLOCKED;
 static HxRuntimeStateSlot g_runtime_states[HX_STATE_RUNTIME_MAX];
+static HxStatePendingSlot g_state_pending[HX_STATE_PENDING_MAX];
+static bool g_state_commit_pending = false;
+static uint32_t g_state_commit_deadline_ms = 0;
+static uint32_t g_state_pending_seq = 0;
+
+static void StateResetCommitWindow();
+static uint32_t StateGetCommitDelayMs();
+static void StateArmCommitWindow();
+static void StateRearmCommitWindow(uint32_t delay_ms);
+static bool StateScheduleCommit();
+static bool StateCommitIsDue();
+static bool StateWriteRuntimeCatalog(bool commit);
+static bool StateStageRuntimeCatalog();
+static void StateClearPendingSlotLocked(HxStatePendingSlot* slot);
+static void StateResetPendingBuffer();
+static int StateFindPendingSlotIndexLocked(const char* storage_key);
+static int StateFindFreePendingSlotLocked();
+static uint32_t StateNextPendingSeqLocked();
+static bool StateStagePendingBoolValue(const char* storage_key, bool value);
+static bool StateStagePendingIntValue(const char* storage_key, int32_t value);
+static bool StateStagePendingStringValue(const char* storage_key, const char* value);
+static bool StateStagePendingEraseValue(const char* storage_key);
+static bool StateReadPendingBool(const char* storage_key, bool* handled, bool* value_out);
+static bool StateReadPendingInt(const char* storage_key, bool* handled, int32_t* value_out);
+static bool StateReadPendingString(const char* storage_key, bool* handled, char* out, size_t out_size, size_t max_len);
+static void StateFreePendingCommitItems(HxStatePendingCommitItem* items, size_t count);
+static bool StateClonePendingCommitItems(HxStatePendingCommitItem* items, size_t max_items, size_t* count_out);
+static void StateClearCommittedPendingItems(const HxStatePendingCommitItem* items, size_t count);
+static size_t StatePendingCountLocked();
+bool StateCommit();
 
 static const HxStateKeyDef kHxStaticStateKeys[] = {
 #define HX_STATE_ITEM(id, key_text, type_id, min_i32_value, max_i32_value, max_len_value, console_visible_value) \
@@ -255,6 +315,7 @@ static void StateResetRuntimeRegistry() {
   }
 
   taskEXIT_CRITICAL(&g_state_registry_mux);
+  StateResetCommitWindow();
 }
 
 static bool StateResolveDefAndStorageKey(const char* key,
@@ -333,6 +394,534 @@ static bool StateParseIntText(const char* text, int32_t* value_out) {
 }
 
 static bool StateSaveRuntimeCatalog();
+
+static uint32_t StateGetCommitDelayMs() {
+  int32_t delay_ms = (int32_t)HX_CONFIG_DEFAULT_STATE_DELAY;
+
+  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_STATES_DELAY);
+  if (item && (item->type == HX_SCHEMA_VALUE_INT32)) {
+    if ((HxConfigData.states_delay >= item->min_i32) && (HxConfigData.states_delay <= item->max_i32)) {
+      delay_ms = HxConfigData.states_delay;
+    }
+  }
+
+  if (delay_ms < 0) {
+    delay_ms = 0;
+  }
+
+  return (uint32_t)delay_ms;
+}
+
+static void StateResetCommitWindow() {
+  taskENTER_CRITICAL(&g_state_commit_mux);
+  g_state_commit_pending = false;
+  g_state_commit_deadline_ms = 0;
+  taskEXIT_CRITICAL(&g_state_commit_mux);
+}
+
+static void StateArmCommitWindow() {
+  uint32_t now = millis();
+  uint32_t delay_ms = StateGetCommitDelayMs();
+  bool armed = false;
+
+  taskENTER_CRITICAL(&g_state_commit_mux);
+
+  if (!g_state_commit_pending) {
+    g_state_commit_pending = true;
+    g_state_commit_deadline_ms = now + delay_ms;
+    armed = true;
+  }
+
+  taskEXIT_CRITICAL(&g_state_commit_mux);
+
+  if (armed) {
+    HX_LOGD("STA", "commit window armed delay=%lu ms", (unsigned long)delay_ms);
+  }
+}
+
+static void StateRearmCommitWindow(uint32_t delay_ms) {
+  taskENTER_CRITICAL(&g_state_commit_mux);
+  g_state_commit_pending = true;
+  g_state_commit_deadline_ms = millis() + delay_ms;
+  taskEXIT_CRITICAL(&g_state_commit_mux);
+
+  HX_LOGD("STA", "commit window rearmed delay=%lu ms", (unsigned long)delay_ms);
+}
+
+static bool StateCommitIsDue() {
+  bool pending = false;
+  uint32_t deadline_ms = 0;
+
+  taskENTER_CRITICAL(&g_state_commit_mux);
+  pending = g_state_commit_pending;
+  deadline_ms = g_state_commit_deadline_ms;
+  taskEXIT_CRITICAL(&g_state_commit_mux);
+
+  if (!pending) {
+    return false;
+  }
+
+  uint32_t now = millis();
+  return (int32_t)(now - deadline_ms) >= 0;
+}
+
+static bool StateScheduleCommit() {
+  if (!g_state_ready) {
+    return false;
+  }
+
+  uint32_t delay_ms = StateGetCommitDelayMs();
+  if (delay_ms == 0) {
+    return StateCommit();
+  }
+
+  StateArmCommitWindow();
+  return true;
+}
+
+static void StateClearPendingSlotLocked(HxStatePendingSlot* slot) {
+  if (!slot) {
+    return;
+  }
+
+  if (slot->string_value) {
+    free(slot->string_value);
+  }
+
+  memset(slot, 0, sizeof(*slot));
+}
+
+static void StateResetPendingBuffer() {
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  for (size_t i = 0; i < HX_STATE_PENDING_MAX; i++) {
+    StateClearPendingSlotLocked(&g_state_pending[i]);
+  }
+
+  g_state_pending_seq = 0;
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+}
+
+static int StateFindPendingSlotIndexLocked(const char* storage_key) {
+  if (!storage_key || !storage_key[0]) {
+    return -1;
+  }
+
+  for (size_t i = 0; i < HX_STATE_PENDING_MAX; i++) {
+    if (!g_state_pending[i].used) {
+      continue;
+    }
+
+    if (strcmp(g_state_pending[i].storage_key, storage_key) == 0) {
+      return (int)i;
+    }
+  }
+
+  return -1;
+}
+
+static int StateFindFreePendingSlotLocked() {
+  for (size_t i = 0; i < HX_STATE_PENDING_MAX; i++) {
+    if (!g_state_pending[i].used) {
+      return (int)i;
+    }
+  }
+
+  return -1;
+}
+
+static size_t StatePendingCountLocked() {
+  size_t count = 0;
+
+  for (size_t i = 0; i < HX_STATE_PENDING_MAX; i++) {
+    if (g_state_pending[i].used) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
+static uint32_t StateNextPendingSeqLocked() {
+  g_state_pending_seq++;
+  if (g_state_pending_seq == 0) {
+    g_state_pending_seq = 1;
+  }
+
+  return g_state_pending_seq;
+}
+
+static bool StateStagePendingBoolValue(const char* storage_key, bool value) {
+  if (!storage_key || !storage_key[0]) {
+    return false;
+  }
+
+  bool ok = false;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index < 0) {
+    index = StateFindFreePendingSlotLocked();
+  }
+
+  if (index >= 0) {
+    HxStatePendingSlot* slot = &g_state_pending[index];
+
+    if (slot->used && slot->string_value) {
+      free(slot->string_value);
+      slot->string_value = nullptr;
+    }
+
+    if (!slot->used) {
+      memset(slot, 0, sizeof(*slot));
+      strncpy(slot->storage_key, storage_key, sizeof(slot->storage_key) - 1);
+      slot->storage_key[sizeof(slot->storage_key) - 1] = '\0';
+      slot->used = true;
+    }
+
+    slot->kind = HX_STATE_PENDING_BOOL;
+    slot->bool_value = value;
+    slot->seq = StateNextPendingSeqLocked();
+    ok = true;
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+  return ok;
+}
+
+static bool StateStagePendingIntValue(const char* storage_key, int32_t value) {
+  if (!storage_key || !storage_key[0]) {
+    return false;
+  }
+
+  bool ok = false;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index < 0) {
+    index = StateFindFreePendingSlotLocked();
+  }
+
+  if (index >= 0) {
+    HxStatePendingSlot* slot = &g_state_pending[index];
+
+    if (slot->used && slot->string_value) {
+      free(slot->string_value);
+      slot->string_value = nullptr;
+    }
+
+    if (!slot->used) {
+      memset(slot, 0, sizeof(*slot));
+      strncpy(slot->storage_key, storage_key, sizeof(slot->storage_key) - 1);
+      slot->storage_key[sizeof(slot->storage_key) - 1] = '\0';
+      slot->used = true;
+    }
+
+    slot->kind = HX_STATE_PENDING_INT32;
+    slot->int_value = value;
+    slot->seq = StateNextPendingSeqLocked();
+    ok = true;
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+  return ok;
+}
+
+static bool StateStagePendingStringValue(const char* storage_key, const char* value) {
+  if (!storage_key || !storage_key[0] || !value) {
+    return false;
+  }
+
+  char* value_copy = (char*)malloc(strlen(value) + 1);
+  if (!value_copy) {
+    return false;
+  }
+
+  strcpy(value_copy, value);
+
+  bool ok = false;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index < 0) {
+    index = StateFindFreePendingSlotLocked();
+  }
+
+  if (index >= 0) {
+    HxStatePendingSlot* slot = &g_state_pending[index];
+
+    if (slot->used && slot->string_value) {
+      free(slot->string_value);
+      slot->string_value = nullptr;
+    }
+
+    if (!slot->used) {
+      memset(slot, 0, sizeof(*slot));
+      strncpy(slot->storage_key, storage_key, sizeof(slot->storage_key) - 1);
+      slot->storage_key[sizeof(slot->storage_key) - 1] = '\0';
+      slot->used = true;
+    }
+
+    slot->kind = HX_STATE_PENDING_STRING;
+    slot->string_value = value_copy;
+    slot->seq = StateNextPendingSeqLocked();
+    ok = true;
+    value_copy = nullptr;
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+
+  if (value_copy) {
+    free(value_copy);
+  }
+
+  return ok;
+}
+
+static bool StateStagePendingEraseValue(const char* storage_key) {
+  if (!storage_key || !storage_key[0]) {
+    return false;
+  }
+
+  bool ok = false;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index < 0) {
+    index = StateFindFreePendingSlotLocked();
+  }
+
+  if (index >= 0) {
+    HxStatePendingSlot* slot = &g_state_pending[index];
+
+    if (slot->used && slot->string_value) {
+      free(slot->string_value);
+      slot->string_value = nullptr;
+    }
+
+    if (!slot->used) {
+      memset(slot, 0, sizeof(*slot));
+      strncpy(slot->storage_key, storage_key, sizeof(slot->storage_key) - 1);
+      slot->storage_key[sizeof(slot->storage_key) - 1] = '\0';
+      slot->used = true;
+    }
+
+    slot->kind = HX_STATE_PENDING_ERASE;
+    slot->seq = StateNextPendingSeqLocked();
+    ok = true;
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+  return ok;
+}
+
+static bool StateReadPendingBool(const char* storage_key, bool* handled, bool* value_out) {
+  if (handled) {
+    *handled = false;
+  }
+
+  if (!storage_key || !value_out) {
+    return false;
+  }
+
+  bool found = false;
+  bool ok = false;
+  bool value = false;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index >= 0) {
+    found = true;
+    if (g_state_pending[index].kind == HX_STATE_PENDING_BOOL) {
+      value = g_state_pending[index].bool_value;
+      ok = true;
+    }
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+
+  if (handled) {
+    *handled = found;
+  }
+
+  if (ok) {
+    *value_out = value;
+  }
+
+  return ok;
+}
+
+static bool StateReadPendingInt(const char* storage_key, bool* handled, int32_t* value_out) {
+  if (handled) {
+    *handled = false;
+  }
+
+  if (!storage_key || !value_out) {
+    return false;
+  }
+
+  bool found = false;
+  bool ok = false;
+  int32_t value = 0;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index >= 0) {
+    found = true;
+    if (g_state_pending[index].kind == HX_STATE_PENDING_INT32) {
+      value = g_state_pending[index].int_value;
+      ok = true;
+    }
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+
+  if (handled) {
+    *handled = found;
+  }
+
+  if (ok) {
+    *value_out = value;
+  }
+
+  return ok;
+}
+
+static bool StateReadPendingString(const char* storage_key, bool* handled, char* out, size_t out_size, size_t max_len) {
+  if (handled) {
+    *handled = false;
+  }
+
+  if (!storage_key || !out || (out_size == 0)) {
+    return false;
+  }
+
+  out[0] = '\0';
+
+  bool found = false;
+  bool ok = false;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index >= 0) {
+    found = true;
+
+    if ((g_state_pending[index].kind == HX_STATE_PENDING_STRING) && g_state_pending[index].string_value) {
+      size_t len = strlen(g_state_pending[index].string_value);
+      if ((len <= max_len) && ((len + 1) <= out_size)) {
+        memcpy(out, g_state_pending[index].string_value, len + 1);
+        ok = true;
+      }
+    }
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+
+  if (handled) {
+    *handled = found;
+  }
+
+  return ok;
+}
+
+static void StateFreePendingCommitItems(HxStatePendingCommitItem* items, size_t count) {
+  if (!items) {
+    return;
+  }
+
+  for (size_t i = 0; i < count; i++) {
+    if (items[i].string_value) {
+      free(items[i].string_value);
+      items[i].string_value = nullptr;
+    }
+  }
+}
+
+static bool StateClonePendingCommitItems(HxStatePendingCommitItem* items, size_t max_items, size_t* count_out) {
+  if (!items || !count_out) {
+    return false;
+  }
+
+  *count_out = 0;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  for (size_t i = 0; i < HX_STATE_PENDING_MAX; i++) {
+    if (!g_state_pending[i].used) {
+      continue;
+    }
+
+    if (*count_out >= max_items) {
+      taskEXIT_CRITICAL(&g_state_pending_mux);
+      StateFreePendingCommitItems(items, *count_out);
+      return false;
+    }
+
+    HxStatePendingCommitItem* item = &items[*count_out];
+    memset(item, 0, sizeof(*item));
+    strncpy(item->storage_key, g_state_pending[i].storage_key, sizeof(item->storage_key) - 1);
+    item->storage_key[sizeof(item->storage_key) - 1] = '\0';
+    item->kind = g_state_pending[i].kind;
+    item->seq = g_state_pending[i].seq;
+    item->bool_value = g_state_pending[i].bool_value;
+    item->int_value = g_state_pending[i].int_value;
+
+    if ((g_state_pending[i].kind == HX_STATE_PENDING_STRING) && g_state_pending[i].string_value) {
+      item->string_value = (char*)malloc(strlen(g_state_pending[i].string_value) + 1);
+      if (!item->string_value) {
+        taskEXIT_CRITICAL(&g_state_pending_mux);
+        StateFreePendingCommitItems(items, *count_out + 1);
+        return false;
+      }
+
+      strcpy(item->string_value, g_state_pending[i].string_value);
+    }
+
+    (*count_out)++;
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+  return true;
+}
+
+static void StateClearCommittedPendingItems(const HxStatePendingCommitItem* items, size_t count) {
+  if (!items) {
+    return;
+  }
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  for (size_t i = 0; i < count; i++) {
+    int index = StateFindPendingSlotIndexLocked(items[i].storage_key);
+    if (index < 0) {
+      continue;
+    }
+
+    if (g_state_pending[index].seq != items[i].seq) {
+      continue;
+    }
+
+    StateClearPendingSlotLocked(&g_state_pending[index]);
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+}
+
+static bool StateStageRuntimeCatalog() {
+  if (!StateWriteRuntimeCatalog(false)) {
+    return false;
+  }
+
+  return StateScheduleCommit();
+}
 
 static bool StateDefsCompatible(const HxStateKeyDef* existing, const HxStateKeyDef* requested) {
   if (!existing || !requested) {
@@ -450,7 +1039,9 @@ static bool StateInsertRuntimeDef(const HxStateKeyDef* def, bool persist_catalog
 
   taskEXIT_CRITICAL(&g_state_registry_mux);
 
-  if (persist_catalog && !StateSaveRuntimeCatalog()) {
+  HX_LOGD("STA", "register runtime key=%s owner=%s", slot->def.key, slot->def.owner);
+
+  if (persist_catalog && !StateStageRuntimeCatalog()) {
     taskENTER_CRITICAL(&g_state_registry_mux);
     int rollback_index = StateFindRuntimeSlotIndexLocked(def->key);
     if (rollback_index >= 0) {
@@ -537,17 +1128,19 @@ static bool StateWriteRuntimeCatalog(bool commit) {
   bool ok = false;
 
   if (manifest.length() == 0) {
-    ok = HxNvsEraseKey(HX_NVS_STORE_STATE, HX_STATE_CATALOG_KEY);
+    ok = StateStagePendingEraseValue(HX_STATE_CATALOG_KEY);
   } else {
-    ok = HxNvsSetString(HX_NVS_STORE_STATE, HX_STATE_CATALOG_KEY, manifest.c_str());
+    ok = StateStagePendingStringValue(HX_STATE_CATALOG_KEY, manifest.c_str());
   }
 
   if (!ok) {
     return false;
   }
 
+  HX_LOGD("STA", "stage runtime catalog len=%lu", (unsigned long)manifest.length());
+
   if (commit) {
-    return HxNvsCommit(HX_NVS_STORE_STATE);
+    return StateCommit();
   }
 
   return true;
@@ -668,6 +1261,15 @@ static bool StateLoadRuntimeCatalog() {
   }
 
   free(buffer);
+
+  size_t runtime_count = 0;
+  taskENTER_CRITICAL(&g_state_registry_mux);
+  runtime_count = StateRuntimeCountLocked();
+  taskEXIT_CRITICAL(&g_state_registry_mux);
+
+  HX_LOGD("STA", "runtime catalog loaded count=%lu dirty=%s",
+          (unsigned long)runtime_count,
+          dirty ? "true" : "false");
 
   if (dirty) {
     return StateSaveRuntimeCatalog();
@@ -844,11 +1446,7 @@ bool StateDelete(const char* key) {
     return false;
   }
 
-  if (!HxNvsEraseKey(HX_NVS_STORE_STATE, storage_key)) {
-    return false;
-  }
-
-  if (!HxNvsCommit(HX_NVS_STORE_STATE)) {
+  if (!StateStagePendingEraseValue(storage_key)) {
     return false;
   }
 
@@ -861,7 +1459,14 @@ bool StateDelete(const char* key) {
 
   taskEXIT_CRITICAL(&g_state_registry_mux);
 
-  return StateSaveRuntimeCatalog();
+  HX_LOGD("STA", "delete runtime key=%s", key);
+
+  if (!StateStageRuntimeCatalog()) {
+    StateScheduleCommit();
+    return false;
+  }
+
+  return true;
 }
 
 bool StateExists(const char* key) {
@@ -884,11 +1489,12 @@ bool StateErase(const char* key) {
     return false;
   }
 
-  if (!HxNvsEraseKey(HX_NVS_STORE_STATE, storage_key)) {
+  if (!StateStagePendingEraseValue(storage_key)) {
     return false;
   }
 
-  return HxNvsCommit(HX_NVS_STORE_STATE);
+  HX_LOGD("STA", "stage erase key=%s", def->key);
+  return StateScheduleCommit();
 }
 
 bool StateValueToString(const HxStateKeyDef* item, char* out, size_t out_size) {
@@ -970,6 +1576,7 @@ bool StateWriteFromString(const char* key, const char* value) {
 
 bool StateInit() {
   StateResetRuntimeRegistry();
+  StateResetPendingBuffer();
 
   g_state_ready = EspNvsOpenState();
   if (!g_state_ready) {
@@ -980,6 +1587,7 @@ bool StateInit() {
     return false;
   }
 
+  StateResetCommitWindow();
   return true;
 }
 
@@ -1004,7 +1612,92 @@ bool StateCommit() {
     return false;
   }
 
-  return HxNvsCommit(HX_NVS_STORE_STATE);
+  HxStatePendingCommitItem items[HX_STATE_PENDING_MAX];
+  memset(items, 0, sizeof(items));
+
+  size_t count = 0;
+  if (!StateClonePendingCommitItems(items, HX_STATE_PENDING_MAX, &count)) {
+    HX_LOGW("STA", "commit snapshot failed");
+    return false;
+  }
+
+  if (count == 0) {
+    StateResetCommitWindow();
+    return true;
+  }
+
+  HX_LOGD("STA", "commit flush start ops=%lu", (unsigned long)count);
+
+  for (size_t i = 0; i < count; i++) {
+    bool ok = false;
+
+    switch (items[i].kind) {
+      case HX_STATE_PENDING_ERASE:
+        ok = HxNvsEraseKey(HX_NVS_STORE_STATE, items[i].storage_key);
+        break;
+
+      case HX_STATE_PENDING_BOOL:
+        ok = HxNvsSetBool(HX_NVS_STORE_STATE, items[i].storage_key, items[i].bool_value);
+        break;
+
+      case HX_STATE_PENDING_INT32:
+        ok = HxNvsSetInt(HX_NVS_STORE_STATE, items[i].storage_key, items[i].int_value);
+        break;
+
+      case HX_STATE_PENDING_STRING:
+        ok = items[i].string_value && HxNvsSetString(HX_NVS_STORE_STATE, items[i].storage_key, items[i].string_value);
+        break;
+
+      default:
+        ok = false;
+        break;
+    }
+
+    if (!ok) {
+      HX_LOGW("STA", "commit apply failed key=%s", items[i].storage_key);
+      StateFreePendingCommitItems(items, count);
+      return false;
+    }
+  }
+
+  if (!HxNvsCommit(HX_NVS_STORE_STATE)) {
+    HX_LOGW("STA", "commit flush failed");
+    StateFreePendingCommitItems(items, count);
+    return false;
+  }
+
+  StateClearCommittedPendingItems(items, count);
+  StateFreePendingCommitItems(items, count);
+
+  size_t remaining = 0;
+  taskENTER_CRITICAL(&g_state_pending_mux);
+  remaining = StatePendingCountLocked();
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+
+  if (remaining == 0) {
+    StateResetCommitWindow();
+  } else {
+    StateRearmCommitWindow(StateGetCommitDelayMs());
+  }
+
+  HX_LOGD("STA", "commit flush OK ops=%lu remaining=%lu",
+          (unsigned long)count,
+          (unsigned long)remaining);
+  return true;
+}
+
+void StateLoop() {
+  if (!g_state_ready) {
+    return;
+  }
+
+  if (!StateCommitIsDue()) {
+    return;
+  }
+
+  if (!StateCommit()) {
+    HX_LOGW("STA", "delayed commit failed");
+  }
 }
 
 bool StateSave() {
@@ -1027,6 +1720,15 @@ bool StateReadBool(const char* key, bool* value) {
     return false;
   }
 
+  bool handled = false;
+  if (StateReadPendingBool(storage_key, &handled, value)) {
+    return true;
+  }
+
+  if (handled) {
+    return false;
+  }
+
   return HxNvsGetBool(HX_NVS_STORE_STATE, storage_key, value);
 }
 
@@ -1043,6 +1745,18 @@ bool StateReadInt(const char* key, int32_t* value) {
   }
 
   if (def->type != HX_SCHEMA_VALUE_INT32) {
+    return false;
+  }
+
+  bool handled = false;
+  if (StateReadPendingInt(storage_key, &handled, value)) {
+    if ((*value < def->min_i32) || (*value > def->max_i32)) {
+      return false;
+    }
+    return true;
+  }
+
+  if (handled) {
     return false;
   }
 
@@ -1072,6 +1786,15 @@ bool StateReadString(const char* key, char* out, size_t out_size) {
   }
 
   if (def->type != HX_SCHEMA_VALUE_STRING) {
+    return false;
+  }
+
+  bool handled = false;
+  if (StateReadPendingString(storage_key, &handled, out, out_size, def->max_len)) {
+    return true;
+  }
+
+  if (handled) {
     return false;
   }
 
@@ -1155,11 +1878,12 @@ bool StateSetBool(const char* key, bool value) {
     return false;
   }
 
-  if (!HxNvsSetBool(HX_NVS_STORE_STATE, storage_key, value)) {
+  if (!StateStagePendingBoolValue(storage_key, value)) {
     return false;
   }
 
-  return HxNvsCommit(HX_NVS_STORE_STATE);
+  HX_LOGD("STA", "stage bool key=%s value=%s", def->key, value ? "true" : "false");
+  return StateScheduleCommit();
 }
 
 bool StateSetInt(const char* key, int32_t value) {
@@ -1186,11 +1910,12 @@ bool StateSetInt(const char* key, int32_t value) {
     return false;
   }
 
-  if (!HxNvsSetInt(HX_NVS_STORE_STATE, storage_key, value)) {
+  if (!StateStagePendingIntValue(storage_key, value)) {
     return false;
   }
 
-  return HxNvsCommit(HX_NVS_STORE_STATE);
+  HX_LOGD("STA", "stage int key=%s value=%ld", def->key, (long)value);
+  return StateScheduleCommit();
 }
 
 bool StateSetString(const char* key, const char* value) {
@@ -1218,11 +1943,12 @@ bool StateSetString(const char* key, const char* value) {
     return false;
   }
 
-  if (!HxNvsSetString(HX_NVS_STORE_STATE, storage_key, value)) {
+  if (!StateStagePendingStringValue(storage_key, value)) {
     return false;
   }
 
-  return HxNvsCommit(HX_NVS_STORE_STATE);
+  HX_LOGD("STA", "stage string key=%s len=%lu", def->key, (unsigned long)len);
+  return StateScheduleCommit();
 }
 
 bool StateIncrementInt(const char* key, int32_t* new_value_out) {

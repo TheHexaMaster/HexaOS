@@ -30,6 +30,7 @@ void loop() {
   Hx.uptime_ms = now;
 
   ModuleLoopAll();
+  StateLoop();
 
   if ((now - last_100ms) >= 100) {
     last_100ms = now;
