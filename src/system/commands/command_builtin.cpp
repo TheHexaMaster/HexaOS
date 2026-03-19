@@ -728,6 +728,64 @@ static HxCmdStatus CmdStateToggle(const char* args, HxCmdOutput* out) {
   return HX_CMD_OK;
 }
 
+
+static HxCmdStatus CmdStateInfo(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: state info");
+    return HX_CMD_USAGE;
+  }
+
+  HxStateStorageInfo info{};
+  if (!StateGetStorageInfo(&info)) {
+    CmdOutWriteLine(out, "state info failed");
+    return HX_CMD_ERROR;
+  }
+
+  CmdOutPrintfLine(out, "partition = %s", info.partition_label ? info.partition_label : "-");
+  CmdOutPrintfLine(out, "namespace = %s", info.namespace_name ? info.namespace_name : "-");
+  CmdOutPrintfLine(out, "ready = %s", info.ready ? "true" : "false");
+  CmdOutPrintfLine(out, "delay_ms = %lu", (unsigned long)info.commit_delay_ms);
+  CmdOutPrintfLine(out,
+                   "partition.entries = used=%lu free=%lu available=%lu total=%lu",
+                   (unsigned long)info.partition_entries_used,
+                   (unsigned long)info.partition_entries_free,
+                   (unsigned long)info.partition_entries_available,
+                   (unsigned long)info.partition_entries_total);
+  CmdOutPrintfLine(out,
+                   "partition.bytes_approx = used=%lu free=%lu total=%lu entry_size=%lu",
+                   (unsigned long)(info.partition_entries_used * info.entry_size_bytes),
+                   (unsigned long)(info.partition_entries_free * info.entry_size_bytes),
+                   (unsigned long)(info.partition_entries_total * info.entry_size_bytes),
+                   (unsigned long)info.entry_size_bytes);
+  CmdOutPrintfLine(out, "namespace.entries = %lu", (unsigned long)info.namespace_entries_used);
+  CmdOutPrintfLine(out,
+                   "keys = static=%lu runtime=%lu total=%lu runtime_capacity=%lu",
+                   (unsigned long)info.static_key_count,
+                   (unsigned long)info.runtime_key_count,
+                   (unsigned long)info.total_key_count,
+                   (unsigned long)info.runtime_capacity);
+  CmdOutPrintfLine(out,
+                   "pending = used=%lu capacity=%lu",
+                   (unsigned long)info.pending_key_count,
+                   (unsigned long)info.pending_capacity);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdStateFormat(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: state format");
+    return HX_CMD_USAGE;
+  }
+
+  if (!StateFormat()) {
+    CmdOutWriteLine(out, "state format failed");
+    return HX_CMD_ERROR;
+  }
+
+  CmdOutWriteLine(out, "state storage formatted");
+  return HX_CMD_OK;
+}
+
 static const HxCmdDef kBuiltinCommands[] = {
   { "help",            CmdHelp,           "Show command list" },
   { "?",               CmdHelp,           nullptr },
@@ -746,6 +804,8 @@ static const HxCmdDef kBuiltinCommands[] = {
   { "config load",     CmdLoadConfig,     nullptr },
   { "defaultcfg",      CmdDefaultConfig,  "Reset config to defaults" },
   { "config defaults", CmdDefaultConfig,  nullptr },
+  { "state info",      CmdStateInfo,      "Show state storage information" },
+  { "state format",    CmdStateFormat,    "Format state NVS storage" },
   { "state list",      CmdStateList,      "List visible states" },
   { "state read",      CmdStateRead,      "Read state key" },
   { "state exist",     CmdStateExist,     "Check whether state exists" },

@@ -25,6 +25,17 @@ bool EspNvsOpenConfig();
 bool EspNvsOpenState();
 bool EspNvsOpenFactory();
 
+
+struct HxNvsStats {
+  const char* partition_label;
+  const char* namespace_name;
+  size_t used_entries;
+  size_t free_entries;
+  size_t available_entries;
+  size_t total_entries;
+  size_t namespace_entries;
+};
+
 bool HxNvsGetBool(HxNvsStore store, const char* key, bool* value);
 bool HxNvsGetInt(HxNvsStore store, const char* key, int32_t* value);
 bool HxNvsGetString(HxNvsStore store, const char* key, String& value);
@@ -35,3 +46,5 @@ bool HxNvsSetString(HxNvsStore store, const char* key, const char* value);
 bool HxNvsEraseKey(HxNvsStore store, const char* key);
 
 bool HxNvsCommit(HxNvsStore store);
+bool HxNvsGetStats(HxNvsStore store, HxNvsStats* out_stats);
+bool HxNvsFormat(HxNvsStore store);

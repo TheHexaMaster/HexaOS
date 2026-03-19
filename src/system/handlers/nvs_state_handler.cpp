@@ -34,6 +34,7 @@ static constexpr size_t HX_STATE_STORAGE_KEY_SIZE = 15;
 static constexpr size_t HX_STATE_CATALOG_LINE_MAX = 256;
 static constexpr size_t HX_STATE_CATALOG_RESERVE = 4096;
 static constexpr size_t HX_STATE_PENDING_MAX = 96;
+static constexpr size_t HX_STATE_NVS_ENTRY_SIZE = 32;
 
 enum HxStatePendingKind : uint8_t {
   HX_STATE_PENDING_NONE = 0,
@@ -1702,6 +1703,67 @@ void StateLoop() {
 
 bool StateSave() {
   return StateCommit();
+}
+
+bool StateFormat() {
+  if (!g_state_ready) {
+    return false;
+  }
+
+  StateResetPendingBuffer();
+  StateResetRuntimeRegistry();
+  StateResetCommitWindow();
+
+  g_state_ready = false;
+  g_state_ready = HxNvsFormat(HX_NVS_STORE_STATE);
+  if (!g_state_ready) {
+    return false;
+  }
+
+  HX_LOGI("STA", "state storage formatted");
+  return true;
+}
+
+bool StateGetStorageInfo(HxStateStorageInfo* out_info) {
+  if (!out_info || !g_state_ready) {
+    return false;
+  }
+
+  memset(out_info, 0, sizeof(*out_info));
+
+  HxNvsStats stats{};
+  if (!HxNvsGetStats(HX_NVS_STORE_STATE, &stats)) {
+    return false;
+  }
+
+  size_t runtime_count = 0;
+  size_t pending_count = 0;
+
+  taskENTER_CRITICAL(&g_state_registry_mux);
+  runtime_count = StateRuntimeCountLocked();
+  taskEXIT_CRITICAL(&g_state_registry_mux);
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+  pending_count = StatePendingCountLocked();
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+
+  out_info->ready = g_state_ready;
+  out_info->partition_label = stats.partition_label;
+  out_info->namespace_name = stats.namespace_name;
+  out_info->commit_delay_ms = StateGetCommitDelayMs();
+  out_info->entry_size_bytes = HX_STATE_NVS_ENTRY_SIZE;
+  out_info->static_key_count = HX_STATIC_STATE_COUNT;
+  out_info->runtime_key_count = runtime_count;
+  out_info->total_key_count = HX_STATIC_STATE_COUNT + runtime_count;
+  out_info->runtime_capacity = HX_STATE_RUNTIME_MAX;
+  out_info->pending_key_count = pending_count;
+  out_info->pending_capacity = HX_STATE_PENDING_MAX;
+  out_info->partition_entries_used = stats.used_entries;
+  out_info->partition_entries_free = stats.free_entries;
+  out_info->partition_entries_available = stats.available_entries;
+  out_info->partition_entries_total = stats.total_entries;
+  out_info->namespace_entries_used = stats.namespace_entries;
+  return true;
 }
 
 bool StateReadBool(const char* key, bool* value) {

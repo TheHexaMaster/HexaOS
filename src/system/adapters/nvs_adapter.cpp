@@ -15,6 +15,7 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 #include <stdlib.h>
+#include <string.h>
 
 static constexpr const char* HX_NVS_PARTITION_CONFIG = "nvs";
 static constexpr const char* HX_NVS_PARTITION_STATE = "nvs_state";
@@ -24,6 +25,24 @@ static constexpr const char* HX_NVS_NAMESPACE = "hx";
 static nvs_handle_t g_nvs_config = 0;
 static nvs_handle_t g_nvs_state = 0;
 static nvs_handle_t g_nvs_factory = 0;
+
+static const char* GetStorePartitionLabel(HxNvsStore store) {
+  switch (store) {
+    case HX_NVS_STORE_CONFIG:  return HX_NVS_PARTITION_CONFIG;
+    case HX_NVS_STORE_STATE:   return HX_NVS_PARTITION_STATE;
+    case HX_NVS_STORE_FACTORY: return HX_NVS_PARTITION_FACTORY;
+    default:                   return nullptr;
+  }
+}
+
+static nvs_handle_t* GetStoreHandlePtr(HxNvsStore store) {
+  switch (store) {
+    case HX_NVS_STORE_CONFIG:  return &g_nvs_config;
+    case HX_NVS_STORE_STATE:   return &g_nvs_state;
+    case HX_NVS_STORE_FACTORY: return &g_nvs_factory;
+    default:                   return nullptr;
+  }
+}
 
 static nvs_handle_t GetStoreHandle(HxNvsStore store) {
   switch (store) {
@@ -256,4 +275,70 @@ bool HxNvsCommit(HxNvsStore store) {
 
   esp_err_t err = nvs_commit(handle);
   return (err == ESP_OK);
+}
+
+bool HxNvsGetStats(HxNvsStore store, HxNvsStats* out_stats) {
+  if (!out_stats) {
+    return false;
+  }
+
+  memset(out_stats, 0, sizeof(*out_stats));
+
+  const char* partition_label = GetStorePartitionLabel(store);
+  if (!partition_label || !partition_label[0]) {
+    return false;
+  }
+
+  nvs_stats_t stats{};
+  esp_err_t err = nvs_get_stats(partition_label, &stats);
+  if (err != ESP_OK) {
+    return false;
+  }
+
+  out_stats->partition_label = partition_label;
+  out_stats->namespace_name = HX_NVS_NAMESPACE;
+  out_stats->used_entries = stats.used_entries;
+  out_stats->free_entries = stats.free_entries;
+  out_stats->available_entries = stats.available_entries;
+  out_stats->total_entries = stats.total_entries;
+
+  nvs_handle_t handle = GetStoreHandle(store);
+  if (IsHandleReady(handle)) {
+    size_t used_entries = 0;
+    if (nvs_get_used_entry_count(handle, &used_entries) == ESP_OK) {
+      out_stats->namespace_entries = used_entries + 1;
+    }
+  }
+
+  return true;
+}
+
+bool HxNvsFormat(HxNvsStore store) {
+  const char* partition_label = GetStorePartitionLabel(store);
+  nvs_handle_t* handle = GetStoreHandlePtr(store);
+
+  if (!partition_label || !partition_label[0] || !handle) {
+    return false;
+  }
+
+  if (IsHandleReady(*handle)) {
+    nvs_close(*handle);
+    *handle = 0;
+  }
+
+  esp_err_t err = nvs_flash_erase_partition(partition_label);
+  if (err != ESP_OK) {
+    LogError("NVS format failed: partition='%s' err=%d", partition_label, (int)err);
+    return false;
+  }
+
+  if (!InitPartition(partition_label)) {
+    return false;
+  }
+
+  if (!OpenPartitionHandle(partition_label, handle)) {
+    return false;
+  }
+
+  return true;
 }

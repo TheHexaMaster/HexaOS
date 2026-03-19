@@ -43,6 +43,26 @@ enum HxStateFlags : uint16_t {
   HX_STATE_FLAG_RUNTIME         = 1 << 4
 };
 
+
+struct HxStateStorageInfo {
+  bool ready;
+  const char* partition_label;
+  const char* namespace_name;
+  uint32_t commit_delay_ms;
+  size_t entry_size_bytes;
+  size_t static_key_count;
+  size_t runtime_key_count;
+  size_t total_key_count;
+  size_t runtime_capacity;
+  size_t pending_key_count;
+  size_t pending_capacity;
+  size_t partition_entries_used;
+  size_t partition_entries_free;
+  size_t partition_entries_available;
+  size_t partition_entries_total;
+  size_t namespace_entries_used;
+};
+
 struct HxStateKeyDef {
   const char* key;
   HxSchemaValueType type;
@@ -127,6 +147,8 @@ bool StateInit();
 bool StateLoad();
 bool StateSave();
 bool StateCommit();
+bool StateFormat();
+bool StateGetStorageInfo(HxStateStorageInfo* out_info);
 void StateLoop();
 
 // FACTORY HANDLER
