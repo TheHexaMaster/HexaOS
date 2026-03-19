@@ -34,13 +34,24 @@ struct HxConfigKeyDef {
   bool console_writable;
 };
 
+enum HxStateFlags : uint16_t {
+  HX_STATE_FLAG_NONE            = 0,
+  HX_STATE_FLAG_PERSISTENT      = 1 << 0,
+  HX_STATE_FLAG_CONSOLE_VISIBLE = 1 << 1,
+  HX_STATE_FLAG_API_VISIBLE     = 1 << 2,
+  HX_STATE_FLAG_READONLY        = 1 << 3,
+  HX_STATE_FLAG_RUNTIME         = 1 << 4
+};
+
 struct HxStateKeyDef {
   const char* key;
   HxSchemaValueType type;
   int32_t min_i32;
   int32_t max_i32;
   size_t max_len;
+  uint16_t flags;
   bool console_visible;
+  const char* owner;
 };
 
 size_t ConfigConfigKeyCount();
@@ -54,7 +65,27 @@ bool ConfigConfigResetValue(const HxConfigKeyDef* item);
 size_t StateKeyCount();
 const HxStateKeyDef* StateKeyAt(size_t index);
 const HxStateKeyDef* StateFindKey(const char* key);
+
+bool StateRegister(const HxStateKeyDef* def);
+bool StateUnregister(const char* key);
+
+bool StateExists(const char* key);
+bool StateErase(const char* key);
+
 bool StateValueToString(const HxStateKeyDef* item, char* out, size_t out_size);
+bool StateSetValueFromString(const HxStateKeyDef* item, const char* value);
+
+bool StateReadBool(const char* key, bool* value);
+bool StateReadInt(const char* key, int32_t* value);
+bool StateReadString(const char* key, char* out, size_t out_size);
+
+bool StateGetBoolOr(const char* key, bool defval);
+int32_t StateGetIntOr(const char* key, int32_t defval);
+bool StateGetStringOr(const char* key, char* out, size_t out_size, const char* defval);
+
+bool StateSetBool(const char* key, bool value);
+bool StateSetInt(const char* key, int32_t value);
+bool StateSetString(const char* key, const char* value);
 
 extern HxConfig HxConfigData;
 extern const HxConfig HxConfigDefaults;
@@ -70,10 +101,7 @@ void ConfigApply();
 bool StateInit();
 bool StateLoad();
 bool StateSave();
-bool StateGetBool(const char* key, bool defval);
-int32_t StateGetInt(const char* key, int32_t defval);
-bool StateSetBool(const char* key, bool value);
-bool StateSetInt(const char* key, int32_t value);
+bool StateCommit();
 
 // FACTORY HANDLER
 bool FactoryDataInit();
