@@ -6,7 +6,9 @@
 
   Description
   Central logging backend for HexaOS.
-  Implements formatted log output, log level filtering, in-memory history buffering and synchronized console-safe printing so log lines do not break interactive shell input.
+  Implements formatted log output, log level filtering, in-memory history
+  buffering and synchronized console-safe printing so log lines do not break
+  interactive shell input.
 */
 
 #pragma once
@@ -23,7 +25,6 @@ typedef void (*HxLogSinkLineHook)();
 void LogInit();
 void LogSetLevel(HxLogLevel level);
 HxLogLevel LogGetLevel();
-
 void LogSetSinkLineHooks(HxLogSinkLineHook pre_write_line, HxLogSinkLineHook post_write_line);
 
 void LogRaw(const char* text);

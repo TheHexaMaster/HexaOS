@@ -6,7 +6,9 @@
 
   Description
   HexaOS module interface contract.
-  Declares the lightweight module descriptor used by the core registry so optional subsystems can expose init, loop and timed lifecycle hooks in a uniform way.
+  Declares the lightweight module descriptor used by the core registry so
+  optional subsystems can expose init, loop and timed lifecycle hooks in a
+  uniform way.
 */
 
 #pragma once
@@ -30,7 +32,6 @@ extern const HxModule ModuleStorage;
 extern const HxModule ModuleBerry;
 extern const HxModule ModuleWeb;
 extern const HxModule ModuleLvgl;
-
 
 void ModuleInitAll();
 void ModuleStartAll();

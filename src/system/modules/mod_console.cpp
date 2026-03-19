@@ -6,17 +6,17 @@
 
   Description
   Interactive serial console module.
-  Implements the HexaOS shell prompt, line editing, command handling and prompt-preserving integration with the logging backend for debugging and service operations.
+  Implements the HexaOS shell prompt, line editing, serial input handling and
+  prompt-preserving integration with the logging backend while delegating
+  command execution to the shared command engine.
 */
 
 #include "hexaos.h"
+#include "system/adapters/console_adapter.h"
+#include "system/commands/command_engine.h"
 
-#include <esp_system.h>
-#include <freertos/FreeRTOS.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 static constexpr size_t HX_CONSOLE_LINE_MAX = 128;
 static constexpr const char* HX_CONSOLE_PROMPT = "hx> ";
@@ -29,6 +29,23 @@ static size_t g_console_len = 0;
 static bool g_console_overflow = false;
 static bool g_last_was_cr = false;
 static bool g_console_editing_active = false;
+
+static void ConsoleCommandWriteRaw(void* user, const char* text) {
+  (void)user;
+  LogSinkWriteRaw(text ? text : "");
+}
+
+static void ConsoleCommandWriteLine(void* user, const char* text) {
+  (void)user;
+  LogSinkWriteLineRaw(text ? text : "");
+}
+
+static HxCmdOutput g_console_cmd_output = {
+  .write_raw = ConsoleCommandWriteRaw,
+  .write_line = ConsoleCommandWriteLine,
+  .user = nullptr,
+  .interactive = true
+};
 
 static void ConsoleSetEditingActive(bool active) {
   taskENTER_CRITICAL(&g_console_state_mux);
@@ -139,370 +156,6 @@ static void ConsoleOnSinkLockedPostWriteLine() {
   }
 }
 
-static void ConsolePrintLogHistory() {
-  size_t used = LogHistorySize();
-  if (used == 0) {
-    LogSinkWriteLineRaw("log history is empty");
-    ConsolePrompt();
-    return;
-  }
-
-  char* dump = (char*)malloc(used + 1);
-  if (!dump) {
-    LogSinkWriteLineRaw("log history dump failed: out of memory");
-    ConsolePrompt();
-    return;
-  }
-
-  size_t copied = LogHistoryCopy(dump, used + 1);
-  if (copied > 0) {
-    LogSinkWriteRaw(dump);
-  }
-
-  free(dump);
-  ConsolePrompt();
-}
-
-static void ConsolePrintLogStats() {
-  char line[160];
-  snprintf(line, sizeof(line),
-           "log: used=%lu capacity=%lu dropped_lines=%lu dropped_isr=%lu",
-           (unsigned long)LogHistorySize(),
-           (unsigned long)LogHistoryCapacity(),
-           (unsigned long)LogDroppedLines(),
-           (unsigned long)LogDroppedIsr());
-  LogSinkWriteLineRaw(line);
-  ConsolePrompt();
-}
-
-static void ConsoleWriteConfigItemLine(const HxConfigKeyDef* item) {
-  if (!item) {
-    return;
-  }
-
-  char current[96];
-  char defaults[96];
-
-  if (!ConfigConfigValueToString(item, current, sizeof(current))) {
-    snprintf(current, sizeof(current), "<error>");
-  }
-
-  if (!ConfigConfigDefaultToString(item, defaults, sizeof(defaults))) {
-    snprintf(defaults, sizeof(defaults), "<error>");
-  }
-
-  char line[256];
-  snprintf(line, sizeof(line), "%s = %s (default=%s)", item->key, current, defaults);
-  LogSinkWriteLineRaw(line);
-}
-
-static void ConsoleWriteStateItemLine(const HxStateKeyDef* item) {
-  if (!item) {
-    return;
-  }
-
-  char value[96];
-  char line[256];
-
-  if (StateValueToString(item, value, sizeof(value))) {
-    snprintf(line, sizeof(line), "%s = %s", item->key, value);
-  } else {
-    snprintf(line, sizeof(line), "%s = <unset>", item->key);
-  }
-
-  LogSinkWriteLineRaw(line);
-}
-
-static void ConsolePrintHelp() {
-  LogSinkWriteLineRaw("commands:");
-  LogSinkWriteLineRaw("  help");
-  LogSinkWriteLineRaw("  reboot");
-  LogSinkWriteLineRaw("  log");
-  LogSinkWriteLineRaw("  logclr");
-  LogSinkWriteLineRaw("  logstat");
-  LogSinkWriteLineRaw("  listcfg");
-  LogSinkWriteLineRaw("  readcfg <key>");
-  LogSinkWriteLineRaw("  setcfg <key> <value>");
-  LogSinkWriteLineRaw("  savecfg");
-  LogSinkWriteLineRaw("  loadcfg");
-  LogSinkWriteLineRaw("  defaultcfg");
-  LogSinkWriteLineRaw("  liststate");
-  LogSinkWriteLineRaw("  readstate <key>");
-  ConsolePrompt();
-}
-
-static void ConsolePrintConfigList() {
-  for (size_t i = 0; i < ConfigConfigKeyCount(); i++) {
-    const HxConfigKeyDef* item = ConfigConfigKeyAt(i);
-    if (!item || !item->console_visible) {
-      continue;
-    }
-
-    ConsoleWriteConfigItemLine(item);
-  }
-
-  char line[96];
-  snprintf(line, sizeof(line), "config.loaded = %s", Hx.config_loaded ? "true" : "false");
-  LogSinkWriteLineRaw(line);
-  ConsolePrompt();
-}
-
-static void ConsolePrintStateList() {
-  for (size_t i = 0; i < StateKeyCount(); i++) {
-    const HxStateKeyDef* item = StateKeyAt(i);
-    if (!item || !item->console_visible) {
-      continue;
-    }
-
-    ConsoleWriteStateItemLine(item);
-  }
-
-  ConsolePrompt();
-}
-
-static void ConsoleReadConfigKey(const char* key) {
-  const HxConfigKeyDef* item = ConfigFindConfigKey(key);
-  if (!item) {
-    LogSinkWriteLineRaw("config key not found");
-    ConsolePrompt();
-    return;
-  }
-
-  ConsoleWriteConfigItemLine(item);
-  ConsolePrompt();
-}
-
-static void ConsoleReadStateKey(const char* key) {
-  const HxStateKeyDef* item = StateFindKey(key);
-  if (!item) {
-    LogSinkWriteLineRaw("state key not found");
-    ConsolePrompt();
-    return;
-  }
-
-  ConsoleWriteStateItemLine(item);
-  ConsolePrompt();
-}
-
-static void ConsoleSetConfigKey(const char* key, const char* value) {
-  const HxConfigKeyDef* item = ConfigFindConfigKey(key);
-  if (!item) {
-    LogSinkWriteLineRaw("config key not found");
-    ConsolePrompt();
-    return;
-  }
-
-  if (!item->console_writable) {
-    LogSinkWriteLineRaw("config key is read-only");
-    ConsolePrompt();
-    return;
-  }
-
-  if (!ConfigConfigSetValueFromString(item, value)) {
-    LogSinkWriteLineRaw("invalid config value");
-    ConsolePrompt();
-    return;
-  }
-
-  ConfigApply();
-
-  char line[192];
-  snprintf(line, sizeof(line), "%s updated", item->key);
-  LogSinkWriteLineRaw(line);
-  ConsolePrompt();
-}
-
-static bool ConsoleSplitKeyValue(const char* text, char* key_out, size_t key_size, const char** value_out) {
-  if (!text || !key_out || (key_size == 0) || !value_out) {
-    return false;
-  }
-
-  while ((*text == ' ') || (*text == '\t')) {
-    text++;
-  }
-
-  if (!text[0]) {
-    return false;
-  }
-
-  const char* sep = text;
-  while (*sep && (*sep != ' ') && (*sep != '\t')) {
-    sep++;
-  }
-
-  size_t key_len = (size_t)(sep - text);
-  if ((key_len == 0) || (key_len >= key_size)) {
-    return false;
-  }
-
-  memcpy(key_out, text, key_len);
-  key_out[key_len] = '\0';
-
-  while ((*sep == ' ') || (*sep == '\t')) {
-    sep++;
-  }
-
-  *value_out = sep;
-  return (sep[0] != '\0');
-}
-
-static bool ConsoleExtractSingleKey(const char* text, char* key_out, size_t key_size) {
-  if (!text || !key_out || (key_size == 0)) {
-    return false;
-  }
-
-  while ((*text == ' ') || (*text == '\t')) {
-    text++;
-  }
-
-  if (!text[0]) {
-    return false;
-  }
-
-  const char* end = text;
-  while (*end && (*end != ' ') && (*end != '\t')) {
-    end++;
-  }
-
-  while ((*end == ' ') || (*end == '\t')) {
-    end++;
-  }
-
-  if (*end != '\0') {
-    return false;
-  }
-
-  size_t len = (size_t)(end - text);
-  while ((len > 0) && ((text[len - 1] == ' ') || (text[len - 1] == '\t'))) {
-    len--;
-  }
-
-  if ((len == 0) || (len >= key_size)) {
-    return false;
-  }
-
-  memcpy(key_out, text, len);
-  key_out[len] = '\0';
-  return true;
-}
-
-static void ConsoleExecuteCommand(const char* line) {
-  if (!line || !line[0]) {
-    ConsolePrompt();
-    return;
-  }
-
-  if ((strcmp(line, "help") == 0) || (strcmp(line, "?") == 0)) {
-    ConsolePrintHelp();
-    return;
-  }
-
-  if (strcmp(line, "reboot") == 0) {
-    LogWarn("CON: soft restart requested");
-    delay(100);
-    esp_restart();
-    return;
-  }
-
-  if (strcmp(line, "log") == 0) {
-    ConsolePrintLogHistory();
-    return;
-  }
-
-  if (strcmp(line, "logclr") == 0) {
-    LogHistoryClear();
-    LogSinkWriteLineRaw("log history cleared");
-    ConsolePrompt();
-    return;
-  }
-
-  if (strcmp(line, "logstat") == 0) {
-    ConsolePrintLogStats();
-    return;
-  }
-
-  if ((strcmp(line, "listcfg") == 0) ||
-      (strcmp(line, "config") == 0) ||
-      (strcmp(line, "show config") == 0)) {
-    ConsolePrintConfigList();
-    return;
-  }
-
-  if ((strcmp(line, "savecfg") == 0) || (strcmp(line, "config save") == 0)) {
-    if (ConfigSave()) {
-      LogSinkWriteLineRaw("config saved to NVS");
-    } else {
-      LogSinkWriteLineRaw("config save failed");
-    }
-    ConsolePrompt();
-    return;
-  }
-
-  if ((strcmp(line, "loadcfg") == 0) || (strcmp(line, "config load") == 0)) {
-    if (ConfigLoad()) {
-      ConfigApply();
-      LogSinkWriteLineRaw("config loaded from NVS");
-    } else {
-      LogSinkWriteLineRaw("config load failed");
-    }
-    ConsolePrompt();
-    return;
-  }
-
-  if ((strcmp(line, "defaultcfg") == 0) || (strcmp(line, "config defaults") == 0)) {
-    ConfigResetToDefaults(&HxConfigData);
-    ConfigApply();
-    LogSinkWriteLineRaw("config reset to build defaults");
-    ConsolePrompt();
-    return;
-  }
-
-  if (strncmp(line, "readcfg ", 8) == 0) {
-    char key[64];
-    if (!ConsoleExtractSingleKey(line + 8, key, sizeof(key))) {
-      LogSinkWriteLineRaw("usage: readcfg <key>");
-      ConsolePrompt();
-      return;
-    }
-
-    ConsoleReadConfigKey(key);
-    return;
-  }
-
-  if (strncmp(line, "setcfg ", 7) == 0) {
-    char key[64];
-    const char* value = nullptr;
-    if (!ConsoleSplitKeyValue(line + 7, key, sizeof(key), &value)) {
-      LogSinkWriteLineRaw("usage: setcfg <key> <value>");
-      ConsolePrompt();
-      return;
-    }
-
-    ConsoleSetConfigKey(key, value);
-    return;
-  }
-
-  if (strcmp(line, "liststate") == 0) {
-    ConsolePrintStateList();
-    return;
-  }
-
-  if (strncmp(line, "readstate ", 10) == 0) {
-    char key[64];
-    if (!ConsoleExtractSingleKey(line + 10, key, sizeof(key))) {
-      LogSinkWriteLineRaw("usage: readstate <key>");
-      ConsolePrompt();
-      return;
-    }
-
-    ConsoleReadStateKey(key);
-    return;
-  }
-
-  LogWarn("CON: unknown command: %s", line);
-  ConsolePrompt();
-}
-
 static void ConsoleHandleLine() {
   char line[HX_CONSOLE_LINE_MAX];
   bool overflow;
@@ -537,7 +190,8 @@ static void ConsoleHandleLine() {
 
   line[end] = '\0';
   ConsoleClearLine();
-  ConsoleExecuteCommand(&line[start]);
+  CommandExecuteLine(&line[start], &g_console_cmd_output);
+  ConsolePrompt();
 }
 
 static void ConsoleReadSerial() {

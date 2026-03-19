@@ -6,10 +6,13 @@
 
   Description
   Boot sequence helpers for early system startup.
-  Provides boot banner output, reset reason decoding and other boot-time diagnostics used before the rest of the runtime is fully initialized.
+  Provides boot banner output, reset reason decoding and other boot-time
+  diagnostics used before the rest of the runtime is fully initialized.
 */
 
 #include "hexaos.h"
+#include "system/commands/command_engine.h"
+
 #include <esp_system.h>
 #include "esp_chip_info.h"
 
@@ -27,8 +30,6 @@ static const char* EspResetReasonText(uint32_t reason) {
     default:                return "UNKNOWN";
   }
 }
-
-
 
 void BootPrintBanner() {
   LogRaw("========================================");
@@ -54,7 +55,6 @@ void BootPrintChipInfo() {
 }
 
 void BootInit() {
-
   BootPrintBanner();
   BootPrintResetInfo();
   BootPrintChipInfo();
@@ -89,7 +89,10 @@ void BootInit() {
     LogWarn("FIL: mount failed");
   }
 
+  if (!CommandInit()) {
+    LogWarn("CMD: init failed");
+  }
+
   ModuleInitAll();
   ModuleStartAll();
-
 }

@@ -6,11 +6,14 @@
 
   Description
   Central logging backend for HexaOS.
-  Implements formatted log output, log level filtering, in-memory history buffering and synchronized console-safe printing so log lines do not break interactive shell input.
+  Implements formatted log output, log level filtering, in-memory history
+  buffering and synchronized console-safe printing so log lines do not break
+  interactive shell input.
 */
 
-
 #include "hexaos.h"
+#include "system/adapters/console_adapter.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -80,9 +83,11 @@ static bool LogTakeSinkLock() {
   if (!g_log_sink_mutex) {
     return true;
   }
+
   if (LogIsInIsr()) {
     return false;
   }
+
   return (xSemaphoreTake(g_log_sink_mutex, portMAX_DELAY) == pdTRUE);
 }
 
@@ -90,9 +95,11 @@ static void LogGiveSinkLock() {
   if (!g_log_sink_mutex) {
     return;
   }
+
   if (LogIsInIsr()) {
     return;
   }
+
   xSemaphoreGive(g_log_sink_mutex);
 }
 

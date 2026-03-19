@@ -1,1 +1,0 @@
-1. STATE NVS - REbuild, remove actual function, create different api controlled from user engine. Config api stays as it is.
