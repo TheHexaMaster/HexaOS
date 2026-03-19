@@ -1,3 +1,13 @@
+/*
+  HexaOS - pre_build.h
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Static pre-build definitions
+*/
+
 #pragma once
 
 // CONSOLE ADAPTERS VARIANTS

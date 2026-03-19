@@ -31,3 +31,10 @@ extern const HxModule ModuleStorage;
 extern const HxModule ModuleBerry;
 extern const HxModule ModuleWeb;
 extern const HxModule ModuleLvgl;
+
+
+void ModuleInitAll();
+void ModuleStartAll();
+void ModuleLoopAll();
+void ModuleEvery100ms();
+void ModuleEverySecond();

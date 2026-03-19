@@ -11,12 +11,6 @@
 
 #pragma once
 
-// PRE-BUILD Macros
-#include "include/pre_build.h"
-
-
-
-
 // SYSTEM BUILD DEF
 
 #define HX_SYSTEM_NAME                "HexaOS"
@@ -28,7 +22,7 @@
 // MODULES
 #define HX_ENABLE_MODULE_SYSTEM       true                                    // System module
 #define HX_ENABLE_MODULE_CONSOLE      true                                    // Console module (in actual stage of developemnt, its mandatory to stay TRUE)
-  #define HX_BUILD_CONSOLE_ADAPTER    HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC
+  #define HX_BUILD_CONSOLE_ADAPTER    HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC (IDF JTAG Shall be more stable because of Arduino CDC bug causing random crash issue - MTVAL: 0x500d2000)
 #define HX_ENABLE_MODULE_STORAGE      false
 #define HX_ENABLE_MODULE_BERRY        false
 #define HX_ENABLE_MODULE_WEB          false
@@ -48,5 +42,3 @@
 
 
 
-// POS-BUILD Macros
-#include "include/pos_build.h"

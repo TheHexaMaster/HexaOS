@@ -66,6 +66,17 @@ bool ConfigLoad();
 bool ConfigSave();
 void ConfigApply();
 
+// STATE HANDLER
+bool StateInit();
+bool StateLoad();
+bool StateSave();
+bool StateGetBool(const char* key, bool defval);
+int32_t StateGetInt(const char* key, int32_t defval);
+bool StateSetBool(const char* key, bool value);
+bool StateSetInt(const char* key, int32_t value);
+
+// FACTORY HANDLER
+bool FactoryDataInit();
 
 #define HX_CFG_KEY_DECLARE(id, key_text, type_id, field_name, storage_size, max_len_value, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
   static constexpr const char* HX_CFG_##id = key_text;
