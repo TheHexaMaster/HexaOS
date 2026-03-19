@@ -24,7 +24,7 @@ static constexpr size_t HX_COMMAND_LINE_MAX = 192;
 static const HxCmdDef* g_commands[HX_COMMAND_MAX_COUNT];
 static size_t g_command_count = 0;
 
-static const HxCmdDef* CommandFind(const char* name) {
+static const HxCmdDef* CommandFindExact(const char* name) {
   if (!name || !name[0]) {
     return nullptr;
   }
@@ -43,6 +43,51 @@ static const HxCmdDef* CommandFind(const char* name) {
   return nullptr;
 }
 
+static const HxCmdDef* CommandFindBestPrefix(const char* line, size_t* matched_len_out) {
+  if (matched_len_out) {
+    *matched_len_out = 0;
+  }
+
+  if (!line || !line[0]) {
+    return nullptr;
+  }
+
+  const HxCmdDef* best = nullptr;
+  size_t best_len = 0;
+
+  for (size_t i = 0; i < g_command_count; i++) {
+    const HxCmdDef* def = g_commands[i];
+    if (!def || !def->name || !def->name[0]) {
+      continue;
+    }
+
+    size_t name_len = strlen(def->name);
+    if (name_len == 0) {
+      continue;
+    }
+
+    if (strncmp(line, def->name, name_len) != 0) {
+      continue;
+    }
+
+    char next = line[name_len];
+    if ((next != '\0') && (next != ' ') && (next != '\t')) {
+      continue;
+    }
+
+    if (name_len > best_len) {
+      best = def;
+      best_len = name_len;
+    }
+  }
+
+  if (matched_len_out) {
+    *matched_len_out = best_len;
+  }
+
+  return best;
+}
+
 bool CommandInit() {
   memset(g_commands, 0, sizeof(g_commands));
   g_command_count = 0;
@@ -58,7 +103,7 @@ bool CommandRegister(const HxCmdDef* def) {
     return false;
   }
 
-  if (CommandFind(def->name)) {
+  if (CommandFindExact(def->name)) {
     return false;
   }
 
@@ -148,27 +193,25 @@ HxCmdStatus CommandExecuteLine(const char* line, HxCmdOutput* out) {
   }
   *end = '\0';
 
-  const HxCmdDef* full_def = CommandFind(start);
-  if (full_def) {
-    return full_def->handler("", out);
-  }
-
-  char* args = start;
-  while (*args && (*args != ' ') && (*args != '\t')) {
-    args++;
-  }
-
-  if (*args) {
-    *args++ = '\0';
-    while ((*args == ' ') || (*args == '\t')) {
-      args++;
-    }
-  }
-
-  const HxCmdDef* def = CommandFind(start);
+  size_t matched_len = 0;
+  const HxCmdDef* def = CommandFindBestPrefix(start, &matched_len);
   if (!def) {
-    CmdOutPrintfLine(out, "unknown command: %s", start);
+    char unknown[64];
+    size_t i = 0;
+
+    while (start[i] && (start[i] != ' ') && (start[i] != '\t') && (i < (sizeof(unknown) - 1))) {
+      unknown[i] = start[i];
+      i++;
+    }
+    unknown[i] = '\0';
+
+    CmdOutPrintfLine(out, "unknown command: %s", unknown[0] ? unknown : start);
     return HX_CMD_UNKNOWN;
+  }
+
+  char* args = start + matched_len;
+  while ((*args == ' ') || (*args == '\t')) {
+    args++;
   }
 
   return def->handler(args, out);

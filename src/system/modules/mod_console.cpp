@@ -249,8 +249,7 @@ static bool ConsoleInit() {
 }
 
 static void ConsoleStart() {
-  LogInfo("CON: start");
-  LogInfo("CON: commands available: help, reboot, log, logclr, logstat, listcfg, readcfg, setcfg, savecfg, loadcfg, defaultcfg, liststate, readstate");
+  LogInfo("CON: start. Use help command to list avaliable commands.");
   ConsolePrompt();
 }
 

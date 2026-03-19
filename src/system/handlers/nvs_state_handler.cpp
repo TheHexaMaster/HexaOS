@@ -459,6 +459,73 @@ bool StateUnregister(const char* key) {
   return removed;
 }
 
+bool StateCreate(const char* key,
+                 HxSchemaValueType type,
+                 int32_t min_i32,
+                 int32_t max_i32,
+                 size_t max_len,
+                 uint16_t flags,
+                 bool console_visible,
+                 const char* owner) {
+  if (StateExists(key)) {
+    return false;
+  }
+
+  HxStateKeyDef def = {
+    .key = key,
+    .type = type,
+    .min_i32 = min_i32,
+    .max_i32 = max_i32,
+    .max_len = max_len,
+    .flags = flags,
+    .console_visible = console_visible,
+    .owner = owner
+  };
+
+  if (!StateRegister(&def)) {
+    return false;
+  }
+
+  switch (type) {
+    case HX_SCHEMA_VALUE_BOOL: {
+      bool current = false;
+      if (!StateReadBool(key, &current)) {
+        if (!StateSetBool(key, false)) {
+          StateUnregister(key);
+          return false;
+        }
+      }
+      return true;
+    }
+
+    case HX_SCHEMA_VALUE_INT32: {
+      int32_t current = 0;
+      if (!StateReadInt(key, &current)) {
+        if (!StateSetInt(key, 0)) {
+          StateUnregister(key);
+          return false;
+        }
+      }
+      return true;
+    }
+
+    case HX_SCHEMA_VALUE_STRING: {
+      char current[2];
+      if (!StateReadString(key, current, sizeof(current))) {
+        if (!StateSetString(key, "")) {
+          StateUnregister(key);
+          return false;
+        }
+      }
+      return true;
+    }
+
+    default:
+      StateUnregister(key);
+      return false;
+  }
+}
+
 bool StateExists(const char* key) {
   return StateFindKey(key) != nullptr;
 }
@@ -552,6 +619,15 @@ bool StateSetValueFromString(const HxStateKeyDef* item, const char* value) {
     default:
       return false;
   }
+}
+
+bool StateWriteFromString(const char* key, const char* value) {
+  const HxStateKeyDef* item = StateFindKey(key);
+  if (!item) {
+    return false;
+  }
+
+  return StateSetValueFromString(item, value);
 }
 
 bool StateInit() {
@@ -800,4 +876,81 @@ bool StateSetString(const char* key, const char* value) {
   }
 
   return HxNvsCommit(HX_NVS_STORE_STATE);
+}
+
+bool StateIncrementInt(const char* key, int32_t* new_value_out) {
+  const HxStateKeyDef* def = StateFindKey(key);
+  if (!def || (def->type != HX_SCHEMA_VALUE_INT32)) {
+    return false;
+  }
+
+  int32_t current = 0;
+  if (!StateReadInt(key, &current)) {
+    current = 0;
+  }
+
+  if (current >= def->max_i32) {
+    return false;
+  }
+
+  int32_t next = current + 1;
+  if (!StateSetInt(key, next)) {
+    return false;
+  }
+
+  if (new_value_out) {
+    *new_value_out = next;
+  }
+
+  return true;
+}
+
+bool StateDecrementInt(const char* key, int32_t* new_value_out) {
+  const HxStateKeyDef* def = StateFindKey(key);
+  if (!def || (def->type != HX_SCHEMA_VALUE_INT32)) {
+    return false;
+  }
+
+  int32_t current = 0;
+  if (!StateReadInt(key, &current)) {
+    current = 0;
+  }
+
+  if (current <= def->min_i32) {
+    return false;
+  }
+
+  int32_t next = current - 1;
+  if (!StateSetInt(key, next)) {
+    return false;
+  }
+
+  if (new_value_out) {
+    *new_value_out = next;
+  }
+
+  return true;
+}
+
+bool StateToggleBool(const char* key, bool* new_value_out) {
+  const HxStateKeyDef* def = StateFindKey(key);
+  if (!def || (def->type != HX_SCHEMA_VALUE_BOOL)) {
+    return false;
+  }
+
+  bool current = false;
+  if (!StateReadBool(key, &current)) {
+    current = false;
+  }
+
+  bool next = !current;
+  if (!StateSetBool(key, next)) {
+    return false;
+  }
+
+  if (new_value_out) {
+    *new_value_out = next;
+  }
+
+  return true;
 }

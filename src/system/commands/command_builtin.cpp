@@ -19,6 +19,91 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const char* CmdStateTypeText(HxSchemaValueType type) {
+  switch (type) {
+    case HX_SCHEMA_VALUE_BOOL:   return "bool";
+    case HX_SCHEMA_VALUE_INT32:  return "int";
+    case HX_SCHEMA_VALUE_STRING: return "string";
+    default:                     return "unknown";
+  }
+}
+
+static const char* CmdStateScopeText(const HxStateKeyDef* item) {
+  if (!item) {
+    return "unknown";
+  }
+
+  return (item->flags & HX_STATE_FLAG_RUNTIME) ? "runtime" : "static";
+}
+
+static const char* CmdStateOwnerText(const HxStateKeyDef* item) {
+  if (!item || !item->owner || !item->owner[0]) {
+    return "-";
+  }
+
+  return item->owner;
+}
+
+static const char* CmdSkipWs(const char* text) {
+  if (!text) {
+    return "";
+  }
+
+  while ((*text == ' ') || (*text == '\t')) {
+    text++;
+  }
+
+  return text;
+}
+
+static bool CmdExtractToken(const char** text_io, char* out, size_t out_size) {
+  if (!text_io || !out || (out_size == 0)) {
+    return false;
+  }
+
+  const char* text = CmdSkipWs(*text_io);
+  if (!text[0]) {
+    return false;
+  }
+
+  const char* end = text;
+  while (*end && (*end != ' ') && (*end != '\t')) {
+    end++;
+  }
+
+  size_t len = (size_t)(end - text);
+  if ((len == 0) || (len >= out_size)) {
+    return false;
+  }
+
+  memcpy(out, text, len);
+  out[len] = '\0';
+
+  *text_io = CmdSkipWs(end);
+  return true;
+}
+
+static bool CmdParseInt32Token(const char** text_io, int32_t* value_out) {
+  char token[32];
+
+  if (!CmdExtractToken(text_io, token, sizeof(token))) {
+    return false;
+  }
+
+  char* endptr = nullptr;
+  long value = strtol(token, &endptr, 10);
+  if ((endptr == token) || (*endptr != '\0')) {
+    return false;
+  }
+
+  if ((value < INT32_MIN) || (value > INT32_MAX)) {
+    return false;
+  }
+
+  *value_out = (int32_t)value;
+  return true;
+}
+
 static void CmdWriteConfigItemLine(const HxConfigKeyDef* item, HxCmdOutput* out) {
   if (!item) {
     return;
@@ -43,13 +128,19 @@ static void CmdWriteStateItemLine(const HxStateKeyDef* item, HxCmdOutput* out) {
     return;
   }
 
-  char value[96];
+  char value[160];
 
-  if (StateValueToString(item, value, sizeof(value))) {
-    CmdOutPrintfLine(out, "%s = %s", item->key, value);
-  } else {
-    CmdOutPrintfLine(out, "%s = <unset>", item->key);
+  if (!StateValueToString(item, value, sizeof(value))) {
+    snprintf(value, sizeof(value), "<unset>");
   }
+
+  CmdOutPrintfLine(out,
+                   "%s [%s,%s,owner=%s] = %s",
+                   item->key,
+                   CmdStateTypeText(item->type),
+                   CmdStateScopeText(item),
+                   CmdStateOwnerText(item),
+                   value);
 }
 
 static bool CmdSplitKeyValue(const char* text, char* key_out, size_t key_size, const char** value_out) {
@@ -295,26 +386,58 @@ static HxCmdStatus CmdDefaultConfig(const char* args, HxCmdOutput* out) {
   return HX_CMD_OK;
 }
 
-static HxCmdStatus CmdListState(const char* args, HxCmdOutput* out) {
-  (void)args;
+static HxCmdStatus CmdStateList(const char* args, HxCmdOutput* out) {
+  const char* prefix = CmdSkipWs(args);
+  size_t prefix_len = 0;
+
+  if (prefix[0]) {
+    const char* end = prefix;
+    while (*end && (*end != ' ') && (*end != '\t')) {
+      end++;
+    }
+
+    if (*end != '\0') {
+      CmdOutWriteLine(out, "usage: state list [prefix]");
+      return HX_CMD_USAGE;
+    }
+
+    prefix_len = strlen(prefix);
+  }
+
+  size_t shown = 0;
 
   for (size_t i = 0; i < StateKeyCount(); i++) {
     const HxStateKeyDef* item = StateKeyAt(i);
-    if (!item || !item->console_visible) {
+    if (!item) {
       continue;
     }
 
+    if (!item->console_visible) {
+      continue;
+    }
+
+    if (prefix_len > 0) {
+      if (strncmp(item->key, prefix, prefix_len) != 0) {
+        continue;
+      }
+    }
+
     CmdWriteStateItemLine(item, out);
+    shown++;
+  }
+
+  if (shown == 0) {
+    CmdOutWriteLine(out, "no matching states");
   }
 
   return HX_CMD_OK;
 }
 
-static HxCmdStatus CmdReadState(const char* args, HxCmdOutput* out) {
-  char key[64];
+static HxCmdStatus CmdStateRead(const char* args, HxCmdOutput* out) {
+  char key[96];
 
   if (!CmdExtractSingleKey(args, key, sizeof(key))) {
-    CmdOutWriteLine(out, "usage: readstate <key>");
+    CmdOutWriteLine(out, "usage: state read <key>");
     return HX_CMD_USAGE;
   }
 
@@ -328,26 +451,311 @@ static HxCmdStatus CmdReadState(const char* args, HxCmdOutput* out) {
   return HX_CMD_OK;
 }
 
+static HxCmdStatus CmdStateExist(const char* args, HxCmdOutput* out) {
+  char key[96];
+
+  if (!CmdExtractSingleKey(args, key, sizeof(key))) {
+    CmdOutWriteLine(out, "usage: state exist <key>");
+    return HX_CMD_USAGE;
+  }
+
+  CmdOutWriteLine(out, StateExists(key) ? "true" : "false");
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
+  const char* text = args;
+  char key[96];
+  char type[16];
+
+  if (!CmdExtractToken(&text, key, sizeof(key)) || !CmdExtractToken(&text, type, sizeof(type))) {
+    CmdOutWriteLine(out, "usage:");
+    CmdOutWriteLine(out, "  state create <key> bool");
+    CmdOutWriteLine(out, "  state create <key> int <min> <max>");
+    CmdOutWriteLine(out, "  state create <key> string <max_len>");
+    return HX_CMD_USAGE;
+  }
+
+  if (StateExists(key)) {
+    CmdOutWriteLine(out, "state already exists");
+    return HX_CMD_ERROR;
+  }
+
+  if (strcmp(type, "bool") == 0) {
+    if (CmdSkipWs(text)[0] != '\0') {
+      CmdOutWriteLine(out, "usage: state create <key> bool");
+      return HX_CMD_USAGE;
+    }
+
+    if (!StateCreate(key,
+                     HX_SCHEMA_VALUE_BOOL,
+                     0,
+                     1,
+                     0,
+                     HX_STATE_FLAG_CONSOLE_VISIBLE,
+                     true,
+                     "console")) {
+      CmdOutWriteLine(out, "state create failed");
+      return HX_CMD_ERROR;
+    }
+
+    CmdOutPrintfLine(out, "created bool state: %s", key);
+    return HX_CMD_OK;
+  }
+
+  if ((strcmp(type, "int") == 0) || (strcmp(type, "int32") == 0)) {
+    int32_t min_i32 = 0;
+    int32_t max_i32 = 0;
+
+    if (!CmdParseInt32Token(&text, &min_i32) || !CmdParseInt32Token(&text, &max_i32) || (CmdSkipWs(text)[0] != '\0')) {
+      CmdOutWriteLine(out, "usage: state create <key> int <min> <max>");
+      return HX_CMD_USAGE;
+    }
+
+    if (min_i32 > max_i32) {
+      CmdOutWriteLine(out, "invalid integer range");
+      return HX_CMD_ERROR;
+    }
+
+    if (!StateCreate(key,
+                     HX_SCHEMA_VALUE_INT32,
+                     min_i32,
+                     max_i32,
+                     0,
+                     HX_STATE_FLAG_CONSOLE_VISIBLE,
+                     true,
+                     "console")) {
+      CmdOutWriteLine(out, "state create failed");
+      return HX_CMD_ERROR;
+    }
+
+    CmdOutPrintfLine(out, "created int state: %s [%ld..%ld]", key, (long)min_i32, (long)max_i32);
+    return HX_CMD_OK;
+  }
+
+  if (strcmp(type, "string") == 0) {
+    int32_t max_len = 0;
+
+    if (!CmdParseInt32Token(&text, &max_len) || (CmdSkipWs(text)[0] != '\0')) {
+      CmdOutWriteLine(out, "usage: state create <key> string <max_len>");
+      return HX_CMD_USAGE;
+    }
+
+    if (max_len <= 0) {
+      CmdOutWriteLine(out, "invalid string max_len");
+      return HX_CMD_ERROR;
+    }
+
+    if (!StateCreate(key,
+                     HX_SCHEMA_VALUE_STRING,
+                     0,
+                     0,
+                     (size_t)max_len,
+                     HX_STATE_FLAG_CONSOLE_VISIBLE,
+                     true,
+                     "console")) {
+      CmdOutWriteLine(out, "state create failed");
+      return HX_CMD_ERROR;
+    }
+
+    CmdOutPrintfLine(out, "created string state: %s [max_len=%ld]", key, (long)max_len);
+    return HX_CMD_OK;
+  }
+
+  CmdOutWriteLine(out, "unsupported state type");
+  return HX_CMD_ERROR;
+}
+
+static HxCmdStatus CmdStateWrite(const char* args, HxCmdOutput* out) {
+  char key[96];
+  const char* value = nullptr;
+
+  if (!CmdSplitKeyValue(args, key, sizeof(key), &value)) {
+    CmdOutWriteLine(out, "usage: state write <key> <value>");
+    return HX_CMD_USAGE;
+  }
+
+  const HxStateKeyDef* item = StateFindKey(key);
+  if (!item) {
+    CmdOutWriteLine(out, "state key not found");
+    return HX_CMD_ERROR;
+  }
+
+  if (!StateWriteFromString(key, value)) {
+    CmdOutWriteLine(out, "state write failed");
+    return HX_CMD_ERROR;
+  }
+
+  CmdWriteStateItemLine(item, out);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdStateErase(const char* args, HxCmdOutput* out) {
+  char key[96];
+
+  if (!CmdExtractSingleKey(args, key, sizeof(key))) {
+    CmdOutWriteLine(out, "usage: state erase <key>");
+    return HX_CMD_USAGE;
+  }
+
+  const HxStateKeyDef* item = StateFindKey(key);
+  if (!item) {
+    CmdOutWriteLine(out, "state key not found");
+    return HX_CMD_ERROR;
+  }
+
+  if (!StateErase(key)) {
+    CmdOutWriteLine(out, "state erase failed");
+    return HX_CMD_ERROR;
+  }
+
+  CmdOutPrintfLine(out, "%s erased", key);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdStateUnregister(const char* args, HxCmdOutput* out) {
+  char key[96];
+
+  if (!CmdExtractSingleKey(args, key, sizeof(key))) {
+    CmdOutWriteLine(out, "usage: state unreg <key>");
+    return HX_CMD_USAGE;
+  }
+
+  const HxStateKeyDef* item = StateFindKey(key);
+  if (!item) {
+    CmdOutWriteLine(out, "state key not found");
+    return HX_CMD_ERROR;
+  }
+
+  if ((item->flags & HX_STATE_FLAG_RUNTIME) == 0) {
+    CmdOutWriteLine(out, "state is not runtime");
+    return HX_CMD_ERROR;
+  }
+
+  if (!StateUnregister(key)) {
+    CmdOutWriteLine(out, "state unregister failed");
+    return HX_CMD_ERROR;
+  }
+
+  CmdOutPrintfLine(out, "%s unregistered", key);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdStateIncrement(const char* args, HxCmdOutput* out) {
+  char key[96];
+
+  if (!CmdExtractSingleKey(args, key, sizeof(key))) {
+    CmdOutWriteLine(out, "usage: state increment <key>");
+    return HX_CMD_USAGE;
+  }
+
+  const HxStateKeyDef* item = StateFindKey(key);
+  if (!item) {
+    CmdOutWriteLine(out, "state key not found");
+    return HX_CMD_ERROR;
+  }
+
+  if (item->type != HX_SCHEMA_VALUE_INT32) {
+    CmdOutWriteLine(out, "state is not integer");
+    return HX_CMD_ERROR;
+  }
+
+  int32_t next = 0;
+  if (!StateIncrementInt(key, &next)) {
+    CmdOutWriteLine(out, "state increment failed");
+    return HX_CMD_ERROR;
+  }
+
+  CmdOutPrintfLine(out, "%s = %ld", key, (long)next);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdStateDecrement(const char* args, HxCmdOutput* out) {
+  char key[96];
+
+  if (!CmdExtractSingleKey(args, key, sizeof(key))) {
+    CmdOutWriteLine(out, "usage: state decrement <key>");
+    return HX_CMD_USAGE;
+  }
+
+  const HxStateKeyDef* item = StateFindKey(key);
+  if (!item) {
+    CmdOutWriteLine(out, "state key not found");
+    return HX_CMD_ERROR;
+  }
+
+  if (item->type != HX_SCHEMA_VALUE_INT32) {
+    CmdOutWriteLine(out, "state is not integer");
+    return HX_CMD_ERROR;
+  }
+
+  int32_t next = 0;
+  if (!StateDecrementInt(key, &next)) {
+    CmdOutWriteLine(out, "state decrement failed");
+    return HX_CMD_ERROR;
+  }
+
+  CmdOutPrintfLine(out, "%s = %ld", key, (long)next);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdStateToggle(const char* args, HxCmdOutput* out) {
+  char key[96];
+
+  if (!CmdExtractSingleKey(args, key, sizeof(key))) {
+    CmdOutWriteLine(out, "usage: state toggle <key>");
+    return HX_CMD_USAGE;
+  }
+
+  const HxStateKeyDef* item = StateFindKey(key);
+  if (!item) {
+    CmdOutWriteLine(out, "state key not found");
+    return HX_CMD_ERROR;
+  }
+
+  if (item->type != HX_SCHEMA_VALUE_BOOL) {
+    CmdOutWriteLine(out, "state is not boolean");
+    return HX_CMD_ERROR;
+  }
+
+  bool next = false;
+  if (!StateToggleBool(key, &next)) {
+    CmdOutWriteLine(out, "state toggle failed");
+    return HX_CMD_ERROR;
+  }
+
+  CmdOutPrintfLine(out, "%s = %s", key, next ? "true" : "false");
+  return HX_CMD_OK;
+}
+
 static const HxCmdDef kBuiltinCommands[] = {
-  { "help",            CmdHelp,          "Show command list" },
-  { "?",               CmdHelp,          nullptr },
-  { "reboot",          CmdReboot,        "Restart device" },
-  { "log",             CmdLogHistory,    "Show log history" },
-  { "logclr",          CmdLogClear,      "Clear log history" },
-  { "logstat",         CmdLogStats,      "Show log statistics" },
-  { "listcfg",         CmdListConfig,    "List visible config keys" },
-  { "config",          CmdListConfig,    nullptr },
-  { "show config",     CmdListConfig,    nullptr },
-  { "readcfg",         CmdReadConfig,    "Read config key" },
-  { "setcfg",          CmdSetConfig,     "Set config key" },
-  { "savecfg",         CmdSaveConfig,    "Save config to NVS" },
-  { "config save",     CmdSaveConfig,    nullptr },
-  { "loadcfg",         CmdLoadConfig,    "Load config from NVS" },
-  { "config load",     CmdLoadConfig,    nullptr },
-  { "defaultcfg",      CmdDefaultConfig, "Reset config to defaults" },
-  { "config defaults", CmdDefaultConfig, nullptr },
-  { "liststate",       CmdListState,     "List visible state keys" },
-  { "readstate",       CmdReadState,     "Read state key" }
+  { "help",            CmdHelp,           "Show command list" },
+  { "?",               CmdHelp,           nullptr },
+  { "reboot",          CmdReboot,         "Restart device" },
+  { "log",             CmdLogHistory,     "Show log history" },
+  { "logclr",          CmdLogClear,       "Clear log history" },
+  { "logstat",         CmdLogStats,       "Show log statistics" },
+  { "listcfg",         CmdListConfig,     "List visible config keys" },
+  { "config",          CmdListConfig,     nullptr },
+  { "show config",     CmdListConfig,     nullptr },
+  { "readcfg",         CmdReadConfig,     "Read config key" },
+  { "setcfg",          CmdSetConfig,      "Set config key" },
+  { "savecfg",         CmdSaveConfig,     "Save config to NVS" },
+  { "config save",     CmdSaveConfig,     nullptr },
+  { "loadcfg",         CmdLoadConfig,     "Load config from NVS" },
+  { "config load",     CmdLoadConfig,     nullptr },
+  { "defaultcfg",      CmdDefaultConfig,  "Reset config to defaults" },
+  { "config defaults", CmdDefaultConfig,  nullptr },
+  { "state list",      CmdStateList,      "List visible states" },
+  { "state read",      CmdStateRead,      "Read state key" },
+  { "state exist",     CmdStateExist,     "Check whether state exists" },
+  { "state create",    CmdStateCreate,    "Create runtime state" },
+  { "state write",     CmdStateWrite,     "Write value to state" },
+  { "state erase",     CmdStateErase,     "Erase persisted state value" },
+  { "state unreg",     CmdStateUnregister,  "Unregister runtime state" },
+  { "state increment", CmdStateIncrement, "Increment integer state" },
+  { "state decrement", CmdStateDecrement, "Decrement integer state" },
+  { "state toggle",    CmdStateToggle,    "Toggle boolean state" }
 };
 
 bool CommandRegisterBuiltins() {

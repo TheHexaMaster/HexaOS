@@ -69,11 +69,21 @@ const HxStateKeyDef* StateFindKey(const char* key);
 bool StateRegister(const HxStateKeyDef* def);
 bool StateUnregister(const char* key);
 
+bool StateCreate(const char* key,
+                 HxSchemaValueType type,
+                 int32_t min_i32,
+                 int32_t max_i32,
+                 size_t max_len,
+                 uint16_t flags,
+                 bool console_visible,
+                 const char* owner);
+
 bool StateExists(const char* key);
 bool StateErase(const char* key);
 
 bool StateValueToString(const HxStateKeyDef* item, char* out, size_t out_size);
 bool StateSetValueFromString(const HxStateKeyDef* item, const char* value);
+bool StateWriteFromString(const char* key, const char* value);
 
 bool StateReadBool(const char* key, bool* value);
 bool StateReadInt(const char* key, int32_t* value);
@@ -86,6 +96,10 @@ bool StateGetStringOr(const char* key, char* out, size_t out_size, const char* d
 bool StateSetBool(const char* key, bool value);
 bool StateSetInt(const char* key, int32_t value);
 bool StateSetString(const char* key, const char* value);
+
+bool StateIncrementInt(const char* key, int32_t* new_value_out);
+bool StateDecrementInt(const char* key, int32_t* new_value_out);
+bool StateToggleBool(const char* key, bool* new_value_out);
 
 extern HxConfig HxConfigData;
 extern const HxConfig HxConfigDefaults;
