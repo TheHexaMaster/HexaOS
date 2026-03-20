@@ -22,7 +22,7 @@
 - [x] RTOS - Integration PART 1 - update to existing modules using RTOS external unmanaged calls - log an console
 - [x] RTOS - REfactor - move from handler to core without using build selector - native RTOS core implementation. This way core RTOS can manage different RTOS adapters in future. 
 - [x] RTOS - Integration PART 2 - update to existing modules using RTOS external unmanaged calls - NVS config and STATE. 
-- [ ] RTOS - Integration PART 3 - littlefs_handler 
+- [x] RTOS - Integration PART 3 - littlefs_handler 
 - [ ] TIME - We need to create central time engine / interface prepared to operate from RTC and timming for events, synchronysing from internal RTC modules (i2c driver) and NTP sync (prepare, web interface later)
 - [ ] LOG - Add 5th log level - "LLD", displayng Low Level Debug Messages
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling

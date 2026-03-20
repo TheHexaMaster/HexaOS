@@ -18,9 +18,6 @@
 #include <FS.h>
 #include <LittleFS.h>
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-
 #include <stdio.h>
 #include <string.h>
 
@@ -29,38 +26,29 @@ static constexpr const char* HX_FILES_PARTITION_LABEL = "littlefs";
 static constexpr size_t HX_FILES_PATH_MAX = 255;
 
 static bool g_files_ready = false;
-static portMUX_TYPE g_files_state_mux = portMUX_INITIALIZER_UNLOCKED;
-static StaticSemaphore_t g_files_mutex_buf;
-static SemaphoreHandle_t g_files_mutex = nullptr;
+static HxRtosCritical g_files_state_lock = HX_RTOS_CRITICAL_INIT;
+static HxRtosMutex g_files_mutex = HX_RTOS_MUTEX_INIT;
 
 static void FilesSetMounted(bool mounted) {
-  taskENTER_CRITICAL(&g_files_state_mux);
+  RtosCriticalEnter(&g_files_state_lock);
   Hx.littlefs_mounted = mounted;
-  taskEXIT_CRITICAL(&g_files_state_mux);
+  RtosCriticalExit(&g_files_state_lock);
 }
 
 static bool FilesMounted() {
   bool mounted = false;
-  taskENTER_CRITICAL(&g_files_state_mux);
+  RtosCriticalEnter(&g_files_state_lock);
   mounted = Hx.littlefs_mounted;
-  taskEXIT_CRITICAL(&g_files_state_mux);
+  RtosCriticalExit(&g_files_state_lock);
   return mounted;
 }
 
 static bool FilesTakeLock() {
-  if (!g_files_mutex) {
-    return false;
-  }
-
-  return (xSemaphoreTake(g_files_mutex, portMAX_DELAY) == pdTRUE);
+  return RtosMutexLock(&g_files_mutex, HX_RTOS_WAIT_FOREVER);
 }
 
 static void FilesGiveLock() {
-  if (!g_files_mutex) {
-    return;
-  }
-
-  xSemaphoreGive(g_files_mutex);
+  RtosMutexUnlock(&g_files_mutex);
 }
 
 static bool FilesPathIsValid(const char* path) {
@@ -187,9 +175,14 @@ bool FilesInit() {
     return true;
   }
 
-  g_files_mutex = xSemaphoreCreateMutexStatic(&g_files_mutex_buf);
-  if (!g_files_mutex) {
+  if (!RtosCriticalInit(&g_files_state_lock)) {
+    HX_LOGE(HX_FILES_TAG, "init failed state lock");
+    return false;
+  }
+
+  if (!RtosMutexInit(&g_files_mutex)) {
     HX_LOGE(HX_FILES_TAG, "init failed mutex");
+    RtosCriticalDestroy(&g_files_state_lock);
     return false;
   }
 
