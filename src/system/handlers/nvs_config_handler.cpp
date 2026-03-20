@@ -297,12 +297,12 @@ static bool ConfigStoreItemOverride(const HxConfigKeyDef* item) {
   }
 }
 
-size_t ConfigConfigKeyCount() {
+size_t ConfigKeyCount() {
   return sizeof(kHxConfigKeys) / sizeof(kHxConfigKeys[0]);
 }
 
-const HxConfigKeyDef* ConfigConfigKeyAt(size_t index) {
-  if (index >= ConfigConfigKeyCount()) {
+const HxConfigKeyDef* ConfigKeyAt(size_t index) {
+  if (index >= ConfigKeyCount()) {
     return nullptr;
   }
 
@@ -314,7 +314,7 @@ const HxConfigKeyDef* ConfigFindConfigKey(const char* key) {
     return nullptr;
   }
 
-  for (size_t i = 0; i < ConfigConfigKeyCount(); i++) {
+  for (size_t i = 0; i < ConfigKeyCount(); i++) {
     if (strcmp(kHxConfigKeys[i].key, key) == 0) {
       return &kHxConfigKeys[i];
     }
@@ -331,7 +331,7 @@ void ConfigResetToDefaults(HxConfig* config) {
   *config = HxConfigDefaults;
 }
 
-bool ConfigConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size) {
+bool ConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size) {
   if (!item || !out || (out_size == 0)) {
     return false;
   }
@@ -361,7 +361,7 @@ bool ConfigConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out
   }
 }
 
-bool ConfigConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_size) {
+bool ConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_size) {
   if (!item || !out || (out_size == 0)) {
     return false;
   }
@@ -391,7 +391,7 @@ bool ConfigConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t o
   }
 }
 
-bool ConfigConfigSetValueFromString(const HxConfigKeyDef* item, const char* value) {
+bool ConfigSetValueFromString(const HxConfigKeyDef* item, const char* value) {
   if (!item || !value || !item->console_writable) {
     return false;
   }
@@ -399,7 +399,7 @@ bool ConfigConfigSetValueFromString(const HxConfigKeyDef* item, const char* valu
   return ConfigAssignValueFromString(&HxConfigData, item, value);
 }
 
-bool ConfigConfigResetValue(const HxConfigKeyDef* item) {
+bool ConfigResetValue(const HxConfigKeyDef* item) {
   if (!item) {
     return false;
   }
@@ -412,24 +412,6 @@ bool ConfigConfigResetValue(const HxConfigKeyDef* item) {
 
   memcpy(current_ptr, default_ptr, item->value_size);
   return true;
-}
-
-bool ConfigSetLogLevel(HxLogLevel value) {
-  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_LOG_LEVEL);
-  if (!item) {
-    return false;
-  }
-
-  return ConfigAssignInt32Field(&HxConfigData, item, (int32_t)value);
-}
-
-bool ConfigSetSafebootEnable(bool value) {
-  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_SAFEBOOT_ENABLE);
-  if (!item) {
-    return false;
-  }
-
-  return ConfigAssignBoolField(&HxConfigData, item, value);
 }
 
 bool ConfigInit() {
@@ -446,7 +428,7 @@ bool ConfigLoad() {
     return false;
   }
 
-  for (size_t i = 0; i < ConfigConfigKeyCount(); i++) {
+  for (size_t i = 0; i < ConfigKeyCount(); i++) {
     if (!ConfigReadItemFromNvs(&kHxConfigKeys[i])) {
       Hx.config_loaded = false;
       return false;
@@ -462,7 +444,7 @@ bool ConfigSave() {
     return false;
   }
 
-  for (size_t i = 0; i < ConfigConfigKeyCount(); i++) {
+  for (size_t i = 0; i < ConfigKeyCount(); i++) {
     if (!ConfigStoreItemOverride(&kHxConfigKeys[i])) {
       return false;
     }

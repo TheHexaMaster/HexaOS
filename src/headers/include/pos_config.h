@@ -86,13 +86,13 @@ struct HxStateKeyDef {
   HxStateOwnerClass owner_class;
 };
 
-size_t ConfigConfigKeyCount();
-const HxConfigKeyDef* ConfigConfigKeyAt(size_t index);
+size_t ConfigKeyCount();
+const HxConfigKeyDef* ConfigKeyAt(size_t index);
 const HxConfigKeyDef* ConfigFindConfigKey(const char* key);
-bool ConfigConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size);
-bool ConfigConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_size);
-bool ConfigConfigSetValueFromString(const HxConfigKeyDef* item, const char* value);
-bool ConfigConfigResetValue(const HxConfigKeyDef* item);
+bool ConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size);
+bool ConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_size);
+bool ConfigSetValueFromString(const HxConfigKeyDef* item, const char* value);
+bool ConfigResetValue(const HxConfigKeyDef* item);
 
 size_t StateKeyCount();
 const HxStateKeyDef* StateKeyAt(size_t index);
@@ -157,7 +157,6 @@ void ConfigApply();
 // STATE HANDLER
 bool StateInit();
 bool StateLoad();
-bool StateSave();
 bool StateCommit();
 bool StateFormat();
 bool StateGetStorageInfo(HxStateStorageInfo* out_info);

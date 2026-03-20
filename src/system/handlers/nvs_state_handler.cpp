@@ -1681,10 +1681,6 @@ void StateLoop() {
   }
 }
 
-bool StateSave() {
-  return StateCommit();
-}
-
 bool StateFormat() {
   if (!g_state_ready) {
     return false;

@@ -119,11 +119,11 @@ static void CmdWriteConfigItemLine(const HxConfigKeyDef* item, HxCmdOutput* out)
   char current[96];
   char defaults[96];
 
-  if (!ConfigConfigValueToString(item, current, sizeof(current))) {
+  if (!ConfigValueToString(item, current, sizeof(current))) {
     snprintf(current, sizeof(current), "<error>");
   }
 
-  if (!ConfigConfigDefaultToString(item, defaults, sizeof(defaults))) {
+  if (!ConfigDefaultToString(item, defaults, sizeof(defaults))) {
     snprintf(defaults, sizeof(defaults), "<error>");
   }
 
@@ -298,8 +298,8 @@ static HxCmdStatus CmdLogStats(const char* args, HxCmdOutput* out) {
 static HxCmdStatus CmdListConfig(const char* args, HxCmdOutput* out) {
   (void)args;
 
-  for (size_t i = 0; i < ConfigConfigKeyCount(); i++) {
-    const HxConfigKeyDef* item = ConfigConfigKeyAt(i);
+  for (size_t i = 0; i < ConfigKeyCount(); i++) {
+    const HxConfigKeyDef* item = ConfigKeyAt(i);
     if (!item || !item->console_visible) {
       continue;
     }
@@ -349,7 +349,7 @@ static HxCmdStatus CmdSetConfig(const char* args, HxCmdOutput* out) {
     return HX_CMD_ERROR;
   }
 
-  if (!ConfigConfigSetValueFromString(item, value)) {
+  if (!ConfigSetValueFromString(item, value)) {
     CmdOutWriteLine(out, "invalid config value");
     return HX_CMD_ERROR;
   }
