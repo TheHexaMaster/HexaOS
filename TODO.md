@@ -13,9 +13,9 @@
 - [x] STATES - Refactor ownership system - no strings, only enums and different logic.
 - [x] STATES - Bugfix - delay shall apply only on value writes, not on creation / deletion / format / another commands. 
 - [x] STATES - Bugfix - catalog data inconsistency 
+- [x] FACTORY NVS - Because of lack of use, this NVS will be deleted and not supported in later models. 
 - [ ] STATES - Stable and tested release.
-- [ ] CONFIG - Rebuild only AS system (at build) hosted mechanism for configs AND some necessary system counters (reboot counter, last reboot etc). Configs cannot be created / deleted by runtime - only changed by specific rules.
-- [ ] FACTORY NVS - Because of lack of use, this NVS will be deleted and not supported in later models. 
+- [ ] CONFIG - Refactor to final logic and test.
 - [ ] CONSOLE - Now we have defined only SERIAL console trought HWCDC / JTAG build selector. Need to add typical SERIAL UART as a build selector option (possible serial fallback as optional setting from config with default false.)
 - [ ] LOG - Add 5th log level - "LLD", displayng Low Level Debug Messages
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling
