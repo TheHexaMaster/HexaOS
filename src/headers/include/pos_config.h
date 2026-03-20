@@ -82,7 +82,6 @@ struct HxStateKeyDef {
   int32_t max_i32;
   size_t max_len;
   uint16_t flags;
-  bool console_visible;
   HxStateOwnerClass owner_class;
 };
 
@@ -107,7 +106,6 @@ bool StateCreate(const char* key,
                  int32_t max_i32,
                  size_t max_len,
                  uint16_t flags,
-                 bool console_visible,
                  HxStateOwnerClass owner_class);
 
 bool StateEnsure(const char* key,
@@ -116,7 +114,6 @@ bool StateEnsure(const char* key,
                  int32_t max_i32,
                  size_t max_len,
                  uint16_t flags,
-                 bool console_visible,
                  HxStateOwnerClass owner_class);
 
 bool StateDelete(const char* key);

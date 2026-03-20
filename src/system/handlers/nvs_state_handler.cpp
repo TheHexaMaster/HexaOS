@@ -117,7 +117,6 @@ static const HxStateKeyDef kHxStaticStateKeys[] = {
     .max_i32 = (int32_t)(max_i32_value), \
     .max_len = (size_t)(max_len_value), \
     .flags = (uint16_t)(HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE | ((console_visible_value) ? HX_STATE_FLAG_CONSOLE_VISIBLE : 0) | ((write_restricted_value) ? HX_STATE_FLAG_WRITE_RESTRICTED : 0)), \
-    .console_visible = (console_visible_value), \
     .owner_class = HX_STATE_OWNER_SYSTEM \
   },
 
@@ -947,10 +946,6 @@ static bool StateDefsCompatible(const HxStateKeyDef* existing, const HxStateKeyD
     return false;
   }
 
-  if (existing->console_visible != requested->console_visible) {
-    return false;
-  }
-
   if (existing->owner_class != requested->owner_class) {
     return false;
   }
@@ -1031,14 +1026,6 @@ static bool StateInsertRuntimeDef(const HxStateKeyDef* def, bool persist_catalog
   slot->def.key = slot->owned_key;
   slot->def.flags |= (HX_STATE_FLAG_RUNTIME | HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE);
 
-  if (slot->def.console_visible || (slot->def.flags & HX_STATE_FLAG_CONSOLE_VISIBLE)) {
-    slot->def.console_visible = true;
-    slot->def.flags |= HX_STATE_FLAG_CONSOLE_VISIBLE;
-  } else {
-    slot->def.console_visible = false;
-    slot->def.flags &= ~HX_STATE_FLAG_CONSOLE_VISIBLE;
-  }
-
   taskEXIT_CRITICAL(&g_state_registry_mux);
 
   HX_LOGD("STA", "register runtime key=%s owner=%s",
@@ -1090,14 +1077,13 @@ static bool StateBuildRuntimeCatalog(String& manifest) {
     char line[HX_STATE_CATALOG_LINE_MAX];
     int written = snprintf(line,
                            sizeof(line),
-                           "%s|%d|%ld|%ld|%lu|%u|%u|%u\n",
+                           "%s|%d|%ld|%ld|%lu|%u|%u\n",
                            key_copy,
                            (int)def_copy.type,
                            (long)def_copy.min_i32,
                            (long)def_copy.max_i32,
                            (unsigned long)def_copy.max_len,
                            (unsigned int)def_copy.flags,
-                           def_copy.console_visible ? 1U : 0U,
                            (unsigned int)def_copy.owner_class);
 
     if ((written <= 0) || ((size_t)written >= sizeof(line))) {
@@ -1173,17 +1159,17 @@ static bool StateLoadRuntimeCatalog() {
       continue;
     }
 
-    char* fields[8] = { nullptr };
+    char* fields[7] = { nullptr };
     size_t field_count = 0;
     char* field_ctx = nullptr;
 
     for (char* tok = strtok_r(line, "|", &field_ctx);
-         tok != nullptr && field_count < 8;
+         tok != nullptr && field_count < 7;
          tok = strtok_r(nullptr, "|", &field_ctx)) {
       fields[field_count++] = tok;
     }
 
-    if (field_count != 8) {
+    if (field_count != 7) {
       continue;
     }
 
@@ -1192,7 +1178,6 @@ static bool StateLoadRuntimeCatalog() {
     int32_t max_i32 = 0;
     int32_t max_len_i32 = 0;
     int32_t flags_i32 = 0;
-    int32_t console_visible_i32 = 0;
     int32_t owner_class_i32 = 0;
 
     if (!StateParseIntText(fields[1], &type_i32) ||
@@ -1200,8 +1185,7 @@ static bool StateLoadRuntimeCatalog() {
         !StateParseIntText(fields[3], &max_i32) ||
         !StateParseIntText(fields[4], &max_len_i32) ||
         !StateParseIntText(fields[5], &flags_i32) ||
-        !StateParseIntText(fields[6], &console_visible_i32) ||
-        !StateParseIntText(fields[7], &owner_class_i32)) {
+        !StateParseIntText(fields[6], &owner_class_i32)) {
       continue;
     }
 
@@ -1212,17 +1196,10 @@ static bool StateLoadRuntimeCatalog() {
       .max_i32 = max_i32,
       .max_len = (size_t)max_len_i32,
       .flags = (uint16_t)flags_i32,
-      .console_visible = (console_visible_i32 != 0),
       .owner_class = (HxStateOwnerClass)owner_class_i32
     };
 
     def.flags |= (HX_STATE_FLAG_RUNTIME | HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE);
-
-    if (def.console_visible) {
-      def.flags |= HX_STATE_FLAG_CONSOLE_VISIBLE;
-    } else {
-      def.flags &= ~HX_STATE_FLAG_CONSOLE_VISIBLE;
-    }
 
     if (!StateValidateDef(&def)) {
       continue;
@@ -1315,7 +1292,6 @@ bool StateCreate(const char* key,
                  int32_t max_i32,
                  size_t max_len,
                  uint16_t flags,
-                 bool console_visible,
                  HxStateOwnerClass owner_class) {
   if (StateExists(key)) {
     return false;
@@ -1328,7 +1304,6 @@ bool StateCreate(const char* key,
     .max_i32 = max_i32,
     .max_len = max_len,
     .flags = flags,
-    .console_visible = console_visible,
     .owner_class = owner_class
   };
 
@@ -1392,7 +1367,6 @@ bool StateEnsure(const char* key,
                  int32_t max_i32,
                  size_t max_len,
                  uint16_t flags,
-                 bool console_visible,
                  HxStateOwnerClass owner_class) {
   HxStateKeyDef requested = {
     .key = key,
@@ -1401,7 +1375,6 @@ bool StateEnsure(const char* key,
     .max_i32 = max_i32,
     .max_len = max_len,
     .flags = flags,
-    .console_visible = console_visible,
     .owner_class = owner_class
   };
 
@@ -1410,7 +1383,7 @@ bool StateEnsure(const char* key,
     return StateDefsCompatible(existing, &requested);
   }
 
-  return StateCreate(key, type, min_i32, max_i32, max_len, flags, console_visible, owner_class);
+  return StateCreate(key, type, min_i32, max_i32, max_len, flags, owner_class);
 }
 
 bool StateDelete(const char* key) {

@@ -419,7 +419,7 @@ static HxCmdStatus CmdStateList(const char* args, HxCmdOutput* out) {
       continue;
     }
 
-    if (!item->console_visible) {
+    if ((item->flags & HX_STATE_FLAG_CONSOLE_VISIBLE) == 0) {
       continue;
     }
 
@@ -500,7 +500,6 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
                      1,
                      0,
                      HX_STATE_FLAG_CONSOLE_VISIBLE,
-                     true,
                      HX_STATE_OWNER_USER)) {
       CmdOutWriteLine(out, "state create failed");
       return HX_CMD_ERROR;
@@ -530,7 +529,6 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
                      max_i32,
                      0,
                      HX_STATE_FLAG_CONSOLE_VISIBLE,
-                     true,
                      HX_STATE_OWNER_USER)) {
       CmdOutWriteLine(out, "state create failed");
       return HX_CMD_ERROR;
@@ -559,7 +557,6 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
                      0,
                      (size_t)max_len,
                      HX_STATE_FLAG_CONSOLE_VISIBLE,
-                     true,
                      HX_STATE_OWNER_USER)) {
       CmdOutWriteLine(out, "state create failed");
       return HX_CMD_ERROR;
