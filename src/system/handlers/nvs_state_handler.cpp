@@ -552,7 +552,7 @@ static bool StateIsWriteAllowed(const HxStateKeyDef* def, HxStateWriteSource sou
 static uint32_t StateGetCommitDelayMs() {
   int32_t delay_ms = (int32_t)HX_CONFIG_DEFAULT_STATE_DELAY;
 
-  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_STATES_DELAY);
+  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_states_delay);
   if (item && (item->type == HX_SCHEMA_VALUE_INT32)) {
     if ((HxConfigData.states_delay >= item->min_i32) && (HxConfigData.states_delay <= item->max_i32)) {
       delay_ms = HxConfigData.states_delay;

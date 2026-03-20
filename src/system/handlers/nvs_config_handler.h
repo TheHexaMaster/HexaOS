@@ -2,17 +2,17 @@
 
 #include "headers/hx_config.h"
 
-#define HX_CFG_STRUCT_XS(id, key_text, field_name, max_len_value, default_value, console_visible_value, console_writable_value) \
-  char field_name[(max_len_value) + 1];
+#define HX_CFG_STRUCT_XS(id, key_text, max_len_value, default_value, console_visible_value, console_writable_value) \
+  char id[(max_len_value) + 1];
 
-#define HX_CFG_STRUCT_XI(id, key_text, field_name, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
-  int32_t field_name;
+#define HX_CFG_STRUCT_XI(id, key_text, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+  int32_t id;
 
-#define HX_CFG_STRUCT_XB(id, key_text, field_name, default_value, console_visible_value, console_writable_value) \
-  bool field_name;
+#define HX_CFG_STRUCT_XB(id, key_text, default_value, console_visible_value, console_writable_value) \
+  bool id;
 
-#define HX_CFG_STRUCT_XF(id, key_text, field_name, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
-  float field_name;
+#define HX_CFG_STRUCT_XF(id, key_text, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
+  float id;
 
 struct HxConfig {
   HX_CONFIG_SCHEMA(HX_CFG_STRUCT_XS, HX_CFG_STRUCT_XI, HX_CFG_STRUCT_XB, HX_CFG_STRUCT_XF)
@@ -79,16 +79,16 @@ void ConfigApply();
 
 
 
-#define HX_CFG_KEY_DECLARE_XS(id, key_text, field_name, max_len_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CFG_KEY_DECLARE_XS(id, key_text, max_len_value, default_value, console_visible_value, console_writable_value) \
   static constexpr const char* HX_CFG_##id = key_text;
 
-#define HX_CFG_KEY_DECLARE_XI(id, key_text, field_name, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CFG_KEY_DECLARE_XI(id, key_text, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
   static constexpr const char* HX_CFG_##id = key_text;
 
-#define HX_CFG_KEY_DECLARE_XB(id, key_text, field_name, default_value, console_visible_value, console_writable_value) \
+#define HX_CFG_KEY_DECLARE_XB(id, key_text, default_value, console_visible_value, console_writable_value) \
   static constexpr const char* HX_CFG_##id = key_text;
 
-#define HX_CFG_KEY_DECLARE_XF(id, key_text, field_name, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CFG_KEY_DECLARE_XF(id, key_text, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
   static constexpr const char* HX_CFG_##id = key_text;
 
 HX_CONFIG_SCHEMA(HX_CFG_KEY_DECLARE_XS, HX_CFG_KEY_DECLARE_XI, HX_CFG_KEY_DECLARE_XB, HX_CFG_KEY_DECLARE_XF)

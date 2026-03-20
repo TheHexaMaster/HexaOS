@@ -68,13 +68,13 @@ static void ConfigFormatFloatDisplay(char* out, size_t out_size, float value) {
 
 HxConfig HxConfigData = {};
 const HxConfig HxConfigDefaults = {
-#define HX_CONFIG_DEFAULT_XS(id, key_text, field_name, max_len_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_DEFAULT_XS(id, key_text, max_len_value, default_value, console_visible_value, console_writable_value) \
   default_value,
-#define HX_CONFIG_DEFAULT_XI(id, key_text, field_name, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_DEFAULT_XI(id, key_text, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
   default_value,
-#define HX_CONFIG_DEFAULT_XB(id, key_text, field_name, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_DEFAULT_XB(id, key_text, default_value, console_visible_value, console_writable_value) \
   default_value,
-#define HX_CONFIG_DEFAULT_XF(id, key_text, field_name, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_DEFAULT_XF(id, key_text, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
   default_value,
 
   HX_CONFIG_SCHEMA(HX_CONFIG_DEFAULT_XS, HX_CONFIG_DEFAULT_XI, HX_CONFIG_DEFAULT_XB, HX_CONFIG_DEFAULT_XF)
@@ -86,12 +86,12 @@ const HxConfig HxConfigDefaults = {
 };
 
 static const HxConfigKeyDef kHxConfigKeys[] = {
-#define HX_CONFIG_ITEM_XS(id, key_text, field_name, max_len_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_ITEM_XS(id, key_text, max_len_value, default_value, console_visible_value, console_writable_value) \
   { \
     .key = key_text, \
     .type = HX_SCHEMA_VALUE_STRING, \
-    .config_offset = offsetof(HxConfig, field_name), \
-    .value_size = sizeof(((HxConfig*)0)->field_name), \
+    .config_offset = offsetof(HxConfig, id), \
+    .value_size = sizeof(((HxConfig*)0)->id), \
     .min_i32 = 0, \
     .max_i32 = 0, \
     .min_f32 = 0.0f, \
@@ -100,12 +100,12 @@ static const HxConfigKeyDef kHxConfigKeys[] = {
     .console_visible = (console_visible_value), \
     .console_writable = (console_writable_value) \
   },
-#define HX_CONFIG_ITEM_XI(id, key_text, field_name, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_ITEM_XI(id, key_text, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
   { \
     .key = key_text, \
     .type = HX_SCHEMA_VALUE_INT32, \
-    .config_offset = offsetof(HxConfig, field_name), \
-    .value_size = sizeof(((HxConfig*)0)->field_name), \
+    .config_offset = offsetof(HxConfig, id), \
+    .value_size = sizeof(((HxConfig*)0)->id), \
     .min_i32 = (int32_t)(min_i32_value), \
     .max_i32 = (int32_t)(max_i32_value), \
     .min_f32 = 0.0f, \
@@ -114,12 +114,12 @@ static const HxConfigKeyDef kHxConfigKeys[] = {
     .console_visible = (console_visible_value), \
     .console_writable = (console_writable_value) \
   },
-#define HX_CONFIG_ITEM_XB(id, key_text, field_name, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_ITEM_XB(id, key_text, default_value, console_visible_value, console_writable_value) \
   { \
     .key = key_text, \
     .type = HX_SCHEMA_VALUE_BOOL, \
-    .config_offset = offsetof(HxConfig, field_name), \
-    .value_size = sizeof(((HxConfig*)0)->field_name), \
+    .config_offset = offsetof(HxConfig, id), \
+    .value_size = sizeof(((HxConfig*)0)->id), \
     .min_i32 = 0, \
     .max_i32 = 0, \
     .min_f32 = 0.0f, \
@@ -128,12 +128,12 @@ static const HxConfigKeyDef kHxConfigKeys[] = {
     .console_visible = (console_visible_value), \
     .console_writable = (console_writable_value) \
   },
-#define HX_CONFIG_ITEM_XF(id, key_text, field_name, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_ITEM_XF(id, key_text, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
   { \
     .key = key_text, \
     .type = HX_SCHEMA_VALUE_FLOAT, \
-    .config_offset = offsetof(HxConfig, field_name), \
-    .value_size = sizeof(((HxConfig*)0)->field_name), \
+    .config_offset = offsetof(HxConfig, id), \
+    .value_size = sizeof(((HxConfig*)0)->id), \
     .min_i32 = 0, \
     .max_i32 = 0, \
     .min_f32 = (float)(min_f32_value), \
