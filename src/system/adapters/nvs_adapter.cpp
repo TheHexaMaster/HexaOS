@@ -162,6 +162,26 @@ bool HxNvsGetInt(HxNvsStore store, const char* key, int32_t* value) {
   return (err == ESP_OK);
 }
 
+bool HxNvsGetFloat(HxNvsStore store, const char* key, float* value) {
+  if (!key || !value) {
+    return false;
+  }
+
+  nvs_handle_t handle = GetStoreHandle(store);
+  if (!IsHandleReady(handle)) {
+    return false;
+  }
+
+  uint32_t raw = 0;
+  esp_err_t err = nvs_get_u32(handle, key, &raw);
+  if (err != ESP_OK) {
+    return false;
+  }
+
+  memcpy(value, &raw, sizeof(raw));
+  return true;
+}
+
 bool HxNvsGetString(HxNvsStore store, const char* key, String& value) {
   if (!key) {
     return false;
@@ -219,6 +239,23 @@ bool HxNvsSetInt(HxNvsStore store, const char* key, int32_t value) {
   }
 
   esp_err_t err = nvs_set_i32(handle, key, value);
+  return (err == ESP_OK);
+}
+
+bool HxNvsSetFloat(HxNvsStore store, const char* key, float value) {
+  if (!key) {
+    return false;
+  }
+
+  nvs_handle_t handle = GetStoreHandle(store);
+  if (!IsHandleReady(handle)) {
+    return false;
+  }
+
+  uint32_t raw = 0;
+  memcpy(&raw, &value, sizeof(raw));
+
+  esp_err_t err = nvs_set_u32(handle, key, raw);
   return (err == ESP_OK);
 }
 

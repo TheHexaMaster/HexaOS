@@ -1,26 +1,25 @@
 #pragma once
 
-#define HX_CFG_FIELD_HX_SCHEMA_VALUE_STRING(field_name, storage_size) char field_name[storage_size];
-#define HX_CFG_FIELD_HX_SCHEMA_VALUE_BOOL(field_name, storage_size) bool field_name;
-#define HX_CFG_FIELD_HX_SCHEMA_VALUE_INT32(field_name, storage_size) int32_t field_name;
+#define HX_CFG_STRUCT_XS(id, key_text, field_name, max_len_value, default_value, console_visible_value, console_writable_value) \
+  char field_name[(max_len_value) + 1];
 
-#define HX_CFG_FIELD_SELECT_(type_id, field_name, storage_size) HX_CFG_FIELD_##type_id(field_name, storage_size)
-#define HX_CFG_FIELD_SELECT(type_id, field_name, storage_size) HX_CFG_FIELD_SELECT_(type_id, field_name, storage_size)
+#define HX_CFG_STRUCT_XI(id, key_text, field_name, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+  int32_t field_name;
+
+#define HX_CFG_STRUCT_XB(id, key_text, field_name, default_value, console_visible_value, console_writable_value) \
+  bool field_name;
+
+#define HX_CFG_STRUCT_XF(id, key_text, field_name, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
+  float field_name;
 
 struct HxConfig {
-#define HX_CFG_STRUCT_FIELD(id, key_text, type_id, field_name, storage_size, max_len_value, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
-  HX_CFG_FIELD_SELECT(type_id, field_name, storage_size)
-
-  HX_CONFIG_SCHEMA(HX_CFG_STRUCT_FIELD)
-
-#undef HX_CFG_STRUCT_FIELD
+  HX_CONFIG_SCHEMA(HX_CFG_STRUCT_XS, HX_CFG_STRUCT_XI, HX_CFG_STRUCT_XB, HX_CFG_STRUCT_XF)
 };
 
-#undef HX_CFG_FIELD_SELECT
-#undef HX_CFG_FIELD_SELECT_
-#undef HX_CFG_FIELD_HX_SCHEMA_VALUE_INT32
-#undef HX_CFG_FIELD_HX_SCHEMA_VALUE_BOOL
-#undef HX_CFG_FIELD_HX_SCHEMA_VALUE_STRING
+#undef HX_CFG_STRUCT_XF
+#undef HX_CFG_STRUCT_XB
+#undef HX_CFG_STRUCT_XI
+#undef HX_CFG_STRUCT_XS
 
 struct HxConfigKeyDef {
   const char* key;
@@ -29,6 +28,8 @@ struct HxConfigKeyDef {
   size_t value_size;
   int32_t min_i32;
   int32_t max_i32;
+  float min_f32;
+  float max_f32;
   size_t max_len;
   bool console_visible;
   bool console_writable;
@@ -80,6 +81,8 @@ struct HxStateKeyDef {
   HxSchemaValueType type;
   int32_t min_i32;
   int32_t max_i32;
+  float min_f32;
+  float max_f32;
   size_t max_len;
   uint16_t flags;
   HxStateOwnerClass owner_class;
@@ -104,6 +107,8 @@ bool StateCreate(const char* key,
                  HxSchemaValueType type,
                  int32_t min_i32,
                  int32_t max_i32,
+                 float min_f32,
+                 float max_f32,
                  size_t max_len,
                  uint16_t flags,
                  HxStateOwnerClass owner_class);
@@ -112,6 +117,8 @@ bool StateEnsure(const char* key,
                  HxSchemaValueType type,
                  int32_t min_i32,
                  int32_t max_i32,
+                 float min_f32,
+                 float max_f32,
                  size_t max_len,
                  uint16_t flags,
                  HxStateOwnerClass owner_class);
@@ -127,14 +134,17 @@ bool StateWriteFromString(const char* key, const char* value);
 
 bool StateReadBool(const char* key, bool* value);
 bool StateReadInt(const char* key, int32_t* value);
+bool StateReadFloat(const char* key, float* value);
 bool StateReadString(const char* key, char* out, size_t out_size);
 
 bool StateGetBoolOr(const char* key, bool defval);
 int32_t StateGetIntOr(const char* key, int32_t defval);
+float StateGetFloatOr(const char* key, float defval);
 bool StateGetStringOr(const char* key, char* out, size_t out_size, const char* defval);
 
 bool StateSetBool(const char* key, bool value);
 bool StateSetInt(const char* key, int32_t value);
+bool StateSetFloat(const char* key, float value);
 bool StateSetString(const char* key, const char* value);
 
 bool StateIncrementInt(const char* key, int32_t* new_value_out);
@@ -160,16 +170,40 @@ bool StateGetStorageInfo(HxStateStorageInfo* out_info);
 void StateLoop();
 
 
-#define HX_CFG_KEY_DECLARE(id, key_text, type_id, field_name, storage_size, max_len_value, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CFG_KEY_DECLARE_XS(id, key_text, field_name, max_len_value, default_value, console_visible_value, console_writable_value) \
   static constexpr const char* HX_CFG_##id = key_text;
 
-HX_CONFIG_SCHEMA(HX_CFG_KEY_DECLARE)
+#define HX_CFG_KEY_DECLARE_XI(id, key_text, field_name, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+  static constexpr const char* HX_CFG_##id = key_text;
 
-#undef HX_CFG_KEY_DECLARE
+#define HX_CFG_KEY_DECLARE_XB(id, key_text, field_name, default_value, console_visible_value, console_writable_value) \
+  static constexpr const char* HX_CFG_##id = key_text;
 
-#define HX_STATE_KEY_DECLARE(id, key_text, type_id, min_i32, max_i32, max_len, console_visible, write_restricted) \
+#define HX_CFG_KEY_DECLARE_XF(id, key_text, field_name, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
+  static constexpr const char* HX_CFG_##id = key_text;
+
+HX_CONFIG_SCHEMA(HX_CFG_KEY_DECLARE_XS, HX_CFG_KEY_DECLARE_XI, HX_CFG_KEY_DECLARE_XB, HX_CFG_KEY_DECLARE_XF)
+
+#undef HX_CFG_KEY_DECLARE_XF
+#undef HX_CFG_KEY_DECLARE_XB
+#undef HX_CFG_KEY_DECLARE_XI
+#undef HX_CFG_KEY_DECLARE_XS
+
+#define HX_STATE_KEY_DECLARE_XS(id, key_text, max_len_value, console_visible_value, write_restricted_value) \
   static constexpr const char* HX_STATE_##id = key_text;
 
-HX_STATE_SCHEMA(HX_STATE_KEY_DECLARE)
+#define HX_STATE_KEY_DECLARE_XI(id, key_text, min_i32_value, max_i32_value, console_visible_value, write_restricted_value) \
+  static constexpr const char* HX_STATE_##id = key_text;
 
-#undef HX_STATE_KEY_DECLARE
+#define HX_STATE_KEY_DECLARE_XB(id, key_text, console_visible_value, write_restricted_value) \
+  static constexpr const char* HX_STATE_##id = key_text;
+
+#define HX_STATE_KEY_DECLARE_XF(id, key_text, min_f32_value, max_f32_value, console_visible_value, write_restricted_value) \
+  static constexpr const char* HX_STATE_##id = key_text;
+
+HX_STATE_SCHEMA(HX_STATE_KEY_DECLARE_XS, HX_STATE_KEY_DECLARE_XI, HX_STATE_KEY_DECLARE_XB, HX_STATE_KEY_DECLARE_XF)
+
+#undef HX_STATE_KEY_DECLARE_XF
+#undef HX_STATE_KEY_DECLARE_XB
+#undef HX_STATE_KEY_DECLARE_XI
+#undef HX_STATE_KEY_DECLARE_XS

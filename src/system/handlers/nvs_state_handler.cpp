@@ -17,12 +17,33 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 
 static constexpr const char* HX_STATE_CATALOG_KEY = "CATALOG_STATE";
+
+static void StateFormatFloatDisplay(char* out, size_t out_size, float value) {
+  if (!out || (out_size == 0)) {
+    return;
+  }
+
+  if (!isfinite(value)) {
+    if (isnan(value)) {
+      snprintf(out, out_size, "nan");
+    } else {
+      snprintf(out, out_size, "%s", (value < 0.0f) ? "-inf" : "inf");
+    }
+    return;
+  }
+
+  snprintf(out, out_size, "%.7g", (double)value);
+  if (strcmp(out, "-0") == 0) {
+    snprintf(out, out_size, "0");
+  }
+}
 
 static constexpr size_t HX_STATE_RUNTIME_MAX = 64;
 static constexpr size_t HX_STATE_LOGICAL_KEY_MAX = 96;
@@ -52,7 +73,8 @@ enum HxStatePendingKind : uint8_t {
   HX_STATE_PENDING_ERASE = 1,
   HX_STATE_PENDING_BOOL = 2,
   HX_STATE_PENDING_INT32 = 3,
-  HX_STATE_PENDING_STRING = 4
+  HX_STATE_PENDING_STRING = 4,
+  HX_STATE_PENDING_FLOAT = 5
 };
 
 struct HxRuntimeStateSlot {
@@ -68,6 +90,7 @@ struct HxStatePendingSlot {
   uint32_t seq;
   bool bool_value;
   int32_t int_value;
+  float float_value;
   char* string_value;
 };
 
@@ -77,6 +100,7 @@ struct HxStatePendingCommitItem {
   uint32_t seq;
   bool bool_value;
   int32_t int_value;
+  float float_value;
   char* string_value;
 };
 
@@ -109,15 +133,18 @@ static int StateFindFreePendingSlotLocked();
 static uint32_t StateNextPendingSeqLocked();
 static bool StateStagePendingBoolValue(const char* storage_key, bool value);
 static bool StateStagePendingIntValue(const char* storage_key, int32_t value);
+static bool StateStagePendingFloatValue(const char* storage_key, float value);
 static bool StateStagePendingStringValue(const char* storage_key, const char* value);
 static bool StateStagePendingEraseValue(const char* storage_key);
 static bool StateEraseEx(const char* key, HxStateWriteSource source);
 static bool StateSetValueFromStringEx(const HxStateKeyDef* item, const char* value, HxStateWriteSource source);
 static bool StateSetBoolEx(const char* key, bool value, HxStateWriteSource source);
 static bool StateSetIntEx(const char* key, int32_t value, HxStateWriteSource source);
+static bool StateSetFloatEx(const char* key, float value, HxStateWriteSource source);
 static bool StateSetStringEx(const char* key, const char* value, HxStateWriteSource source);
 static bool StateReadPendingBool(const char* storage_key, bool* handled, bool* value_out);
 static bool StateReadPendingInt(const char* storage_key, bool* handled, int32_t* value_out);
+static bool StateReadPendingFloat(const char* storage_key, bool* handled, float* value_out);
 static bool StateReadPendingString(const char* storage_key, bool* handled, char* out, size_t out_size, size_t max_len);
 static void StateFreePendingCommitItems(HxStatePendingCommitItem* items, size_t count);
 static bool StateClonePendingCommitItems(HxStatePendingCommitItem* items, size_t max_items, size_t* count_out);
@@ -126,20 +153,61 @@ static size_t StatePendingCountLocked();
 bool StateCommit();
 
 static const HxStateKeyDef kHxStaticStateKeys[] = {
-#define HX_STATE_ITEM(id, key_text, type_id, min_i32_value, max_i32_value, max_len_value, console_visible_value, write_restricted_value) \
+#define HX_STATE_ITEM_XS(id, key_text, max_len_value, console_visible_value, write_restricted_value) \
   { \
     .key = key_text, \
-    .type = type_id, \
-    .min_i32 = (int32_t)(min_i32_value), \
-    .max_i32 = (int32_t)(max_i32_value), \
+    .type = HX_SCHEMA_VALUE_STRING, \
+    .min_i32 = 0, \
+    .max_i32 = 0, \
+    .min_f32 = 0.0f, \
+    .max_f32 = 0.0f, \
     .max_len = (size_t)(max_len_value), \
     .flags = (uint16_t)(HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE | ((console_visible_value) ? HX_STATE_FLAG_CONSOLE_VISIBLE : 0) | ((write_restricted_value) ? HX_STATE_FLAG_WRITE_RESTRICTED : 0)), \
     .owner_class = HX_STATE_OWNER_SYSTEM \
   },
+#define HX_STATE_ITEM_XI(id, key_text, min_i32_value, max_i32_value, console_visible_value, write_restricted_value) \
+  { \
+    .key = key_text, \
+    .type = HX_SCHEMA_VALUE_INT32, \
+    .min_i32 = (int32_t)(min_i32_value), \
+    .max_i32 = (int32_t)(max_i32_value), \
+    .min_f32 = 0.0f, \
+    .max_f32 = 0.0f, \
+    .max_len = 0, \
+    .flags = (uint16_t)(HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE | ((console_visible_value) ? HX_STATE_FLAG_CONSOLE_VISIBLE : 0) | ((write_restricted_value) ? HX_STATE_FLAG_WRITE_RESTRICTED : 0)), \
+    .owner_class = HX_STATE_OWNER_SYSTEM \
+  },
+#define HX_STATE_ITEM_XB(id, key_text, console_visible_value, write_restricted_value) \
+  { \
+    .key = key_text, \
+    .type = HX_SCHEMA_VALUE_BOOL, \
+    .min_i32 = 0, \
+    .max_i32 = 0, \
+    .min_f32 = 0.0f, \
+    .max_f32 = 0.0f, \
+    .max_len = 0, \
+    .flags = (uint16_t)(HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE | ((console_visible_value) ? HX_STATE_FLAG_CONSOLE_VISIBLE : 0) | ((write_restricted_value) ? HX_STATE_FLAG_WRITE_RESTRICTED : 0)), \
+    .owner_class = HX_STATE_OWNER_SYSTEM \
+  },
+#define HX_STATE_ITEM_XF(id, key_text, min_f32_value, max_f32_value, console_visible_value, write_restricted_value) \
+  { \
+    .key = key_text, \
+    .type = HX_SCHEMA_VALUE_FLOAT, \
+    .min_i32 = 0, \
+    .max_i32 = 0, \
+    .min_f32 = (float)(min_f32_value), \
+    .max_f32 = (float)(max_f32_value), \
+    .max_len = 0, \
+    .flags = (uint16_t)(HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE | ((console_visible_value) ? HX_STATE_FLAG_CONSOLE_VISIBLE : 0) | ((write_restricted_value) ? HX_STATE_FLAG_WRITE_RESTRICTED : 0)), \
+    .owner_class = HX_STATE_OWNER_SYSTEM \
+  },
 
-  HX_STATE_SCHEMA(HX_STATE_ITEM)
+  HX_STATE_SCHEMA(HX_STATE_ITEM_XS, HX_STATE_ITEM_XI, HX_STATE_ITEM_XB, HX_STATE_ITEM_XF)
 
-#undef HX_STATE_ITEM
+#undef HX_STATE_ITEM_XF
+#undef HX_STATE_ITEM_XB
+#undef HX_STATE_ITEM_XI
+#undef HX_STATE_ITEM_XS
 };
 
 static constexpr size_t HX_STATIC_STATE_COUNT = sizeof(kHxStaticStateKeys) / sizeof(kHxStaticStateKeys[0]);
@@ -205,6 +273,9 @@ static bool StateValidateDef(const HxStateKeyDef* def) {
 
     case HX_SCHEMA_VALUE_INT32:
       return def->min_i32 <= def->max_i32;
+
+    case HX_SCHEMA_VALUE_FLOAT:
+      return isfinite(def->min_f32) && isfinite(def->max_f32) && (def->min_f32 <= def->max_f32);
 
     case HX_SCHEMA_VALUE_STRING:
       return (def->max_len > 0) && (def->max_len <= HX_STATE_STRING_MAX);
@@ -402,6 +473,36 @@ static bool StateParseIntText(const char* text, int32_t* value_out) {
   }
 
   *value_out = (int32_t)value;
+  return true;
+}
+
+static bool StateParseFloatText(const char* text, float* value_out) {
+  if (!text || !value_out) {
+    return false;
+  }
+
+  errno = 0;
+
+  char* endptr = nullptr;
+  float value = strtof(text, &endptr);
+
+  if ((errno != 0) || (endptr == text)) {
+    return false;
+  }
+
+  while (*endptr == ' ' || *endptr == '\t') {
+    endptr++;
+  }
+
+  if (*endptr != '\0') {
+    return false;
+  }
+
+  if (!isfinite(value)) {
+    return false;
+  }
+
+  *value_out = value;
   return true;
 }
 
@@ -682,6 +783,46 @@ static bool StateStagePendingIntValue(const char* storage_key, int32_t value) {
   return ok;
 }
 
+
+static bool StateStagePendingFloatValue(const char* storage_key, float value) {
+  if (!storage_key || !storage_key[0]) {
+    return false;
+  }
+
+  bool ok = false;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index < 0) {
+    index = StateFindFreePendingSlotLocked();
+  }
+
+  if (index >= 0) {
+    HxStatePendingSlot* slot = &g_state_pending[index];
+
+    if (slot->used && slot->string_value) {
+      free(slot->string_value);
+      slot->string_value = nullptr;
+    }
+
+    if (!slot->used) {
+      memset(slot, 0, sizeof(*slot));
+      strncpy(slot->storage_key, storage_key, sizeof(slot->storage_key) - 1);
+      slot->storage_key[sizeof(slot->storage_key) - 1] = '\0';
+      slot->used = true;
+    }
+
+    slot->kind = HX_STATE_PENDING_FLOAT;
+    slot->float_value = value;
+    slot->seq = StateNextPendingSeqLocked();
+    ok = true;
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+  return ok;
+}
+
 static bool StateStagePendingStringValue(const char* storage_key, const char* value) {
   if (!storage_key || !storage_key[0] || !value) {
     return false;
@@ -846,6 +987,44 @@ static bool StateReadPendingInt(const char* storage_key, bool* handled, int32_t*
   return ok;
 }
 
+
+static bool StateReadPendingFloat(const char* storage_key, bool* handled, float* value_out) {
+  if (handled) {
+    *handled = false;
+  }
+
+  if (!storage_key || !value_out) {
+    return false;
+  }
+
+  bool found = false;
+  bool ok = false;
+  float value = 0.0f;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index >= 0) {
+    found = true;
+    if (g_state_pending[index].kind == HX_STATE_PENDING_FLOAT) {
+      value = g_state_pending[index].float_value;
+      ok = true;
+    }
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+
+  if (handled) {
+    *handled = found;
+  }
+
+  if (ok) {
+    *value_out = value;
+  }
+
+  return ok;
+}
+
 static bool StateReadPendingString(const char* storage_key, bool* handled, char* out, size_t out_size, size_t max_len) {
   if (handled) {
     *handled = false;
@@ -925,6 +1104,7 @@ static bool StateClonePendingCommitItems(HxStatePendingCommitItem* items, size_t
     item->seq = g_state_pending[i].seq;
     item->bool_value = g_state_pending[i].bool_value;
     item->int_value = g_state_pending[i].int_value;
+    item->float_value = g_state_pending[i].float_value;
 
     if ((g_state_pending[i].kind == HX_STATE_PENDING_STRING) && g_state_pending[i].string_value) {
       item->string_value = (char*)malloc(strlen(g_state_pending[i].string_value) + 1);
@@ -1017,6 +1197,10 @@ static bool StateDefsCompatible(const HxStateKeyDef* existing, const HxStateKeyD
     case HX_SCHEMA_VALUE_INT32:
       return (existing->min_i32 == requested->min_i32) &&
              (existing->max_i32 == requested->max_i32);
+
+    case HX_SCHEMA_VALUE_FLOAT:
+      return (existing->min_f32 == requested->min_f32) &&
+             (existing->max_f32 == requested->max_f32);
 
     case HX_SCHEMA_VALUE_STRING:
       return existing->max_len == requested->max_len;
@@ -1140,15 +1324,48 @@ static bool StateBuildRuntimeCatalog(String& manifest, const char* exclude_key) 
 
     uint16_t catalog_flags = StateRuntimeCatalogFlags(def_copy.flags);
 
+    char arg0[32];
+    char arg1[32];
+    char arg2[32];
+
+    switch (def_copy.type) {
+      case HX_SCHEMA_VALUE_BOOL:
+        snprintf(arg0, sizeof(arg0), "0");
+        snprintf(arg1, sizeof(arg1), "0");
+        snprintf(arg2, sizeof(arg2), "0");
+        break;
+
+      case HX_SCHEMA_VALUE_INT32:
+        snprintf(arg0, sizeof(arg0), "%ld", (long)def_copy.min_i32);
+        snprintf(arg1, sizeof(arg1), "%ld", (long)def_copy.max_i32);
+        snprintf(arg2, sizeof(arg2), "0");
+        break;
+
+      case HX_SCHEMA_VALUE_FLOAT:
+        snprintf(arg0, sizeof(arg0), "%.9g", (double)def_copy.min_f32);
+        snprintf(arg1, sizeof(arg1), "%.9g", (double)def_copy.max_f32);
+        snprintf(arg2, sizeof(arg2), "0");
+        break;
+
+      case HX_SCHEMA_VALUE_STRING:
+        snprintf(arg0, sizeof(arg0), "0");
+        snprintf(arg1, sizeof(arg1), "0");
+        snprintf(arg2, sizeof(arg2), "%lu", (unsigned long)def_copy.max_len);
+        break;
+
+      default:
+        return false;
+    }
+
     char line[HX_STATE_CATALOG_LINE_MAX];
     int written = snprintf(line,
                            sizeof(line),
-                           "%s|%d|%ld|%ld|%lu|%u|%u\n",
+                           "%s|%d|%s|%s|%s|%u|%u\n",
                            key_copy,
                            (int)def_copy.type,
-                           (long)def_copy.min_i32,
-                           (long)def_copy.max_i32,
-                           (unsigned long)def_copy.max_len,
+                           arg0,
+                           arg1,
+                           arg2,
                            (unsigned int)catalog_flags,
                            (unsigned int)def_copy.owner_class);
 
@@ -1240,16 +1457,10 @@ static bool StateLoadRuntimeCatalog() {
     }
 
     int32_t type_i32 = 0;
-    int32_t min_i32 = 0;
-    int32_t max_i32 = 0;
-    int32_t max_len_i32 = 0;
     int32_t flags_i32 = 0;
     int32_t owner_class_i32 = 0;
 
     if (!StateParseIntText(fields[1], &type_i32) ||
-        !StateParseIntText(fields[2], &min_i32) ||
-        !StateParseIntText(fields[3], &max_i32) ||
-        !StateParseIntText(fields[4], &max_len_i32) ||
         !StateParseIntText(fields[5], &flags_i32) ||
         !StateParseIntText(fields[6], &owner_class_i32)) {
       continue;
@@ -1258,12 +1469,45 @@ static bool StateLoadRuntimeCatalog() {
     HxStateKeyDef def = {
       .key = fields[0],
       .type = (HxSchemaValueType)type_i32,
-      .min_i32 = min_i32,
-      .max_i32 = max_i32,
-      .max_len = (size_t)max_len_i32,
+      .min_i32 = 0,
+      .max_i32 = 0,
+      .min_f32 = 0.0f,
+      .max_f32 = 0.0f,
+      .max_len = 0,
       .flags = StateMakeRuntimeFlags((uint16_t)flags_i32),
       .owner_class = (HxStateOwnerClass)owner_class_i32
     };
+
+    switch (def.type) {
+      case HX_SCHEMA_VALUE_BOOL:
+        break;
+
+      case HX_SCHEMA_VALUE_INT32:
+        if (!StateParseIntText(fields[2], &def.min_i32) ||
+            !StateParseIntText(fields[3], &def.max_i32)) {
+          continue;
+        }
+        break;
+
+      case HX_SCHEMA_VALUE_FLOAT:
+        if (!StateParseFloatText(fields[2], &def.min_f32) ||
+            !StateParseFloatText(fields[3], &def.max_f32)) {
+          continue;
+        }
+        break;
+
+      case HX_SCHEMA_VALUE_STRING: {
+        int32_t max_len_i32 = 0;
+        if (!StateParseIntText(fields[4], &max_len_i32)) {
+          continue;
+        }
+        def.max_len = (size_t)max_len_i32;
+        break;
+      }
+
+      default:
+        continue;
+    }
 
     if (!StateValidateDef(&def)) {
       continue;
@@ -1354,6 +1598,8 @@ bool StateCreate(const char* key,
                  HxSchemaValueType type,
                  int32_t min_i32,
                  int32_t max_i32,
+                 float min_f32,
+                 float max_f32,
                  size_t max_len,
                  uint16_t flags,
                  HxStateOwnerClass owner_class) {
@@ -1366,6 +1612,8 @@ bool StateCreate(const char* key,
     .type = type,
     .min_i32 = min_i32,
     .max_i32 = max_i32,
+    .min_f32 = min_f32,
+    .max_f32 = max_f32,
     .max_len = max_len,
     .flags = flags,
     .owner_class = owner_class
@@ -1408,6 +1656,27 @@ bool StateCreate(const char* key,
       return true;
     }
 
+    case HX_SCHEMA_VALUE_FLOAT: {
+      float current = 0.0f;
+      if (!StateReadFloat(key, &current)) {
+        float initial = 0.0f;
+
+        if (initial < min_f32) {
+          initial = min_f32;
+        }
+
+        if (initial > max_f32) {
+          initial = max_f32;
+        }
+
+        if (!StateSetFloatEx(key, initial, HX_STATE_WRITE_SOURCE_SYSTEM) || !StateCommit()) {
+          StateDelete(key);
+          return false;
+        }
+      }
+      return true;
+    }
+
     case HX_SCHEMA_VALUE_STRING: {
       char current[2];
       if (!StateReadString(key, current, sizeof(current))) {
@@ -1429,6 +1698,8 @@ bool StateEnsure(const char* key,
                  HxSchemaValueType type,
                  int32_t min_i32,
                  int32_t max_i32,
+                 float min_f32,
+                 float max_f32,
                  size_t max_len,
                  uint16_t flags,
                  HxStateOwnerClass owner_class) {
@@ -1437,6 +1708,8 @@ bool StateEnsure(const char* key,
     .type = type,
     .min_i32 = min_i32,
     .max_i32 = max_i32,
+    .min_f32 = min_f32,
+    .max_f32 = max_f32,
     .max_len = max_len,
     .flags = flags,
     .owner_class = owner_class
@@ -1447,7 +1720,7 @@ bool StateEnsure(const char* key,
     return StateDefsCompatible(existing, &requested);
   }
 
-  return StateCreate(key, type, min_i32, max_i32, max_len, flags, owner_class);
+  return StateCreate(key, type, min_i32, max_i32, min_f32, max_f32, max_len, flags, owner_class);
 }
 
 bool StateDelete(const char* key) {
@@ -1560,6 +1833,16 @@ bool StateValueToString(const HxStateKeyDef* item, char* out, size_t out_size) {
       return true;
     }
 
+    case HX_SCHEMA_VALUE_FLOAT: {
+      float value = 0.0f;
+      if (!StateReadFloat(item->key, &value)) {
+        return false;
+      }
+
+      StateFormatFloatDisplay(out, out_size, value);
+      return true;
+    }
+
     case HX_SCHEMA_VALUE_STRING:
       return StateReadString(item->key, out, out_size);
 
@@ -1590,6 +1873,15 @@ static bool StateSetValueFromStringEx(const HxStateKeyDef* item, const char* val
       }
 
       return StateSetIntEx(item->key, parsed, source);
+    }
+
+    case HX_SCHEMA_VALUE_FLOAT: {
+      float parsed = 0.0f;
+      if (!StateParseFloatText(value, &parsed)) {
+        return false;
+      }
+
+      return StateSetFloatEx(item->key, parsed, source);
     }
 
     case HX_SCHEMA_VALUE_STRING:
@@ -1677,6 +1969,10 @@ bool StateCommit() {
 
       case HX_STATE_PENDING_INT32:
         ok = HxNvsSetInt(HX_NVS_STORE_STATE, items[i].storage_key, items[i].int_value);
+        break;
+
+      case HX_STATE_PENDING_FLOAT:
+        ok = HxNvsSetFloat(HX_NVS_STORE_STATE, items[i].storage_key, items[i].float_value);
         break;
 
       case HX_STATE_PENDING_STRING:
@@ -1863,6 +2159,46 @@ bool StateReadInt(const char* key, int32_t* value) {
   return true;
 }
 
+
+bool StateReadFloat(const char* key, float* value) {
+  if (!g_state_ready || !value) {
+    return false;
+  }
+
+  char storage_key[HX_STATE_STORAGE_KEY_SIZE];
+  const HxStateKeyDef* def = nullptr;
+
+  if (!StateResolveDefAndStorageKey(key, &def, storage_key, sizeof(storage_key))) {
+    return false;
+  }
+
+  if (def->type != HX_SCHEMA_VALUE_FLOAT) {
+    return false;
+  }
+
+  bool handled = false;
+  if (StateReadPendingFloat(storage_key, &handled, value)) {
+    if (!isfinite(*value) || (*value < def->min_f32) || (*value > def->max_f32)) {
+      return false;
+    }
+    return true;
+  }
+
+  if (handled) {
+    return false;
+  }
+
+  if (!HxNvsGetFloat(HX_NVS_STORE_STATE, storage_key, value)) {
+    return false;
+  }
+
+  if (!isfinite(*value) || (*value < def->min_f32) || (*value > def->max_f32)) {
+    return false;
+  }
+
+  return true;
+}
+
 bool StateReadString(const char* key, char* out, size_t out_size) {
   if (!g_state_ready || !out || (out_size == 0)) {
     return false;
@@ -1921,6 +2257,17 @@ int32_t StateGetIntOr(const char* key, int32_t defval) {
   int32_t value = defval;
 
   if (StateReadInt(key, &value)) {
+    return value;
+  }
+
+  return defval;
+}
+
+
+float StateGetFloatOr(const char* key, float defval) {
+  float value = defval;
+
+  if (StateReadFloat(key, &value)) {
     return value;
   }
 
@@ -2010,6 +2357,41 @@ static bool StateSetIntEx(const char* key, int32_t value, HxStateWriteSource sou
   return StateScheduleValueCommit();
 }
 
+
+static bool StateSetFloatEx(const char* key, float value, HxStateWriteSource source) {
+  if (!g_state_ready) {
+    return false;
+  }
+
+  char storage_key[HX_STATE_STORAGE_KEY_SIZE];
+  const HxStateKeyDef* def = nullptr;
+
+  if (!StateResolveDefAndStorageKey(key, &def, storage_key, sizeof(storage_key))) {
+    return false;
+  }
+
+  if (def->type != HX_SCHEMA_VALUE_FLOAT) {
+    return false;
+  }
+
+  if (!StateIsWriteAllowed(def, source)) {
+    return false;
+  }
+
+  if (!isfinite(value) || (value < def->min_f32) || (value > def->max_f32)) {
+    return false;
+  }
+
+  if (!StateStagePendingFloatValue(storage_key, value)) {
+    return false;
+  }
+
+  char value_text[32];
+  StateFormatFloatDisplay(value_text, sizeof(value_text), value);
+  HX_LOGD("STA", "stage float key=%s value=%s", def->key, value_text);
+  return StateScheduleValueCommit();
+}
+
 static bool StateSetStringEx(const char* key, const char* value, HxStateWriteSource source) {
   if (!g_state_ready || !value) {
     return false;
@@ -2057,6 +2439,10 @@ bool StateSetBool(const char* key, bool value) {
 
 bool StateSetInt(const char* key, int32_t value) {
   return StateSetIntEx(key, value, HX_STATE_WRITE_SOURCE_USER);
+}
+
+bool StateSetFloat(const char* key, float value) {
+  return StateSetFloatEx(key, value, HX_STATE_WRITE_SOURCE_USER);
 }
 
 bool StateSetString(const char* key, const char* value) {

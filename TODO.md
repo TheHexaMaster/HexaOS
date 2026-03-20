@@ -14,6 +14,7 @@
 - [x] STATES - Bugfix - delay shall apply only on value writes, not on creation / deletion / format / another commands. 
 - [x] STATES - Bugfix - catalog data inconsistency 
 - [x] FACTORY NVS - Because of lack of use, this NVS will be deleted and not supported in later models. 
+- [x] STATES and CONFIGS - added FLOAT variable definition + new TYPE SCHEME MACRO for different variables at build (XS,XI,XB,XF)
 - [ ] STATES - Stable and tested release.
 - [ ] CONFIG - Refactor to final logic and test.
 - [ ] CONSOLE - Now we have defined only SERIAL console trought HWCDC / JTAG build selector. Need to add typical SERIAL UART as a build selector option (possible serial fallback as optional setting from config with default false.)

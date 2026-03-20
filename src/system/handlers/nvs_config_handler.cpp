@@ -12,6 +12,8 @@
 #include "hexaos.h"
 #include "system/adapters/nvs_adapter.h"
 
+#include <errno.h>
+#include <math.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -21,35 +23,110 @@
 
 static bool g_config_ready = false;
 
+static void ConfigFormatFloatDisplay(char* out, size_t out_size, float value) {
+  if (!out || (out_size == 0)) {
+    return;
+  }
+
+  if (!isfinite(value)) {
+    if (isnan(value)) {
+      snprintf(out, out_size, "nan");
+    } else {
+      snprintf(out, out_size, "%s", (value < 0.0f) ? "-inf" : "inf");
+    }
+    return;
+  }
+
+  snprintf(out, out_size, "%.7g", (double)value);
+  if (strcmp(out, "-0") == 0) {
+    snprintf(out, out_size, "0");
+  }
+}
+
 HxConfig HxConfigData = {};
 const HxConfig HxConfigDefaults = {
-#define HX_CONFIG_DEFAULT_ITEM(id, key_text, type_id, field_name, storage_size, max_len_value, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_DEFAULT_XS(id, key_text, field_name, max_len_value, default_value, console_visible_value, console_writable_value) \
+  default_value,
+#define HX_CONFIG_DEFAULT_XI(id, key_text, field_name, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+  default_value,
+#define HX_CONFIG_DEFAULT_XB(id, key_text, field_name, default_value, console_visible_value, console_writable_value) \
+  default_value,
+#define HX_CONFIG_DEFAULT_XF(id, key_text, field_name, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
   default_value,
 
-  HX_CONFIG_SCHEMA(HX_CONFIG_DEFAULT_ITEM)
+  HX_CONFIG_SCHEMA(HX_CONFIG_DEFAULT_XS, HX_CONFIG_DEFAULT_XI, HX_CONFIG_DEFAULT_XB, HX_CONFIG_DEFAULT_XF)
 
-#undef HX_CONFIG_DEFAULT_ITEM
+#undef HX_CONFIG_DEFAULT_XF
+#undef HX_CONFIG_DEFAULT_XB
+#undef HX_CONFIG_DEFAULT_XI
+#undef HX_CONFIG_DEFAULT_XS
 };
 
 static const HxConfigKeyDef kHxConfigKeys[] = {
-#define HX_CONFIG_ITEM(id, key_text, type_id, field_name, storage_size, max_len_value, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+#define HX_CONFIG_ITEM_XS(id, key_text, field_name, max_len_value, default_value, console_visible_value, console_writable_value) \
   { \
     .key = key_text, \
-    .type = type_id, \
+    .type = HX_SCHEMA_VALUE_STRING, \
+    .config_offset = offsetof(HxConfig, field_name), \
+    .value_size = sizeof(((HxConfig*)0)->field_name), \
+    .min_i32 = 0, \
+    .max_i32 = 0, \
+    .min_f32 = 0.0f, \
+    .max_f32 = 0.0f, \
+    .max_len = (size_t)(max_len_value), \
+    .console_visible = (console_visible_value), \
+    .console_writable = (console_writable_value) \
+  },
+#define HX_CONFIG_ITEM_XI(id, key_text, field_name, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
+  { \
+    .key = key_text, \
+    .type = HX_SCHEMA_VALUE_INT32, \
     .config_offset = offsetof(HxConfig, field_name), \
     .value_size = sizeof(((HxConfig*)0)->field_name), \
     .min_i32 = (int32_t)(min_i32_value), \
     .max_i32 = (int32_t)(max_i32_value), \
-    .max_len = (size_t)(max_len_value), \
+    .min_f32 = 0.0f, \
+    .max_f32 = 0.0f, \
+    .max_len = 0, \
     .console_visible = (console_visible_value), \
     .console_writable = (console_writable_value) \
-  }, 
+  },
+#define HX_CONFIG_ITEM_XB(id, key_text, field_name, default_value, console_visible_value, console_writable_value) \
+  { \
+    .key = key_text, \
+    .type = HX_SCHEMA_VALUE_BOOL, \
+    .config_offset = offsetof(HxConfig, field_name), \
+    .value_size = sizeof(((HxConfig*)0)->field_name), \
+    .min_i32 = 0, \
+    .max_i32 = 0, \
+    .min_f32 = 0.0f, \
+    .max_f32 = 0.0f, \
+    .max_len = 0, \
+    .console_visible = (console_visible_value), \
+    .console_writable = (console_writable_value) \
+  },
+#define HX_CONFIG_ITEM_XF(id, key_text, field_name, min_f32_value, max_f32_value, default_value, console_visible_value, console_writable_value) \
+  { \
+    .key = key_text, \
+    .type = HX_SCHEMA_VALUE_FLOAT, \
+    .config_offset = offsetof(HxConfig, field_name), \
+    .value_size = sizeof(((HxConfig*)0)->field_name), \
+    .min_i32 = 0, \
+    .max_i32 = 0, \
+    .min_f32 = (float)(min_f32_value), \
+    .max_f32 = (float)(max_f32_value), \
+    .max_len = 0, \
+    .console_visible = (console_visible_value), \
+    .console_writable = (console_writable_value) \
+  },
 
-  HX_CONFIG_SCHEMA(HX_CONFIG_ITEM)
+  HX_CONFIG_SCHEMA(HX_CONFIG_ITEM_XS, HX_CONFIG_ITEM_XI, HX_CONFIG_ITEM_XB, HX_CONFIG_ITEM_XF)
 
-#undef HX_CONFIG_ITEM
+#undef HX_CONFIG_ITEM_XF
+#undef HX_CONFIG_ITEM_XB
+#undef HX_CONFIG_ITEM_XI
+#undef HX_CONFIG_ITEM_XS
 };
-
 
 static void* ConfigFieldPtr(HxConfig* config, const HxConfigKeyDef* item) {
   if (!config || !item) {
@@ -107,6 +184,34 @@ static bool ConfigParseInt32Text(const char* text, int32_t min_value, int32_t ma
   }
 
   *value = (int32_t)raw;
+  return true;
+}
+
+static bool ConfigParseFloatText(const char* text, float min_value, float max_value, float* value) {
+  if (!text || !text[0] || !value) {
+    return false;
+  }
+
+  errno = 0;
+  char* endptr = nullptr;
+  float raw = strtof(text, &endptr);
+  if ((errno != 0) || (endptr == text)) {
+    return false;
+  }
+
+  while ((*endptr == ' ') || (*endptr == '\t')) {
+    endptr++;
+  }
+
+  if (*endptr != '\0') {
+    return false;
+  }
+
+  if (!isfinite(raw) || (raw < min_value) || (raw > max_value)) {
+    return false;
+  }
+
+  *value = raw;
   return true;
 }
 
@@ -175,6 +280,32 @@ static bool ConfigAssignInt32Field(HxConfig* config, const HxConfigKeyDef* item,
   return true;
 }
 
+static bool ConfigAssignFloatField(HxConfig* config, const HxConfigKeyDef* item, float value) {
+  if (!config || !item) {
+    return false;
+  }
+
+  if (item->type != HX_SCHEMA_VALUE_FLOAT) {
+    return false;
+  }
+
+  if (!isfinite(value) || (value < item->min_f32) || (value > item->max_f32)) {
+    return false;
+  }
+
+  if (item->value_size != sizeof(float)) {
+    return false;
+  }
+
+  float* field = static_cast<float*>(ConfigFieldPtr(config, item));
+  if (!field) {
+    return false;
+  }
+
+  *field = value;
+  return true;
+}
+
 static bool ConfigAssignValueFromString(HxConfig* config, const HxConfigKeyDef* item, const char* value) {
   if (!config || !item || !value) {
     return false;
@@ -194,12 +325,18 @@ static bool ConfigAssignValueFromString(HxConfig* config, const HxConfigKeyDef* 
 
     case HX_SCHEMA_VALUE_INT32: {
       int32_t parsed = 0;
-
-        if (!ConfigParseInt32Text(value, item->min_i32, item->max_i32, &parsed)) {
-          return false;
-        }
-
+      if (!ConfigParseInt32Text(value, item->min_i32, item->max_i32, &parsed)) {
+        return false;
+      }
       return ConfigAssignInt32Field(config, item, parsed);
+    }
+
+    case HX_SCHEMA_VALUE_FLOAT: {
+      float parsed = 0.0f;
+      if (!ConfigParseFloatText(value, item->min_f32, item->max_f32, &parsed)) {
+        return false;
+      }
+      return ConfigAssignFloatField(config, item, parsed);
     }
 
     default:
@@ -237,6 +374,14 @@ static bool ConfigReadItemFromNvs(const HxConfigKeyDef* item) {
       return ConfigAssignInt32Field(&HxConfigData, item, int_value);
     }
 
+    case HX_SCHEMA_VALUE_FLOAT: {
+      float float_value = 0.0f;
+      if (!HxNvsGetFloat(HX_NVS_STORE_CONFIG, item->key, &float_value)) {
+        return true;
+      }
+      return ConfigAssignFloatField(&HxConfigData, item, float_value);
+    }
+
     default:
       return false;
   }
@@ -262,6 +407,9 @@ static bool ConfigItemEqualsDefault(const HxConfigKeyDef* item) {
 
     case HX_SCHEMA_VALUE_INT32:
       return (*static_cast<const int32_t*>(current_ptr) == *static_cast<const int32_t*>(default_ptr));
+
+    case HX_SCHEMA_VALUE_FLOAT:
+      return (*static_cast<const float*>(current_ptr) == *static_cast<const float*>(default_ptr));
 
     default:
       return false;
@@ -291,6 +439,9 @@ static bool ConfigStoreItemOverride(const HxConfigKeyDef* item) {
 
     case HX_SCHEMA_VALUE_INT32:
       return HxNvsSetInt(HX_NVS_STORE_CONFIG, item->key, *static_cast<const int32_t*>(current_ptr));
+
+    case HX_SCHEMA_VALUE_FLOAT:
+      return HxNvsSetFloat(HX_NVS_STORE_CONFIG, item->key, *static_cast<const float*>(current_ptr));
 
     default:
       return false;
@@ -356,6 +507,10 @@ bool ConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size)
       snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
       return true;
 
+    case HX_SCHEMA_VALUE_FLOAT:
+      ConfigFormatFloatDisplay(out, out_size, *static_cast<const float*>(ptr));
+      return true;
+
     default:
       return false;
   }
@@ -384,6 +539,10 @@ bool ConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_siz
 
     case HX_SCHEMA_VALUE_INT32:
       snprintf(out, out_size, "%ld", (long)(*static_cast<const int32_t*>(ptr)));
+      return true;
+
+    case HX_SCHEMA_VALUE_FLOAT:
+      ConfigFormatFloatDisplay(out, out_size, *static_cast<const float*>(ptr));
       return true;
 
     default:

@@ -15,15 +15,38 @@
 #include "system/commands/command_builtin.h"
 
 #include <esp_system.h>
+#include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static void CmdFormatFloatDisplay(char* out, size_t out_size, float value) {
+  if (!out || (out_size == 0)) {
+    return;
+  }
+
+  if (!isfinite(value)) {
+    if (isnan(value)) {
+      snprintf(out, out_size, "nan");
+    } else {
+      snprintf(out, out_size, "%s", (value < 0.0f) ? "-inf" : "inf");
+    }
+    return;
+  }
+
+  snprintf(out, out_size, "%.7g", (double)value);
+  if (strcmp(out, "-0") == 0) {
+    snprintf(out, out_size, "0");
+  }
+}
 
 static const char* CmdStateTypeText(HxSchemaValueType type) {
   switch (type) {
     case HX_SCHEMA_VALUE_BOOL:   return "bool";
     case HX_SCHEMA_VALUE_INT32:  return "int";
     case HX_SCHEMA_VALUE_STRING: return "string";
+    case HX_SCHEMA_VALUE_FLOAT:  return "float";
     default:                     return "unknown";
   }
 }
@@ -108,6 +131,24 @@ static bool CmdParseInt32Token(const char** text_io, int32_t* value_out) {
   }
 
   *value_out = (int32_t)value;
+  return true;
+}
+
+static bool CmdParseFloatToken(const char** text_io, float* value_out) {
+  char token[32];
+
+  if (!CmdExtractToken(text_io, token, sizeof(token))) {
+    return false;
+  }
+
+  errno = 0;
+  char* endptr = nullptr;
+  float value = strtof(token, &endptr);
+  if ((errno != 0) || (endptr == token) || (*endptr != '\0') || !isfinite(value)) {
+    return false;
+  }
+
+  *value_out = value;
   return true;
 }
 
@@ -479,6 +520,7 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
     CmdOutWriteLine(out, "usage:");
     CmdOutWriteLine(out, "  state create <key> bool");
     CmdOutWriteLine(out, "  state create <key> int <min> <max>");
+    CmdOutWriteLine(out, "  state create <key> float <min> <max>");
     CmdOutWriteLine(out, "  state create <key> string <max_len>");
     return HX_CMD_USAGE;
   }
@@ -498,6 +540,8 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
                      HX_SCHEMA_VALUE_BOOL,
                      0,
                      1,
+                     0.0f,
+                     0.0f,
                      0,
                      HX_STATE_FLAG_CONSOLE_VISIBLE,
                      HX_STATE_OWNER_USER)) {
@@ -527,6 +571,8 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
                      HX_SCHEMA_VALUE_INT32,
                      min_i32,
                      max_i32,
+                     0.0f,
+                     0.0f,
                      0,
                      HX_STATE_FLAG_CONSOLE_VISIBLE,
                      HX_STATE_OWNER_USER)) {
@@ -535,6 +581,42 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
     }
 
     CmdOutPrintfLine(out, "created int state: %s [%ld..%ld]", key, (long)min_i32, (long)max_i32);
+    return HX_CMD_OK;
+  }
+
+
+  if ((strcmp(type, "float") == 0) || (strcmp(type, "f32") == 0)) {
+    float min_f32 = 0.0f;
+    float max_f32 = 0.0f;
+
+    if (!CmdParseFloatToken(&text, &min_f32) || !CmdParseFloatToken(&text, &max_f32) || (CmdSkipWs(text)[0] != '\0')) {
+      CmdOutWriteLine(out, "usage: state create <key> float <min> <max>");
+      return HX_CMD_USAGE;
+    }
+
+    if (min_f32 > max_f32) {
+      CmdOutWriteLine(out, "invalid float range");
+      return HX_CMD_ERROR;
+    }
+
+    if (!StateCreate(key,
+                     HX_SCHEMA_VALUE_FLOAT,
+                     0,
+                     0,
+                     min_f32,
+                     max_f32,
+                     0,
+                     HX_STATE_FLAG_CONSOLE_VISIBLE,
+                     HX_STATE_OWNER_USER)) {
+      CmdOutWriteLine(out, "state create failed");
+      return HX_CMD_ERROR;
+    }
+
+    char min_text[32];
+    char max_text[32];
+    CmdFormatFloatDisplay(min_text, sizeof(min_text), min_f32);
+    CmdFormatFloatDisplay(max_text, sizeof(max_text), max_f32);
+    CmdOutPrintfLine(out, "created float state: %s [%s..%s]", key, min_text, max_text);
     return HX_CMD_OK;
   }
 
@@ -555,6 +637,8 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
                      HX_SCHEMA_VALUE_STRING,
                      0,
                      0,
+                     0.0f,
+                     0.0f,
                      (size_t)max_len,
                      HX_STATE_FLAG_CONSOLE_VISIBLE,
                      HX_STATE_OWNER_USER)) {

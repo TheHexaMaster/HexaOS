@@ -36,10 +36,12 @@ struct HxNvsStats {
 
 bool HxNvsGetBool(HxNvsStore store, const char* key, bool* value);
 bool HxNvsGetInt(HxNvsStore store, const char* key, int32_t* value);
+bool HxNvsGetFloat(HxNvsStore store, const char* key, float* value);
 bool HxNvsGetString(HxNvsStore store, const char* key, String& value);
 
 bool HxNvsSetBool(HxNvsStore store, const char* key, bool value);
 bool HxNvsSetInt(HxNvsStore store, const char* key, int32_t value);
+bool HxNvsSetFloat(HxNvsStore store, const char* key, float value);
 bool HxNvsSetString(HxNvsStore store, const char* key, const char* value);
 bool HxNvsEraseKey(HxNvsStore store, const char* key);
 
