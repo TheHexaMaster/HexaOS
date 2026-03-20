@@ -97,8 +97,11 @@ static void StateArmCommitWindow();
 static void StateRearmCommitWindow(uint32_t delay_ms);
 static bool StateScheduleValueCommit();
 static bool StateCommitIsDue();
-static bool StateWriteRuntimeCatalog(bool commit);
+static bool StateWriteRuntimeCatalog(bool commit, const char* exclude_key);
 static bool StatePersistRuntimeCatalog();
+static bool StateBuildRuntimeCatalog(String& manifest, const char* exclude_key);
+static bool StateHasPendingValue(const char* storage_key);
+static void StateDiscardPendingValue(const char* storage_key);
 static void StateClearPendingSlotLocked(HxStatePendingSlot* slot);
 static void StateResetPendingBuffer();
 static int StateFindPendingSlotIndexLocked(const char* storage_key);
@@ -541,6 +544,35 @@ static int StateFindPendingSlotIndexLocked(const char* storage_key) {
   return -1;
 }
 
+static bool StateHasPendingValue(const char* storage_key) {
+  if (!storage_key || !storage_key[0]) {
+    return false;
+  }
+
+  bool found = false;
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+  found = (StateFindPendingSlotIndexLocked(storage_key) >= 0);
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+
+  return found;
+}
+
+static void StateDiscardPendingValue(const char* storage_key) {
+  if (!storage_key || !storage_key[0]) {
+    return;
+  }
+
+  taskENTER_CRITICAL(&g_state_pending_mux);
+
+  int index = StateFindPendingSlotIndexLocked(storage_key);
+  if (index >= 0) {
+    StateClearPendingSlotLocked(&g_state_pending[index]);
+  }
+
+  taskEXIT_CRITICAL(&g_state_pending_mux);
+}
+
 static int StateFindFreePendingSlotLocked() {
   for (size_t i = 0; i < HX_STATE_PENDING_MAX; i++) {
     if (!g_state_pending[i].used) {
@@ -936,11 +968,16 @@ static void StateClearCommittedPendingItems(const HxStatePendingCommitItem* item
 }
 
 static bool StatePersistRuntimeCatalog() {
-  if (!StateWriteRuntimeCatalog(false)) {
+  if (!StateWriteRuntimeCatalog(false, nullptr)) {
     return false;
   }
 
-  return StateCommit();
+  if (!StateCommit()) {
+    StateDiscardPendingValue(HX_STATE_CATALOG_KEY);
+    return false;
+  }
+
+  return true;
 }
 
 static bool StateDefsCompatible(const HxStateKeyDef* existing, const HxStateKeyDef* requested) {
@@ -1068,7 +1105,7 @@ static bool StateInsertRuntimeDef(const HxStateKeyDef* def, bool persist_catalog
   return true;
 }
 
-static bool StateBuildRuntimeCatalog(String& manifest) {
+static bool StateBuildRuntimeCatalog(String& manifest, const char* exclude_key) {
   manifest = "";
   manifest.reserve(HX_STATE_CATALOG_RESERVE);
 
@@ -1097,6 +1134,10 @@ static bool StateBuildRuntimeCatalog(String& manifest) {
       continue;
     }
 
+    if (exclude_key && exclude_key[0] && (strcmp(key_copy, exclude_key) == 0)) {
+      continue;
+    }
+
     uint16_t catalog_flags = StateRuntimeCatalogFlags(def_copy.flags);
 
     char line[HX_STATE_CATALOG_LINE_MAX];
@@ -1121,13 +1162,13 @@ static bool StateBuildRuntimeCatalog(String& manifest) {
   return true;
 }
 
-static bool StateWriteRuntimeCatalog(bool commit) {
+static bool StateWriteRuntimeCatalog(bool commit, const char* exclude_key) {
   if (!g_state_ready) {
     return false;
   }
 
   String manifest;
-  if (!StateBuildRuntimeCatalog(manifest)) {
+  if (!StateBuildRuntimeCatalog(manifest, exclude_key)) {
     return false;
   }
 
@@ -1428,7 +1469,25 @@ bool StateDelete(const char* key) {
     return false;
   }
 
+  if (StateHasPendingValue(storage_key) || StateHasPendingValue(HX_STATE_CATALOG_KEY)) {
+    if (!StateCommit()) {
+      return false;
+    }
+  }
+
   if (!StateStagePendingEraseValue(storage_key)) {
+    return false;
+  }
+
+  if (!StateWriteRuntimeCatalog(false, key)) {
+    StateDiscardPendingValue(storage_key);
+    StateDiscardPendingValue(HX_STATE_CATALOG_KEY);
+    return false;
+  }
+
+  if (!StateCommit()) {
+    StateDiscardPendingValue(storage_key);
+    StateDiscardPendingValue(HX_STATE_CATALOG_KEY);
     return false;
   }
 
@@ -1442,8 +1501,7 @@ bool StateDelete(const char* key) {
   taskEXIT_CRITICAL(&g_state_registry_mux);
 
   HX_LOGD("STA", "delete runtime key=%s", key);
-
-  return StatePersistRuntimeCatalog();
+  return true;
 }
 
 bool StateExists(const char* key) {
