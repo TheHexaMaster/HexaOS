@@ -338,7 +338,7 @@ static HxCmdStatus CmdLogStats(const char* args, HxCmdOutput* out) {
 
 static HxCmdStatus CmdListConfig(const char* args, HxCmdOutput* out) {
   if (CmdSkipWs(args)[0] != '\0') {
-    CmdOutWriteLine(out, "usage: listcfg");
+    CmdOutWriteLine(out, "usage: config list");
     return HX_CMD_USAGE;
   }
 
@@ -359,7 +359,7 @@ static HxCmdStatus CmdReadConfig(const char* args, HxCmdOutput* out) {
   char key[64];
 
   if (!CmdExtractSingleKey(args, key, sizeof(key))) {
-    CmdOutWriteLine(out, "usage: readcfg <key>");
+    CmdOutWriteLine(out, "usage: config read <key>");
     return HX_CMD_USAGE;
   }
 
@@ -378,7 +378,7 @@ static HxCmdStatus CmdSetConfig(const char* args, HxCmdOutput* out) {
   const char* value = nullptr;
 
   if (!CmdSplitKeyValue(args, key, sizeof(key), &value)) {
-    CmdOutWriteLine(out, "usage: setcfg <key> <value>");
+    CmdOutWriteLine(out, "usage: config set <key> <value>");
     return HX_CMD_USAGE;
   }
 
@@ -440,7 +440,7 @@ static HxCmdStatus CmdToggleConfig(const char* args, HxCmdOutput* out) {
 
 static HxCmdStatus CmdSaveConfig(const char* args, HxCmdOutput* out) {
   if (CmdSkipWs(args)[0] != '\0') {
-    CmdOutWriteLine(out, "usage: savecfg");
+    CmdOutWriteLine(out, "usage: config save");
     return HX_CMD_USAGE;
   }
 
@@ -455,7 +455,7 @@ static HxCmdStatus CmdSaveConfig(const char* args, HxCmdOutput* out) {
 
 static HxCmdStatus CmdLoadConfig(const char* args, HxCmdOutput* out) {
   if (CmdSkipWs(args)[0] != '\0') {
-    CmdOutWriteLine(out, "usage: loadcfg");
+    CmdOutWriteLine(out, "usage: config load");
     return HX_CMD_USAGE;
   }
 
@@ -471,7 +471,7 @@ static HxCmdStatus CmdLoadConfig(const char* args, HxCmdOutput* out) {
 
 static HxCmdStatus CmdDefaultConfig(const char* args, HxCmdOutput* out) {
   if (CmdSkipWs(args)[0] != '\0') {
-    CmdOutWriteLine(out, "usage: defaultcfg");
+    CmdOutWriteLine(out, "usage: config factorydefault");
     return HX_CMD_USAGE;
   }
 

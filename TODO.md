@@ -35,3 +35,4 @@
 - Webserver (start of development)
 - OTA handling
 - DEBUG - We need console based LOW-LEVEL debugger, capable to call introspect <read/write> <iram/psram/flash/pointer> at selected <hex address> and return/write selected bytes <1,2,4,8,16,32,64...>. Return bytes in HEX. It shall be RAW debugger without any protection (in debug mode, crashes are acceptable.)
+- FreeRTOS adapter for convience async handling with priority and task management covered under HexaOS.
