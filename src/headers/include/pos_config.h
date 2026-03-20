@@ -39,8 +39,13 @@ enum HxStateFlags : uint16_t {
   HX_STATE_FLAG_PERSISTENT      = 1 << 0,
   HX_STATE_FLAG_CONSOLE_VISIBLE = 1 << 1,
   HX_STATE_FLAG_API_VISIBLE     = 1 << 2,
-  HX_STATE_FLAG_READONLY        = 1 << 3,
+  HX_STATE_FLAG_WRITE_RESTRICTED = 1 << 3,
   HX_STATE_FLAG_RUNTIME         = 1 << 4
+};
+
+enum HxStateWriteSource : uint8_t {
+  HX_STATE_WRITE_SOURCE_USER = 0,
+  HX_STATE_WRITE_SOURCE_SYSTEM = 1
 };
 
 
@@ -161,7 +166,7 @@ HX_CONFIG_SCHEMA(HX_CFG_KEY_DECLARE)
 
 #undef HX_CFG_KEY_DECLARE
 
-#define HX_STATE_KEY_DECLARE(id, key_text, type_id, min_i32, max_i32, max_len, console_visible) \
+#define HX_STATE_KEY_DECLARE(id, key_text, type_id, min_i32, max_i32, max_len, console_visible, write_restricted) \
   static constexpr const char* HX_STATE_##id = key_text;
 
 HX_STATE_SCHEMA(HX_STATE_KEY_DECLARE)

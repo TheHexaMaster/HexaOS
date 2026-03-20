@@ -82,6 +82,7 @@ static uint32_t g_state_pending_seq = 0;
 
 static void StateResetCommitWindow();
 static uint32_t StateGetCommitDelayMs();
+static bool StateIsWriteAllowed(const HxStateKeyDef* def, HxStateWriteSource source);
 static void StateArmCommitWindow();
 static void StateRearmCommitWindow(uint32_t delay_ms);
 static bool StateScheduleCommit();
@@ -97,6 +98,11 @@ static bool StateStagePendingBoolValue(const char* storage_key, bool value);
 static bool StateStagePendingIntValue(const char* storage_key, int32_t value);
 static bool StateStagePendingStringValue(const char* storage_key, const char* value);
 static bool StateStagePendingEraseValue(const char* storage_key);
+static bool StateEraseEx(const char* key, HxStateWriteSource source);
+static bool StateSetValueFromStringEx(const HxStateKeyDef* item, const char* value, HxStateWriteSource source);
+static bool StateSetBoolEx(const char* key, bool value, HxStateWriteSource source);
+static bool StateSetIntEx(const char* key, int32_t value, HxStateWriteSource source);
+static bool StateSetStringEx(const char* key, const char* value, HxStateWriteSource source);
 static bool StateReadPendingBool(const char* storage_key, bool* handled, bool* value_out);
 static bool StateReadPendingInt(const char* storage_key, bool* handled, int32_t* value_out);
 static bool StateReadPendingString(const char* storage_key, bool* handled, char* out, size_t out_size, size_t max_len);
@@ -107,14 +113,14 @@ static size_t StatePendingCountLocked();
 bool StateCommit();
 
 static const HxStateKeyDef kHxStaticStateKeys[] = {
-#define HX_STATE_ITEM(id, key_text, type_id, min_i32_value, max_i32_value, max_len_value, console_visible_value) \
+#define HX_STATE_ITEM(id, key_text, type_id, min_i32_value, max_i32_value, max_len_value, console_visible_value, write_restricted_value) \
   { \
     .key = key_text, \
     .type = type_id, \
     .min_i32 = (int32_t)(min_i32_value), \
     .max_i32 = (int32_t)(max_i32_value), \
     .max_len = (size_t)(max_len_value), \
-    .flags = (uint16_t)(HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE | ((console_visible_value) ? HX_STATE_FLAG_CONSOLE_VISIBLE : 0)), \
+    .flags = (uint16_t)(HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE | ((console_visible_value) ? HX_STATE_FLAG_CONSOLE_VISIBLE : 0) | ((write_restricted_value) ? HX_STATE_FLAG_WRITE_RESTRICTED : 0)), \
     .console_visible = (console_visible_value), \
     .owner = HX_STATE_OWNER_STATIC \
   },
@@ -395,6 +401,18 @@ static bool StateParseIntText(const char* text, int32_t* value_out) {
 }
 
 static bool StateSaveRuntimeCatalog();
+
+static bool StateIsWriteAllowed(const HxStateKeyDef* def, HxStateWriteSource source) {
+  if (!def) {
+    return false;
+  }
+
+  if ((def->flags & HX_STATE_FLAG_WRITE_RESTRICTED) && (source != HX_STATE_WRITE_SOURCE_SYSTEM)) {
+    return false;
+  }
+
+  return true;
+}
 
 static uint32_t StateGetCommitDelayMs() {
   int32_t delay_ms = (int32_t)HX_CONFIG_DEFAULT_STATE_DELAY;
@@ -1365,7 +1383,7 @@ bool StateCreate(const char* key,
     case HX_SCHEMA_VALUE_BOOL: {
       bool current = false;
       if (!StateReadBool(key, &current)) {
-        if (!StateSetBool(key, false)) {
+        if (!StateSetBoolEx(key, false, HX_STATE_WRITE_SOURCE_SYSTEM)) {
           StateDelete(key);
           return false;
         }
@@ -1376,7 +1394,7 @@ bool StateCreate(const char* key,
     case HX_SCHEMA_VALUE_INT32: {
       int32_t current = 0;
       if (!StateReadInt(key, &current)) {
-        if (!StateSetInt(key, 0)) {
+        if (!StateSetIntEx(key, 0, HX_STATE_WRITE_SOURCE_SYSTEM)) {
           StateDelete(key);
           return false;
         }
@@ -1387,7 +1405,7 @@ bool StateCreate(const char* key,
     case HX_SCHEMA_VALUE_STRING: {
       char current[2];
       if (!StateReadString(key, current, sizeof(current))) {
-        if (!StateSetString(key, "")) {
+        if (!StateSetStringEx(key, "", HX_STATE_WRITE_SOURCE_SYSTEM)) {
           StateDelete(key);
           return false;
         }
@@ -1474,7 +1492,7 @@ bool StateExists(const char* key) {
   return StateFindKey(key) != nullptr;
 }
 
-bool StateErase(const char* key) {
+static bool StateEraseEx(const char* key, HxStateWriteSource source) {
   if (!g_state_ready) {
     return false;
   }
@@ -1486,7 +1504,7 @@ bool StateErase(const char* key) {
     return false;
   }
 
-  if (def->flags & HX_STATE_FLAG_READONLY) {
+  if (!StateIsWriteAllowed(def, source)) {
     return false;
   }
 
@@ -1534,7 +1552,7 @@ bool StateValueToString(const HxStateKeyDef* item, char* out, size_t out_size) {
   }
 }
 
-bool StateSetValueFromString(const HxStateKeyDef* item, const char* value) {
+static bool StateSetValueFromStringEx(const HxStateKeyDef* item, const char* value, HxStateWriteSource source) {
   if (!item || !value) {
     return false;
   }
@@ -1546,7 +1564,7 @@ bool StateSetValueFromString(const HxStateKeyDef* item, const char* value) {
         return false;
       }
 
-      return StateSetBool(item->key, parsed);
+      return StateSetBoolEx(item->key, parsed, source);
     }
 
     case HX_SCHEMA_VALUE_INT32: {
@@ -1555,11 +1573,11 @@ bool StateSetValueFromString(const HxStateKeyDef* item, const char* value) {
         return false;
       }
 
-      return StateSetInt(item->key, parsed);
+      return StateSetIntEx(item->key, parsed, source);
     }
 
     case HX_SCHEMA_VALUE_STRING:
-      return StateSetString(item->key, value);
+      return StateSetStringEx(item->key, value, source);
 
     default:
       return false;
@@ -1572,7 +1590,7 @@ bool StateWriteFromString(const char* key, const char* value) {
     return false;
   }
 
-  return StateSetValueFromString(item, value);
+  return StateSetValueFromStringEx(item, value, HX_STATE_WRITE_SOURCE_USER);
 }
 
 bool StateInit() {
@@ -1601,7 +1619,7 @@ bool StateLoad() {
   Hx.state_loaded = true;
   Hx.boot_count = (uint32_t)(StateGetIntOr(HX_STATE_BOOT_COUNT, 0) + 1);
 
-  if (!StateSetInt(HX_STATE_BOOT_COUNT, (int32_t)Hx.boot_count)) {
+  if (!StateSetIntEx(HX_STATE_BOOT_COUNT, (int32_t)Hx.boot_count, HX_STATE_WRITE_SOURCE_SYSTEM)) {
     LogWarn("STA: boot_count store failed");
   }
 
@@ -1920,7 +1938,7 @@ bool StateGetStringOr(const char* key, char* out, size_t out_size, const char* d
   return false;
 }
 
-bool StateSetBool(const char* key, bool value) {
+static bool StateSetBoolEx(const char* key, bool value, HxStateWriteSource source) {
   if (!g_state_ready) {
     return false;
   }
@@ -1936,7 +1954,7 @@ bool StateSetBool(const char* key, bool value) {
     return false;
   }
 
-  if (def->flags & HX_STATE_FLAG_READONLY) {
+  if (!StateIsWriteAllowed(def, source)) {
     return false;
   }
 
@@ -1948,7 +1966,7 @@ bool StateSetBool(const char* key, bool value) {
   return StateScheduleCommit();
 }
 
-bool StateSetInt(const char* key, int32_t value) {
+static bool StateSetIntEx(const char* key, int32_t value, HxStateWriteSource source) {
   if (!g_state_ready) {
     return false;
   }
@@ -1964,7 +1982,7 @@ bool StateSetInt(const char* key, int32_t value) {
     return false;
   }
 
-  if (def->flags & HX_STATE_FLAG_READONLY) {
+  if (!StateIsWriteAllowed(def, source)) {
     return false;
   }
 
@@ -1980,7 +1998,7 @@ bool StateSetInt(const char* key, int32_t value) {
   return StateScheduleCommit();
 }
 
-bool StateSetString(const char* key, const char* value) {
+static bool StateSetStringEx(const char* key, const char* value, HxStateWriteSource source) {
   if (!g_state_ready || !value) {
     return false;
   }
@@ -1996,7 +2014,7 @@ bool StateSetString(const char* key, const char* value) {
     return false;
   }
 
-  if (def->flags & HX_STATE_FLAG_READONLY) {
+  if (!StateIsWriteAllowed(def, source)) {
     return false;
   }
 
@@ -2011,6 +2029,26 @@ bool StateSetString(const char* key, const char* value) {
 
   HX_LOGD("STA", "stage string key=%s len=%lu", def->key, (unsigned long)len);
   return StateScheduleCommit();
+}
+
+bool StateErase(const char* key) {
+  return StateEraseEx(key, HX_STATE_WRITE_SOURCE_USER);
+}
+
+bool StateSetValueFromString(const HxStateKeyDef* item, const char* value) {
+  return StateSetValueFromStringEx(item, value, HX_STATE_WRITE_SOURCE_USER);
+}
+
+bool StateSetBool(const char* key, bool value) {
+  return StateSetBoolEx(key, value, HX_STATE_WRITE_SOURCE_USER);
+}
+
+bool StateSetInt(const char* key, int32_t value) {
+  return StateSetIntEx(key, value, HX_STATE_WRITE_SOURCE_USER);
+}
+
+bool StateSetString(const char* key, const char* value) {
+  return StateSetStringEx(key, value, HX_STATE_WRITE_SOURCE_USER);
 }
 
 bool StateIncrementInt(const char* key, int32_t* new_value_out) {
@@ -2029,7 +2067,7 @@ bool StateIncrementInt(const char* key, int32_t* new_value_out) {
   }
 
   int32_t next = current + 1;
-  if (!StateSetInt(key, next)) {
+  if (!StateSetIntEx(key, next, HX_STATE_WRITE_SOURCE_USER)) {
     return false;
   }
 
@@ -2056,7 +2094,7 @@ bool StateDecrementInt(const char* key, int32_t* new_value_out) {
   }
 
   int32_t next = current - 1;
-  if (!StateSetInt(key, next)) {
+  if (!StateSetIntEx(key, next, HX_STATE_WRITE_SOURCE_USER)) {
     return false;
   }
 
@@ -2079,7 +2117,7 @@ bool StateToggleBool(const char* key, bool* new_value_out) {
   }
 
   bool next = !current;
-  if (!StateSetBool(key, next)) {
+  if (!StateSetBoolEx(key, next, HX_STATE_WRITE_SOURCE_USER)) {
     return false;
   }
 

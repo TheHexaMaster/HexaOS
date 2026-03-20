@@ -8,11 +8,12 @@
 - [x] STATES - Console / module persistence question to solve
 - [x] STATES - Cashing handler / save delay, settable in config settings (to protect NVS from too-fast write cycles, suggested minimum - 1s). Per NVS.
 - [x] STATES - Added DEBUG logs in new logging format
-- [ ] STATES - Add state format (total NVS delete to factory state) and state info commands (NVS statistics - space, filled, operations etc)
-- [ ] CONFIG - Full review of mechanism for future usage
-- [ ] CONFIG - Refactor of console commands to config xxx
-- [ ] CONFIG - Authority / ownership model. 
-- [ ] CONFIG - Registration of RUNTIME configs by different modules (need to decide if they will be generated at build OR runtime at first init - question of "defaults" and conflicts?)
+- [x] STATES - Add state format (total NVS delete to factory state) and state info commands (NVS statistics - space, filled, operations etc)
+- [x] STATES - Define write restriction flag for build-generated states. If true, user / runtime EXCEPT system self cannot change the value. 
+- [ ] STATES - Refactor ownership system - no strings, only enums and different logic.
+- [ ] STATES - Stable and tested release.
+- [ ] CONFIG - Rebuild only AS system (at build) hosted mechanism for configs AND some necessary system counters (reboot counter, last reboot etc). Configs cannot be created / deleted by runtime - only changed by specific rules.
+- [ ] FACTORY NVS - Because of lack of use, this NVS will be deleted and not supported in later models. 
 - [ ] CONSOLE - Now we have defined only SERIAL console trought HWCDC / JTAG build selector. Need to add typical SERIAL UART as a build selector option (possible serial fallback as optional setting from config with default false.)
 - [ ] LOG - Add 5th log level - "LLD", displayng Low Level Debug Messages
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling

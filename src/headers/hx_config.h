@@ -28,8 +28,8 @@
 
 
 #define HX_STATE_SCHEMA(X) \
-  X(BOOT_COUNT,         "sys.boot_count",     HX_SCHEMA_VALUE_INT32,  0, INT32_MAX, 0,  true) \
-  X(LAST_RESET,         "sys.last_reset",     HX_SCHEMA_VALUE_STRING, 0, 0,         32, true)
+  X(BOOT_COUNT,         "sys.boot_count",     HX_SCHEMA_VALUE_INT32,  0, INT32_MAX, 0,  true, true) \
+  X(LAST_RESET,         "sys.last_reset",     HX_SCHEMA_VALUE_STRING, 0, 0,         32, true, true)
 
 
 
