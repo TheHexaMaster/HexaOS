@@ -12,6 +12,7 @@
 */
 
 #include "hexaos.h"
+#include "headers/hx_rtos.h"
 #include "system/adapters/console_adapter.h"
 #include "system/commands/command_engine.h"
 
@@ -22,13 +23,21 @@ static constexpr size_t HX_CONSOLE_LINE_MAX = 128;
 static constexpr const char* HX_CONSOLE_PROMPT = "hx> ";
 static constexpr size_t HX_CONSOLE_PROMPT_LEN = 4;
 
-static portMUX_TYPE g_console_state_mux = portMUX_INITIALIZER_UNLOCKED;
+static HxRtosCritical g_console_state_critical = HX_RTOS_CRITICAL_INIT;
 
 static char g_console_line[HX_CONSOLE_LINE_MAX];
 static size_t g_console_len = 0;
 static bool g_console_overflow = false;
 static bool g_last_was_cr = false;
 static bool g_console_editing_active = false;
+
+static void ConsoleStateEnter() {
+  RtosCriticalEnter(&g_console_state_critical);
+}
+
+static void ConsoleStateExit() {
+  RtosCriticalExit(&g_console_state_critical);
+}
 
 static void ConsoleCommandWriteRaw(void* user, const char* text) {
   (void)user;
@@ -48,24 +57,24 @@ static HxCmdOutput g_console_cmd_output = {
 };
 
 static void ConsoleSetEditingActive(bool active) {
-  taskENTER_CRITICAL(&g_console_state_mux);
+  ConsoleStateEnter();
   g_console_editing_active = active;
-  taskEXIT_CRITICAL(&g_console_state_mux);
+  ConsoleStateExit();
 }
 
 static void ConsoleClearLine() {
-  taskENTER_CRITICAL(&g_console_state_mux);
+  ConsoleStateEnter();
   memset(g_console_line, 0, sizeof(g_console_line));
   g_console_len = 0;
   g_console_overflow = false;
-  taskEXIT_CRITICAL(&g_console_state_mux);
+  ConsoleStateExit();
 }
 
 static bool ConsoleSnapshotLine(char* out, size_t out_size, size_t* out_len) {
   bool active;
   size_t len;
 
-  taskENTER_CRITICAL(&g_console_state_mux);
+  ConsoleStateEnter();
   active = g_console_editing_active;
   len = g_console_len;
 
@@ -79,7 +88,7 @@ static bool ConsoleSnapshotLine(char* out, size_t out_size, size_t* out_len) {
     len = copy_len;
   }
 
-  taskEXIT_CRITICAL(&g_console_state_mux);
+  ConsoleStateExit();
 
   if (out_len) {
     *out_len = len;
@@ -91,7 +100,7 @@ static bool ConsoleSnapshotLine(char* out, size_t out_size, size_t* out_len) {
 static bool ConsoleAppendChar(char ch) {
   bool accepted = false;
 
-  taskENTER_CRITICAL(&g_console_state_mux);
+  ConsoleStateEnter();
 
   if (!g_console_overflow && (g_console_len < (HX_CONSOLE_LINE_MAX - 1))) {
     g_console_line[g_console_len++] = ch;
@@ -101,14 +110,14 @@ static bool ConsoleAppendChar(char ch) {
     g_console_overflow = true;
   }
 
-  taskEXIT_CRITICAL(&g_console_state_mux);
+  ConsoleStateExit();
   return accepted;
 }
 
 static bool ConsoleBackspace() {
   bool removed = false;
 
-  taskENTER_CRITICAL(&g_console_state_mux);
+  ConsoleStateEnter();
 
   if (!g_console_overflow && (g_console_len > 0)) {
     g_console_len--;
@@ -116,7 +125,7 @@ static bool ConsoleBackspace() {
     removed = true;
   }
 
-  taskEXIT_CRITICAL(&g_console_state_mux);
+  ConsoleStateExit();
   return removed;
 }
 
@@ -161,7 +170,7 @@ static void ConsoleHandleLine() {
   bool overflow;
   size_t len;
 
-  taskENTER_CRITICAL(&g_console_state_mux);
+  ConsoleStateEnter();
   overflow = g_console_overflow;
   len = g_console_len;
   if (len >= sizeof(line)) {
@@ -169,10 +178,10 @@ static void ConsoleHandleLine() {
   }
   memcpy(line, g_console_line, len);
   line[len] = '\0';
-  taskEXIT_CRITICAL(&g_console_state_mux);
+  ConsoleStateExit();
 
   if (overflow) {
-    LogWarn("CON: input too long");
+    HX_LOGW("CON", "input too long");
     ConsoleClearLine();
     ConsolePrompt();
     return;
@@ -241,15 +250,20 @@ static void ConsoleReadSerial() {
 }
 
 static bool ConsoleInit() {
+  if (!RtosCriticalReady(&g_console_state_critical) && !RtosCriticalInit(&g_console_state_critical)) {
+    HX_LOGE("CON", "state critical init failed");
+    return false;
+  }
+
   ConsoleClearLine();
   ConsoleSetEditingActive(false);
   LogSetSinkLineHooks(ConsoleOnSinkLockedPreWriteLine, ConsoleOnSinkLockedPostWriteLine);
-  LogInfo("CON: init");
+  HX_LOGI("CON", "init");
   return true;
 }
 
 static void ConsoleStart() {
-  LogInfo("CON: start. Use help command to list avaliable commands.");
+  HX_LOGI("CON", "start. Use help command to list available commands.");
   ConsolePrompt();
 }
 

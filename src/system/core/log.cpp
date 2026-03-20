@@ -12,20 +12,17 @@
 */
 
 #include "hexaos.h"
+#include "headers/hx_rtos.h"
 #include "system/adapters/console_adapter.h"
 
 #include <stdio.h>
 #include <string.h>
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-
 static constexpr size_t HX_LOG_LINE_MAX = 256;
 static constexpr size_t HX_LOG_HISTORY_BYTES = 8192;
 
-static portMUX_TYPE g_log_state_mux = portMUX_INITIALIZER_UNLOCKED;
-static StaticSemaphore_t g_log_sink_mutex_buf;
-static SemaphoreHandle_t g_log_sink_mutex = nullptr;
+static HxRtosCritical g_log_state_critical = HX_RTOS_CRITICAL_INIT;
+static HxRtosMutex g_log_sink_mutex = HX_RTOS_MUTEX_INIT;
 
 static volatile HxLogLevel g_log_level = HX_LOG_INFO;
 static char g_log_history[HX_LOG_HISTORY_BYTES];
@@ -37,8 +34,16 @@ static uint32_t g_log_dropped_isr = 0;
 static HxLogSinkLineHook g_log_sink_pre_line_hook = nullptr;
 static HxLogSinkLineHook g_log_sink_post_line_hook = nullptr;
 
+static void LogStateEnter() {
+  RtosCriticalEnter(&g_log_state_critical);
+}
+
+static void LogStateExit() {
+  RtosCriticalExit(&g_log_state_critical);
+}
+
 static void LogGetSinkLineHooks(HxLogSinkLineHook* pre_write_line, HxLogSinkLineHook* post_write_line) {
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
 
   if (pre_write_line) {
     *pre_write_line = g_log_sink_pre_line_hook;
@@ -48,7 +53,7 @@ static void LogGetSinkLineHooks(HxLogSinkLineHook* pre_write_line, HxLogSinkLine
     *post_write_line = g_log_sink_post_line_hook;
   }
 
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
 }
 
 static const char* LogLevelText(HxLogLevel level) {
@@ -62,25 +67,25 @@ static const char* LogLevelText(HxLogLevel level) {
 }
 
 static bool LogIsInIsr() {
-  return xPortInIsrContext();
+  return RtosInIsr();
 }
 
 static void LogRecordIsrDrop() {
-  taskENTER_CRITICAL_ISR(&g_log_state_mux);
+  LogStateEnter();
   g_log_dropped_isr++;
-  taskEXIT_CRITICAL_ISR(&g_log_state_mux);
+  LogStateExit();
 }
 
 static bool LogShouldWrite(HxLogLevel level) {
   HxLogLevel current;
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
   current = g_log_level;
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
   return level <= current;
 }
 
 static bool LogTakeSinkLock() {
-  if (!g_log_sink_mutex) {
+  if (!RtosMutexReady(&g_log_sink_mutex)) {
     return true;
   }
 
@@ -88,11 +93,11 @@ static bool LogTakeSinkLock() {
     return false;
   }
 
-  return (xSemaphoreTake(g_log_sink_mutex, portMAX_DELAY) == pdTRUE);
+  return RtosMutexLock(&g_log_sink_mutex, HX_RTOS_WAIT_FOREVER);
 }
 
 static void LogGiveSinkLock() {
-  if (!g_log_sink_mutex) {
+  if (!RtosMutexReady(&g_log_sink_mutex)) {
     return;
   }
 
@@ -100,7 +105,7 @@ static void LogGiveSinkLock() {
     return;
   }
 
-  xSemaphoreGive(g_log_sink_mutex);
+  RtosMutexUnlock(&g_log_sink_mutex);
 }
 
 static void LogHistoryDropOldestByteLocked() {
@@ -153,10 +158,10 @@ static void LogStoreLine(const char* line) {
     return;
   }
 
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
   LogHistoryAppendLocked(line, strlen(line));
   LogHistoryAppendLocked("\n", 1);
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
 }
 
 static void LogEmitLine(const char* line) {
@@ -302,8 +307,12 @@ static void LogWriteV(HxLogLevel level, const char* tag, const char* fmt, va_lis
 void LogInit() {
   ConsoleAdapterInit();
 
-  if (!g_log_sink_mutex) {
-    g_log_sink_mutex = xSemaphoreCreateMutexStatic(&g_log_sink_mutex_buf);
+  if (!RtosCriticalReady(&g_log_state_critical)) {
+    RtosCriticalInit(&g_log_state_critical);
+  }
+
+  if (!RtosMutexReady(&g_log_sink_mutex)) {
+    RtosMutexInit(&g_log_sink_mutex);
   }
 
   LogHistoryClear();
@@ -317,23 +326,23 @@ void LogInit() {
 }
 
 void LogSetSinkLineHooks(HxLogSinkLineHook pre_write_line, HxLogSinkLineHook post_write_line) {
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
   g_log_sink_pre_line_hook = pre_write_line;
   g_log_sink_post_line_hook = post_write_line;
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
 }
 
 void LogSetLevel(HxLogLevel level) {
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
   g_log_level = level;
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
 }
 
 HxLogLevel LogGetLevel() {
   HxLogLevel level;
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
   level = g_log_level;
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
   return level;
 }
 
@@ -378,9 +387,9 @@ void LogTagged(HxLogLevel level, const char* tag, const char* fmt, ...) {
 
 size_t LogHistorySize() {
   size_t used;
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
   used = g_log_used;
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
   return used;
 }
 
@@ -395,10 +404,10 @@ size_t LogHistoryCopy(char* out, size_t out_size) {
 
   out[0] = '\0';
 
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
 
   if (g_log_used == 0) {
-    taskEXIT_CRITICAL(&g_log_state_mux);
+    LogStateExit();
     return 0;
   }
 
@@ -425,33 +434,33 @@ size_t LogHistoryCopy(char* out, size_t out_size) {
 
   out[copy_len] = '\0';
 
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
   return copy_len;
 }
 
 void LogHistoryClear() {
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
   memset(g_log_history, 0, sizeof(g_log_history));
   g_log_head = 0;
   g_log_tail = 0;
   g_log_used = 0;
   g_log_dropped_lines = 0;
   g_log_dropped_isr = 0;
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
 }
 
 uint32_t LogDroppedLines() {
   uint32_t dropped;
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
   dropped = g_log_dropped_lines;
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
   return dropped;
 }
 
 uint32_t LogDroppedIsr() {
   uint32_t dropped;
-  taskENTER_CRITICAL(&g_log_state_mux);
+  LogStateEnter();
   dropped = g_log_dropped_isr;
-  taskEXIT_CRITICAL(&g_log_state_mux);
+  LogStateExit();
   return dropped;
 }

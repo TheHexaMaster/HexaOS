@@ -67,6 +67,11 @@ void RtosAdapterCriticalEnter(HxRtosCritical* critical) {
   }
 
   HxRtosAdapterCriticalImpl* impl = static_cast<HxRtosAdapterCriticalImpl*>(critical->impl);
+  if (RtosAdapterInIsr()) {
+    taskENTER_CRITICAL_ISR(&impl->mux);
+    return;
+  }
+
   taskENTER_CRITICAL(&impl->mux);
 }
 
@@ -76,6 +81,11 @@ void RtosAdapterCriticalExit(HxRtosCritical* critical) {
   }
 
   HxRtosAdapterCriticalImpl* impl = static_cast<HxRtosAdapterCriticalImpl*>(critical->impl);
+  if (RtosAdapterInIsr()) {
+    taskEXIT_CRITICAL_ISR(&impl->mux);
+    return;
+  }
+
   taskEXIT_CRITICAL(&impl->mux);
 }
 

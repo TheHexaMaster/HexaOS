@@ -19,7 +19,7 @@
 - [x] CONFIG - Refactor to pre-final logic and test.
 - [x] LITTLEFS - Extend adapter with complex funcs to manage FS - initial commit. Need deep refactor, test and optim.
 - [x] RTOS - Create adapter and handler for convience async handling with priority and task management covered under HexaOS.
-- [ ] RTOS - Integration PART 1 - update to existing modules using RTOS external unmanaged calls - log an console
+- [x] RTOS - Integration PART 1 - update to existing modules using RTOS external unmanaged calls - log an console
 - [ ] RTOS - REfactor - move from handler to core without using build selector - native RTOS core implementation. This way core RTOS can manage different RTOS adapters in future. 
 - [ ] RTOS - Integration PART 2 - update to existing modules using RTOS external unmanaged calls - NVS config and STATE. 
 - [ ] TIME - We need to create central time engine / interface prepared to operate from RTC and timming for events, synchronysing from internal RTC modules (i2c driver) and NTP sync (prepare, web interface later)
