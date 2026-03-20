@@ -35,6 +35,23 @@ struct HxConfigKeyDef {
   bool console_writable;
 };
 
+struct HxConfigStorageInfo {
+  bool ready;
+  bool loaded;
+  const char* partition_label;
+  const char* namespace_name;
+  size_t entry_size_bytes;
+  size_t total_key_count;
+  size_t visible_key_count;
+  size_t writable_key_count;
+  size_t overridden_key_count;
+  size_t partition_entries_used;
+  size_t partition_entries_free;
+  size_t partition_entries_available;
+  size_t partition_entries_total;
+  size_t namespace_entries_used;
+};
+
 enum HxStateFlags : uint16_t {
   HX_STATE_FLAG_NONE            = 0,
   HX_STATE_FLAG_PERSISTENT      = 1 << 0,
@@ -95,6 +112,9 @@ bool ConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size)
 bool ConfigDefaultToString(const HxConfigKeyDef* item, char* out, size_t out_size);
 bool ConfigSetValueFromString(const HxConfigKeyDef* item, const char* value);
 bool ConfigResetValue(const HxConfigKeyDef* item);
+bool ConfigToggleBool(const HxConfigKeyDef* item, bool* new_value_out);
+bool ConfigGetStorageInfo(HxConfigStorageInfo* out_info);
+bool ConfigFactoryFormat();
 
 size_t StateKeyCount();
 const HxStateKeyDef* StateKeyAt(size_t index);

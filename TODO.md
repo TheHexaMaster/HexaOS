@@ -15,13 +15,13 @@
 - [x] STATES - Bugfix - catalog data inconsistency 
 - [x] FACTORY NVS - Because of lack of use, this NVS will be deleted and not supported in later models. 
 - [x] STATES and CONFIGS - added FLOAT variable definition + new TYPE SCHEME MACRO for different variables at build (XS,XI,XB,XF)
-- [ ] STATES - Stable and tested release.
-- [ ] CONFIG - Refactor to final logic and test.
-- [ ] CONSOLE - Now we have defined only SERIAL console trought HWCDC / JTAG build selector. Need to add typical SERIAL UART as a build selector option (possible serial fallback as optional setting from config with default false.)
+- [x] STATES - Stable and tested release.
+- [x] CONFIG - Refactor to pre-final logic and test.
 - [ ] LOG - Add 5th log level - "LLD", displayng Low Level Debug Messages
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling
 - [ ] LOG - Feature - color / font difference for various log levels / command inputs / outputs
 - [ ] COMMANDS - Refactor and prototype of central command register and execution buffer (callbacks, scheduling, priorites, etc)
+- [ ] CONSOLE - Now we have defined only SERIAL console trought HWCDC / JTAG build selector. Need to add typical SERIAL UART as a build selector option (possible serial fallback as optional setting from config with default false.)
 - [ ] REFACTOR - Final pre-release code refactor.
 
 ## Future versions todo by priority

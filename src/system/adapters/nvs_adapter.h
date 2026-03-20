@@ -19,10 +19,14 @@ enum HxNvsStore : uint8_t {
   HX_NVS_STORE_STATE = 1
 };
 
+enum HxNvsReadResult : uint8_t {
+  HX_NVS_READ_OK = 0,
+  HX_NVS_READ_NOT_FOUND = 1,
+  HX_NVS_READ_ERROR = 2
+};
 
 bool EspNvsOpenConfig();
 bool EspNvsOpenState();
-
 
 struct HxNvsStats {
   const char* partition_label;
@@ -33,6 +37,11 @@ struct HxNvsStats {
   size_t total_entries;
   size_t namespace_entries;
 };
+
+HxNvsReadResult HxNvsReadBool(HxNvsStore store, const char* key, bool* value);
+HxNvsReadResult HxNvsReadInt(HxNvsStore store, const char* key, int32_t* value);
+HxNvsReadResult HxNvsReadFloat(HxNvsStore store, const char* key, float* value);
+HxNvsReadResult HxNvsReadString(HxNvsStore store, const char* key, String& value);
 
 bool HxNvsGetBool(HxNvsStore store, const char* key, bool* value);
 bool HxNvsGetInt(HxNvsStore store, const char* key, int32_t* value);

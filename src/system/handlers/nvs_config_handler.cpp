@@ -22,6 +22,15 @@
 #include <strings.h>
 
 static bool g_config_ready = false;
+static portMUX_TYPE g_config_mux = portMUX_INITIALIZER_UNLOCKED;
+static constexpr size_t HX_CONFIG_NVS_ENTRY_SIZE_BYTES = 32;
+
+enum ConfigLoadItemResult : uint8_t {
+  HX_CONFIG_LOAD_ITEM_OK = 0,
+  HX_CONFIG_LOAD_ITEM_MISSING = 1,
+  HX_CONFIG_LOAD_ITEM_INVALID = 2,
+  HX_CONFIG_LOAD_ITEM_ERROR = 3
+};
 
 static void ConfigFormatFloatDisplay(char* out, size_t out_size, float value) {
   if (!out || (out_size == 0)) {
@@ -144,6 +153,35 @@ static const void* ConfigFieldPtrConst(const HxConfig* config, const HxConfigKey
   return (const void*)(reinterpret_cast<const uint8_t*>(config) + item->config_offset);
 }
 
+static void ConfigCopyCurrent(HxConfig* out_config) {
+  if (!out_config) {
+    return;
+  }
+
+  taskENTER_CRITICAL(&g_config_mux);
+  *out_config = HxConfigData;
+  taskEXIT_CRITICAL(&g_config_mux);
+}
+
+static void ConfigCommitCurrent(const HxConfig* config, bool loaded) {
+  if (!config) {
+    return;
+  }
+
+  taskENTER_CRITICAL(&g_config_mux);
+  HxConfigData = *config;
+  Hx.config_loaded = loaded;
+  taskEXIT_CRITICAL(&g_config_mux);
+}
+
+static bool ConfigLoadedFlag() {
+  bool loaded = false;
+  taskENTER_CRITICAL(&g_config_mux);
+  loaded = Hx.config_loaded;
+  taskEXIT_CRITICAL(&g_config_mux);
+  return loaded;
+}
+
 static bool ConfigParseBoolText(const char* text, bool* value) {
   if (!text || !text[0] || !value) {
     return false;
@@ -173,9 +211,18 @@ static bool ConfigParseInt32Text(const char* text, int32_t min_value, int32_t ma
     return false;
   }
 
+  errno = 0;
   char* endptr = nullptr;
   long raw = strtol(text, &endptr, 10);
-  if (!endptr || (*endptr != '\0')) {
+  if ((errno != 0) || (endptr == text)) {
+    return false;
+  }
+
+  while ((*endptr == ' ') || (*endptr == '\t')) {
+    endptr++;
+  }
+
+  if (*endptr != '\0') {
     return false;
   }
 
@@ -225,7 +272,7 @@ static bool ConfigAssignStringField(HxConfig* config, const HxConfigKeyDef* item
   }
 
   const size_t len = strlen(value);
-  if ((len == 0) || (len > item->max_len) || (item->value_size < (len + 1))) {
+  if ((len > item->max_len) || (item->value_size < (len + 1))) {
     return false;
   }
 
@@ -235,7 +282,9 @@ static bool ConfigAssignStringField(HxConfig* config, const HxConfigKeyDef* item
   }
 
   memset(field, 0, item->value_size);
-  memcpy(field, value, len);
+  if (len > 0) {
+    memcpy(field, value, len);
+  }
   field[len] = '\0';
   return true;
 }
@@ -344,55 +393,12 @@ static bool ConfigAssignValueFromString(HxConfig* config, const HxConfigKeyDef* 
   }
 }
 
-static bool ConfigReadItemFromNvs(const HxConfigKeyDef* item) {
-  if (!item) {
+static bool ConfigItemEqualsDefaultInConfig(const HxConfig* config, const HxConfigKeyDef* item) {
+  if (!config || !item) {
     return false;
   }
 
-  switch (item->type) {
-    case HX_SCHEMA_VALUE_STRING: {
-      String text_value;
-      if (!HxNvsGetString(HX_NVS_STORE_CONFIG, item->key, text_value)) {
-        return true;
-      }
-      return ConfigAssignStringField(&HxConfigData, item, text_value.c_str());
-    }
-
-    case HX_SCHEMA_VALUE_BOOL: {
-      bool bool_value = false;
-      if (!HxNvsGetBool(HX_NVS_STORE_CONFIG, item->key, &bool_value)) {
-        return true;
-      }
-      return ConfigAssignBoolField(&HxConfigData, item, bool_value);
-    }
-
-    case HX_SCHEMA_VALUE_INT32: {
-      int32_t int_value = 0;
-      if (!HxNvsGetInt(HX_NVS_STORE_CONFIG, item->key, &int_value)) {
-        return true;
-      }
-      return ConfigAssignInt32Field(&HxConfigData, item, int_value);
-    }
-
-    case HX_SCHEMA_VALUE_FLOAT: {
-      float float_value = 0.0f;
-      if (!HxNvsGetFloat(HX_NVS_STORE_CONFIG, item->key, &float_value)) {
-        return true;
-      }
-      return ConfigAssignFloatField(&HxConfigData, item, float_value);
-    }
-
-    default:
-      return false;
-  }
-}
-
-static bool ConfigItemEqualsDefault(const HxConfigKeyDef* item) {
-  if (!item) {
-    return false;
-  }
-
-  const void* current_ptr = ConfigFieldPtrConst(&HxConfigData, item);
+  const void* current_ptr = ConfigFieldPtrConst(config, item);
   const void* default_ptr = ConfigFieldPtrConst(&HxConfigDefaults, item);
   if (!current_ptr || !default_ptr) {
     return false;
@@ -416,16 +422,16 @@ static bool ConfigItemEqualsDefault(const HxConfigKeyDef* item) {
   }
 }
 
-static bool ConfigStoreItemOverride(const HxConfigKeyDef* item) {
-  if (!item) {
+static bool ConfigStoreItemOverrideFromConfig(const HxConfig* config, const HxConfigKeyDef* item) {
+  if (!config || !item) {
     return false;
   }
 
-  if (ConfigItemEqualsDefault(item)) {
+  if (ConfigItemEqualsDefaultInConfig(config, item)) {
     return HxNvsEraseKey(HX_NVS_STORE_CONFIG, item->key);
   }
 
-  const void* current_ptr = ConfigFieldPtrConst(&HxConfigData, item);
+  const void* current_ptr = ConfigFieldPtrConst(config, item);
   if (!current_ptr) {
     return false;
   }
@@ -445,6 +451,65 @@ static bool ConfigStoreItemOverride(const HxConfigKeyDef* item) {
 
     default:
       return false;
+  }
+}
+
+static ConfigLoadItemResult ConfigReadItemFromNvs(HxConfig* config, const HxConfigKeyDef* item) {
+  if (!config || !item) {
+    return HX_CONFIG_LOAD_ITEM_ERROR;
+  }
+
+  switch (item->type) {
+    case HX_SCHEMA_VALUE_STRING: {
+      String text_value;
+      HxNvsReadResult result = HxNvsReadString(HX_NVS_STORE_CONFIG, item->key, text_value);
+      if (result == HX_NVS_READ_NOT_FOUND) {
+        return HX_CONFIG_LOAD_ITEM_MISSING;
+      }
+      if (result != HX_NVS_READ_OK) {
+        return HX_CONFIG_LOAD_ITEM_ERROR;
+      }
+      return ConfigAssignStringField(config, item, text_value.c_str()) ? HX_CONFIG_LOAD_ITEM_OK : HX_CONFIG_LOAD_ITEM_INVALID;
+    }
+
+    case HX_SCHEMA_VALUE_BOOL: {
+      bool bool_value = false;
+      HxNvsReadResult result = HxNvsReadBool(HX_NVS_STORE_CONFIG, item->key, &bool_value);
+      if (result == HX_NVS_READ_NOT_FOUND) {
+        return HX_CONFIG_LOAD_ITEM_MISSING;
+      }
+      if (result != HX_NVS_READ_OK) {
+        return HX_CONFIG_LOAD_ITEM_ERROR;
+      }
+      return ConfigAssignBoolField(config, item, bool_value) ? HX_CONFIG_LOAD_ITEM_OK : HX_CONFIG_LOAD_ITEM_INVALID;
+    }
+
+    case HX_SCHEMA_VALUE_INT32: {
+      int32_t int_value = 0;
+      HxNvsReadResult result = HxNvsReadInt(HX_NVS_STORE_CONFIG, item->key, &int_value);
+      if (result == HX_NVS_READ_NOT_FOUND) {
+        return HX_CONFIG_LOAD_ITEM_MISSING;
+      }
+      if (result != HX_NVS_READ_OK) {
+        return HX_CONFIG_LOAD_ITEM_ERROR;
+      }
+      return ConfigAssignInt32Field(config, item, int_value) ? HX_CONFIG_LOAD_ITEM_OK : HX_CONFIG_LOAD_ITEM_INVALID;
+    }
+
+    case HX_SCHEMA_VALUE_FLOAT: {
+      float float_value = 0.0f;
+      HxNvsReadResult result = HxNvsReadFloat(HX_NVS_STORE_CONFIG, item->key, &float_value);
+      if (result == HX_NVS_READ_NOT_FOUND) {
+        return HX_CONFIG_LOAD_ITEM_MISSING;
+      }
+      if (result != HX_NVS_READ_OK) {
+        return HX_CONFIG_LOAD_ITEM_ERROR;
+      }
+      return ConfigAssignFloatField(config, item, float_value) ? HX_CONFIG_LOAD_ITEM_OK : HX_CONFIG_LOAD_ITEM_INVALID;
+    }
+
+    default:
+      return HX_CONFIG_LOAD_ITEM_ERROR;
   }
 }
 
@@ -479,6 +544,13 @@ void ConfigResetToDefaults(HxConfig* config) {
     return;
   }
 
+  if (config == &HxConfigData) {
+    taskENTER_CRITICAL(&g_config_mux);
+    HxConfigData = HxConfigDefaults;
+    taskEXIT_CRITICAL(&g_config_mux);
+    return;
+  }
+
   *config = HxConfigDefaults;
 }
 
@@ -489,7 +561,10 @@ bool ConfigValueToString(const HxConfigKeyDef* item, char* out, size_t out_size)
 
   out[0] = '\0';
 
-  const void* ptr = ConfigFieldPtrConst(&HxConfigData, item);
+  HxConfig snapshot{};
+  ConfigCopyCurrent(&snapshot);
+
+  const void* ptr = ConfigFieldPtrConst(&snapshot, item);
   if (!ptr) {
     return false;
   }
@@ -555,7 +630,15 @@ bool ConfigSetValueFromString(const HxConfigKeyDef* item, const char* value) {
     return false;
   }
 
-  return ConfigAssignValueFromString(&HxConfigData, item, value);
+  HxConfig next = {};
+  ConfigCopyCurrent(&next);
+  if (!ConfigAssignValueFromString(&next, item, value)) {
+    return false;
+  }
+
+  ConfigCommitCurrent(&next, ConfigLoadedFlag());
+  HX_LOGD("CFG", "set key=%s", item->key);
+  return true;
 }
 
 bool ConfigResetValue(const HxConfigKeyDef* item) {
@@ -564,60 +647,248 @@ bool ConfigResetValue(const HxConfigKeyDef* item) {
   }
 
   const void* default_ptr = ConfigFieldPtrConst(&HxConfigDefaults, item);
-  void* current_ptr = ConfigFieldPtr(&HxConfigData, item);
-  if (!default_ptr || !current_ptr || (item->value_size == 0)) {
+  if (!default_ptr || (item->value_size == 0)) {
+    return false;
+  }
+
+  HxConfig next = {};
+  ConfigCopyCurrent(&next);
+
+  void* current_ptr = ConfigFieldPtr(&next, item);
+  if (!current_ptr) {
     return false;
   }
 
   memcpy(current_ptr, default_ptr, item->value_size);
+  ConfigCommitCurrent(&next, ConfigLoadedFlag());
+  HX_LOGD("CFG", "reset key=%s to default", item->key);
+  return true;
+}
+
+bool ConfigToggleBool(const HxConfigKeyDef* item, bool* new_value_out) {
+  if (!item || (item->type != HX_SCHEMA_VALUE_BOOL) || !item->console_writable || (item->value_size != sizeof(bool))) {
+    return false;
+  }
+
+  HxConfig next = {};
+  ConfigCopyCurrent(&next);
+
+  bool* field = static_cast<bool*>(ConfigFieldPtr(&next, item));
+  if (!field) {
+    return false;
+  }
+
+  *field = !(*field);
+  if (new_value_out) {
+    *new_value_out = *field;
+  }
+
+  ConfigCommitCurrent(&next, ConfigLoadedFlag());
+  HX_LOGD("CFG", "toggle key=%s value=%s", item->key, *field ? "true" : "false");
   return true;
 }
 
 bool ConfigInit() {
   ConfigResetToDefaults(&HxConfigData);
+  taskENTER_CRITICAL(&g_config_mux);
+  Hx.config_loaded = false;
+  taskEXIT_CRITICAL(&g_config_mux);
+
   g_config_ready = EspNvsOpenConfig();
+  if (g_config_ready) {
+    HX_LOGI("CFG", "config store ready (%s)", "nvs");
+  } else {
+    HX_LOGE("CFG", "config store open failed");
+  }
+
   return g_config_ready;
 }
 
 bool ConfigLoad() {
-  ConfigResetToDefaults(&HxConfigData);
+  HxConfig loaded = {};
+  ConfigResetToDefaults(&loaded);
 
   if (!g_config_ready) {
-    Hx.config_loaded = false;
+    ConfigCommitCurrent(&loaded, false);
+    HX_LOGE("CFG", "load failed, config store not ready");
     return false;
   }
 
+  size_t loaded_count = 0;
+  size_t missing_count = 0;
+  size_t invalid_count = 0;
+  size_t error_count = 0;
+  bool repair_dirty = false;
+
   for (size_t i = 0; i < ConfigKeyCount(); i++) {
-    if (!ConfigReadItemFromNvs(&kHxConfigKeys[i])) {
-      Hx.config_loaded = false;
-      return false;
+    const HxConfigKeyDef* item = &kHxConfigKeys[i];
+    ConfigLoadItemResult result = ConfigReadItemFromNvs(&loaded, item);
+
+    switch (result) {
+      case HX_CONFIG_LOAD_ITEM_OK:
+        loaded_count++;
+        HX_LOGD("CFG", "override loaded key=%s", item->key);
+        break;
+
+      case HX_CONFIG_LOAD_ITEM_MISSING:
+        missing_count++;
+        break;
+
+      case HX_CONFIG_LOAD_ITEM_INVALID:
+        invalid_count++;
+        HX_LOGW("CFG", "invalid override ignored, default used: key=%s", item->key);
+        if (HxNvsEraseKey(HX_NVS_STORE_CONFIG, item->key)) {
+          repair_dirty = true;
+        } else {
+          HX_LOGW("CFG", "failed to stage invalid override cleanup: key=%s", item->key);
+        }
+        break;
+
+      case HX_CONFIG_LOAD_ITEM_ERROR:
+      default:
+        error_count++;
+        HX_LOGW("CFG", "read error ignored, default used: key=%s", item->key);
+        break;
     }
   }
 
-  Hx.config_loaded = true;
+  if (repair_dirty) {
+    if (HxNvsCommit(HX_NVS_STORE_CONFIG)) {
+      HX_LOGW("CFG", "invalid overrides removed during load");
+    } else {
+      HX_LOGW("CFG", "invalid override cleanup commit failed");
+    }
+  }
+
+  ConfigCommitCurrent(&loaded, true);
+
+  HX_LOGI("CFG", "load complete overrides=%lu missing=%lu invalid=%lu errors=%lu",
+          (unsigned long)loaded_count,
+          (unsigned long)missing_count,
+          (unsigned long)invalid_count,
+          (unsigned long)error_count);
   return true;
 }
 
 bool ConfigSave() {
   if (!g_config_ready) {
+    HX_LOGE("CFG", "save failed, config store not ready");
     return false;
   }
 
+  HxConfig snapshot = {};
+  ConfigCopyCurrent(&snapshot);
+
+  size_t overridden_count = 0;
+  size_t default_count = 0;
+
   for (size_t i = 0; i < ConfigKeyCount(); i++) {
-    if (!ConfigStoreItemOverride(&kHxConfigKeys[i])) {
+    const HxConfigKeyDef* item = &kHxConfigKeys[i];
+    if (!ConfigStoreItemOverrideFromConfig(&snapshot, item)) {
+      HX_LOGE("CFG", "save failed on key=%s", item->key);
       return false;
+    }
+
+    if (ConfigItemEqualsDefaultInConfig(&snapshot, item)) {
+      default_count++;
+    } else {
+      overridden_count++;
     }
   }
 
   if (!HxNvsCommit(HX_NVS_STORE_CONFIG)) {
+    HX_LOGE("CFG", "save commit failed");
     return false;
   }
 
+  taskENTER_CRITICAL(&g_config_mux);
   Hx.config_loaded = true;
+  taskEXIT_CRITICAL(&g_config_mux);
+
+  HX_LOGI("CFG", "save complete overrides=%lu defaults=%lu",
+          (unsigned long)overridden_count,
+          (unsigned long)default_count);
+  return true;
+}
+
+bool ConfigGetStorageInfo(HxConfigStorageInfo* out_info) {
+  if (!out_info) {
+    return false;
+  }
+
+  memset(out_info, 0, sizeof(*out_info));
+
+  HxNvsStats stats{};
+  if (!HxNvsGetStats(HX_NVS_STORE_CONFIG, &stats)) {
+    return false;
+  }
+
+  HxConfig snapshot = {};
+  ConfigCopyCurrent(&snapshot);
+
+  size_t visible_count = 0;
+  size_t writable_count = 0;
+  size_t overridden_count = 0;
+
+  for (size_t i = 0; i < ConfigKeyCount(); i++) {
+    const HxConfigKeyDef* item = &kHxConfigKeys[i];
+    if (item->console_visible) {
+      visible_count++;
+    }
+    if (item->console_writable) {
+      writable_count++;
+    }
+    if (!ConfigItemEqualsDefaultInConfig(&snapshot, item)) {
+      overridden_count++;
+    }
+  }
+
+  out_info->ready = g_config_ready;
+  out_info->loaded = ConfigLoadedFlag();
+  out_info->partition_label = stats.partition_label;
+  out_info->namespace_name = stats.namespace_name;
+  out_info->entry_size_bytes = HX_CONFIG_NVS_ENTRY_SIZE_BYTES;
+  out_info->total_key_count = ConfigKeyCount();
+  out_info->visible_key_count = visible_count;
+  out_info->writable_key_count = writable_count;
+  out_info->overridden_key_count = overridden_count;
+  out_info->partition_entries_used = stats.used_entries;
+  out_info->partition_entries_free = stats.free_entries;
+  out_info->partition_entries_available = stats.available_entries;
+  out_info->partition_entries_total = stats.total_entries;
+  out_info->namespace_entries_used = stats.namespace_entries;
+  return true;
+}
+
+bool ConfigFactoryFormat() {
+  if (!g_config_ready) {
+    HX_LOGE("CFG", "factory format failed, config store not ready");
+    return false;
+  }
+
+  HX_LOGW("CFG", "factory format requested");
+  if (!HxNvsFormat(HX_NVS_STORE_CONFIG)) {
+    HX_LOGE("CFG", "factory format erase failed");
+    return false;
+  }
+
+  HxConfig defaults = {};
+  ConfigResetToDefaults(&defaults);
+  ConfigCommitCurrent(&defaults, true);
+
+  if (!ConfigSave()) {
+    HX_LOGE("CFG", "factory format default save failed");
+    return false;
+  }
+
+  HX_LOGW("CFG", "factory format complete");
   return true;
 }
 
 void ConfigApply() {
-  LogSetLevel((HxLogLevel)HxConfigData.log_level);
-  Hx.safeboot = HxConfigData.safeboot_enable;
+  HxConfig snapshot = {};
+  ConfigCopyCurrent(&snapshot);
+
+  LogSetLevel((HxLogLevel)snapshot.log_level);
+  Hx.safeboot = snapshot.safeboot_enable;
 }

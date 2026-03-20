@@ -337,7 +337,10 @@ static HxCmdStatus CmdLogStats(const char* args, HxCmdOutput* out) {
 }
 
 static HxCmdStatus CmdListConfig(const char* args, HxCmdOutput* out) {
-  (void)args;
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: listcfg");
+    return HX_CMD_USAGE;
+  }
 
   for (size_t i = 0; i < ConfigKeyCount(); i++) {
     const HxConfigKeyDef* item = ConfigKeyAt(i);
@@ -396,12 +399,50 @@ static HxCmdStatus CmdSetConfig(const char* args, HxCmdOutput* out) {
   }
 
   ConfigApply();
-  CmdOutPrintfLine(out, "%s updated", item->key);
+  CmdWriteConfigItemLine(item, out);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdToggleConfig(const char* args, HxCmdOutput* out) {
+  char key[64];
+
+  if (!CmdExtractSingleKey(args, key, sizeof(key))) {
+    CmdOutWriteLine(out, "usage: config toggle <key>");
+    return HX_CMD_USAGE;
+  }
+
+  const HxConfigKeyDef* item = ConfigFindConfigKey(key);
+  if (!item) {
+    CmdOutWriteLine(out, "config key not found");
+    return HX_CMD_ERROR;
+  }
+
+  if (item->type != HX_SCHEMA_VALUE_BOOL) {
+    CmdOutWriteLine(out, "config key is not boolean");
+    return HX_CMD_ERROR;
+  }
+
+  if (!item->console_writable) {
+    CmdOutWriteLine(out, "config key is read-only");
+    return HX_CMD_ERROR;
+  }
+
+  bool next = false;
+  if (!ConfigToggleBool(item, &next)) {
+    CmdOutWriteLine(out, "config toggle failed");
+    return HX_CMD_ERROR;
+  }
+
+  ConfigApply();
+  CmdOutPrintfLine(out, "%s = %s", item->key, next ? "true" : "false");
   return HX_CMD_OK;
 }
 
 static HxCmdStatus CmdSaveConfig(const char* args, HxCmdOutput* out) {
-  (void)args;
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: savecfg");
+    return HX_CMD_USAGE;
+  }
 
   if (ConfigSave()) {
     CmdOutWriteLine(out, "config saved to NVS");
@@ -413,7 +454,10 @@ static HxCmdStatus CmdSaveConfig(const char* args, HxCmdOutput* out) {
 }
 
 static HxCmdStatus CmdLoadConfig(const char* args, HxCmdOutput* out) {
-  (void)args;
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: loadcfg");
+    return HX_CMD_USAGE;
+  }
 
   if (ConfigLoad()) {
     ConfigApply();
@@ -426,11 +470,68 @@ static HxCmdStatus CmdLoadConfig(const char* args, HxCmdOutput* out) {
 }
 
 static HxCmdStatus CmdDefaultConfig(const char* args, HxCmdOutput* out) {
-  (void)args;
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: defaultcfg");
+    return HX_CMD_USAGE;
+  }
 
   ConfigResetToDefaults(&HxConfigData);
   ConfigApply();
   CmdOutWriteLine(out, "config reset to build defaults");
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdConfigInfo(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: config info");
+    return HX_CMD_USAGE;
+  }
+
+  HxConfigStorageInfo info{};
+  if (!ConfigGetStorageInfo(&info)) {
+    CmdOutWriteLine(out, "config info failed");
+    return HX_CMD_ERROR;
+  }
+
+  CmdOutPrintfLine(out, "partition = %s", info.partition_label ? info.partition_label : "-");
+  CmdOutPrintfLine(out, "namespace = %s", info.namespace_name ? info.namespace_name : "-");
+  CmdOutPrintfLine(out, "ready = %s", info.ready ? "true" : "false");
+  CmdOutPrintfLine(out, "loaded = %s", info.loaded ? "true" : "false");
+  CmdOutPrintfLine(out,
+                   "partition.entries = used=%lu free=%lu available=%lu total=%lu",
+                   (unsigned long)info.partition_entries_used,
+                   (unsigned long)info.partition_entries_free,
+                   (unsigned long)info.partition_entries_available,
+                   (unsigned long)info.partition_entries_total);
+  CmdOutPrintfLine(out,
+                   "partition.bytes_approx = used=%lu free=%lu total=%lu entry_size=%lu",
+                   (unsigned long)(info.partition_entries_used * info.entry_size_bytes),
+                   (unsigned long)(info.partition_entries_free * info.entry_size_bytes),
+                   (unsigned long)(info.partition_entries_total * info.entry_size_bytes),
+                   (unsigned long)info.entry_size_bytes);
+  CmdOutPrintfLine(out, "namespace.entries = %lu", (unsigned long)info.namespace_entries_used);
+  CmdOutPrintfLine(out,
+                   "keys = total=%lu visible=%lu writable=%lu overridden=%lu",
+                   (unsigned long)info.total_key_count,
+                   (unsigned long)info.visible_key_count,
+                   (unsigned long)info.writable_key_count,
+                   (unsigned long)info.overridden_key_count);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdConfigFactoryFormat(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: config factoryformat");
+    return HX_CMD_USAGE;
+  }
+
+  if (!ConfigFactoryFormat()) {
+    CmdOutWriteLine(out, "config factory format failed");
+    return HX_CMD_ERROR;
+  }
+
+  ConfigApply();
+  CmdOutWriteLine(out, "config storage formatted and defaults activated");
   return HX_CMD_OK;
 }
 
@@ -875,36 +976,34 @@ static HxCmdStatus CmdStateFormat(const char* args, HxCmdOutput* out) {
 }
 
 static const HxCmdDef kBuiltinCommands[] = {
-  { "help",            CmdHelp,           "Show command list" },
-  { "?",               CmdHelp,           nullptr },
-  { "reboot",          CmdReboot,         "Restart device" },
-  { "log",             CmdLogHistory,     "Show log history" },
-  { "logclr",          CmdLogClear,       "Clear log history" },
-  { "logstat",         CmdLogStats,       "Show log statistics" },
-  { "listcfg",         CmdListConfig,     "List visible config keys" },
-  { "config",          CmdListConfig,     nullptr },
-  { "show config",     CmdListConfig,     nullptr },
-  { "readcfg",         CmdReadConfig,     "Read config key" },
-  { "setcfg",          CmdSetConfig,      "Set config key" },
-  { "savecfg",         CmdSaveConfig,     "Save config to NVS" },
-  { "config save",     CmdSaveConfig,     nullptr },
-  { "loadcfg",         CmdLoadConfig,     "Load config from NVS" },
-  { "config load",     CmdLoadConfig,     nullptr },
-  { "defaultcfg",      CmdDefaultConfig,  "Reset config to defaults" },
-  { "config defaults", CmdDefaultConfig,  nullptr },
-  { "state info",      CmdStateInfo,      "Show state storage information" },
-  { "state format",    CmdStateFormat,    "Format state NVS storage" },
-  { "state list",      CmdStateList,      "List visible states" },
-  { "state read",      CmdStateRead,      "Read state key" },
-  { "state exist",     CmdStateExist,     "Check whether state exists" },
-  { "state create",    CmdStateCreate,      "Create persistent runtime state" },
-  { "state write",     CmdStateWrite,       "Write value to state" },
-  { "state erase",     CmdStateErase,       "Erase persisted state value" },
-  { "state delete",    CmdStateDelete,      "Delete runtime state" },
-  { "state unreg",     CmdStateDelete,      nullptr },
-  { "state increment", CmdStateIncrement,   "Increment integer state" },
-  { "state decrement", CmdStateDecrement, "Decrement integer state" },
-  { "state toggle",    CmdStateToggle,    "Toggle boolean state" }
+  { "help",                 CmdHelp,                "Show command list" },
+  { "?",                    CmdHelp,                nullptr },
+  { "reboot",               CmdReboot,              "Restart device" },
+  { "log",                  CmdLogHistory,          "Show log history" },
+  { "logclr",               CmdLogClear,            "Clear log history" },
+  { "logstat",              CmdLogStats,            "Show log statistics" },
+  { "config list",          CmdListConfig,          "List visible config keys" },
+  { "config read",          CmdReadConfig,          "Read config key" },
+  { "config set",           CmdSetConfig,           "Set config key" },
+  { "config save",          CmdSaveConfig,          "Save config to NVS" },
+  { "config load",          CmdLoadConfig,          "Load config from NVS" },
+  { "config default",       CmdDefaultConfig,       "Reset config to build defaults" },
+  { "config toggle",        CmdToggleConfig,        "Toggle boolean config key" },
+  { "config info",          CmdConfigInfo,          "Show config storage information" },
+  { "config factoryformat", CmdConfigFactoryFormat, "Format config NVS storage and activate defaults" },
+  { "state info",           CmdStateInfo,           "Show state storage information" },
+  { "state format",         CmdStateFormat,         "Format state NVS storage" },
+  { "state list",           CmdStateList,           "List visible states" },
+  { "state read",           CmdStateRead,           "Read state key" },
+  { "state exist",          CmdStateExist,          "Check whether state exists" },
+  { "state create",         CmdStateCreate,         "Create persistent runtime state" },
+  { "state write",          CmdStateWrite,          "Write value to state" },
+  { "state erase",          CmdStateErase,          "Erase persisted state value" },
+  { "state delete",         CmdStateDelete,         "Delete runtime state" },
+  { "state unreg",          CmdStateDelete,         nullptr },
+  { "state increment",      CmdStateIncrement,      "Increment integer state" },
+  { "state decrement",      CmdStateDecrement,      "Decrement integer state" },
+  { "state toggle",         CmdStateToggle,         "Toggle boolean state" }
 };
 
 bool CommandRegisterBuiltins() {
