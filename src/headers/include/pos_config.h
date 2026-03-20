@@ -48,6 +48,13 @@ enum HxStateWriteSource : uint8_t {
   HX_STATE_WRITE_SOURCE_SYSTEM = 1
 };
 
+enum HxStateOwnerClass : uint8_t {
+  HX_STATE_OWNER_SYSTEM = 0,
+  HX_STATE_OWNER_KERNEL = 1,
+  HX_STATE_OWNER_USER = 2,
+  HX_STATE_OWNER_INTERNAL = 3,
+  HX_STATE_OWNER_EXTERNAL = 4
+};
 
 struct HxStateStorageInfo {
   bool ready;
@@ -76,7 +83,7 @@ struct HxStateKeyDef {
   size_t max_len;
   uint16_t flags;
   bool console_visible;
-  const char* owner;
+  HxStateOwnerClass owner_class;
 };
 
 size_t ConfigConfigKeyCount();
@@ -101,7 +108,7 @@ bool StateCreate(const char* key,
                  size_t max_len,
                  uint16_t flags,
                  bool console_visible,
-                 const char* owner);
+                 HxStateOwnerClass owner_class);
 
 bool StateEnsure(const char* key,
                  HxSchemaValueType type,
@@ -110,7 +117,7 @@ bool StateEnsure(const char* key,
                  size_t max_len,
                  uint16_t flags,
                  bool console_visible,
-                 const char* owner);
+                 HxStateOwnerClass owner_class);
 
 bool StateDelete(const char* key);
 

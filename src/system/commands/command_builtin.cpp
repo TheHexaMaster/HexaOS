@@ -37,11 +37,29 @@ static const char* CmdStateScopeText(const HxStateKeyDef* item) {
 }
 
 static const char* CmdStateOwnerText(const HxStateKeyDef* item) {
-  if (!item || !item->owner || !item->owner[0]) {
-    return "-";
+  if (!item) {
+    return "unknown";
   }
 
-  return item->owner;
+  switch (item->owner_class) {
+    case HX_STATE_OWNER_SYSTEM:
+      return "system";
+
+    case HX_STATE_OWNER_KERNEL:
+      return "kernel";
+
+    case HX_STATE_OWNER_USER:
+      return "user";
+
+    case HX_STATE_OWNER_INTERNAL:
+      return "internal";
+
+    case HX_STATE_OWNER_EXTERNAL:
+      return "external";
+
+    default:
+      return "unknown";
+  }
 }
 
 static const char* CmdSkipWs(const char* text) {
@@ -494,7 +512,7 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
                      0,
                      HX_STATE_FLAG_CONSOLE_VISIBLE,
                      true,
-                     "console")) {
+                     HX_STATE_OWNER_USER)) {
       CmdOutWriteLine(out, "state create failed");
       return HX_CMD_ERROR;
     }
@@ -524,7 +542,7 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
                      0,
                      HX_STATE_FLAG_CONSOLE_VISIBLE,
                      true,
-                     "console")) {
+                     HX_STATE_OWNER_USER)) {
       CmdOutWriteLine(out, "state create failed");
       return HX_CMD_ERROR;
     }
@@ -553,7 +571,7 @@ static HxCmdStatus CmdStateCreate(const char* args, HxCmdOutput* out) {
                      (size_t)max_len,
                      HX_STATE_FLAG_CONSOLE_VISIBLE,
                      true,
-                     "console")) {
+                     HX_STATE_OWNER_USER)) {
       CmdOutWriteLine(out, "state create failed");
       return HX_CMD_ERROR;
     }
