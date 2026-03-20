@@ -1,8 +1,8 @@
 #pragma once
 
-#define HX_CFG_FIELD_STRING(field_name, storage_size) char field_name[storage_size];
-#define HX_CFG_FIELD_BOOL(field_name, storage_size) bool field_name;
-#define HX_CFG_FIELD_INT32(field_name, storage_size) int32_t field_name;
+#define HX_CFG_FIELD_HX_SCHEMA_VALUE_STRING(field_name, storage_size) char field_name[storage_size];
+#define HX_CFG_FIELD_HX_SCHEMA_VALUE_BOOL(field_name, storage_size) bool field_name;
+#define HX_CFG_FIELD_HX_SCHEMA_VALUE_INT32(field_name, storage_size) int32_t field_name;
 
 #define HX_CFG_FIELD_SELECT_(type_id, field_name, storage_size) HX_CFG_FIELD_##type_id(field_name, storage_size)
 #define HX_CFG_FIELD_SELECT(type_id, field_name, storage_size) HX_CFG_FIELD_SELECT_(type_id, field_name, storage_size)
@@ -18,9 +18,9 @@ struct HxConfig {
 
 #undef HX_CFG_FIELD_SELECT
 #undef HX_CFG_FIELD_SELECT_
-#undef HX_CFG_FIELD_INT32
-#undef HX_CFG_FIELD_BOOL
-#undef HX_CFG_FIELD_STRING
+#undef HX_CFG_FIELD_HX_SCHEMA_VALUE_INT32
+#undef HX_CFG_FIELD_HX_SCHEMA_VALUE_BOOL
+#undef HX_CFG_FIELD_HX_SCHEMA_VALUE_STRING
 
 struct HxConfigKeyDef {
   const char* key;

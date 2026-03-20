@@ -78,16 +78,13 @@ static uint32_t g_state_pending_seq = 0;
 
 static void StateResetCommitWindow();
 static uint32_t StateGetCommitDelayMs();
-static bool StateValidateOwnerClass(HxStateOwnerClass owner_class);
-static const char* StateOwnerClassText(HxStateOwnerClass owner_class);
-static bool StateParseIntText(const char* text, int32_t* value_out);
 static bool StateIsWriteAllowed(const HxStateKeyDef* def, HxStateWriteSource source);
 static void StateArmCommitWindow();
 static void StateRearmCommitWindow(uint32_t delay_ms);
-static bool StateScheduleCommit();
+static bool StateScheduleValueCommit();
 static bool StateCommitIsDue();
 static bool StateWriteRuntimeCatalog(bool commit);
-static bool StateStageRuntimeCatalog();
+static bool StatePersistRuntimeCatalog();
 static void StateClearPendingSlotLocked(HxStatePendingSlot* slot);
 static void StateResetPendingBuffer();
 static int StateFindPendingSlotIndexLocked(const char* storage_key);
@@ -157,29 +154,19 @@ static bool StateValidateLogicalKey(const char* key) {
   return true;
 }
 
-static bool StateValidateOwnerClass(HxStateOwnerClass owner_class) {
-  return owner_class <= HX_STATE_OWNER_EXTERNAL;
+static bool StateOwnerClassIsValid(HxStateOwnerClass owner_class) {
+  return (owner_class >= HX_STATE_OWNER_SYSTEM) &&
+         (owner_class <= HX_STATE_OWNER_EXTERNAL);
 }
 
 static const char* StateOwnerClassText(HxStateOwnerClass owner_class) {
   switch (owner_class) {
-    case HX_STATE_OWNER_SYSTEM:
-      return "system";
-
-    case HX_STATE_OWNER_KERNEL:
-      return "kernel";
-
-    case HX_STATE_OWNER_USER:
-      return "user";
-
-    case HX_STATE_OWNER_INTERNAL:
-      return "internal";
-
-    case HX_STATE_OWNER_EXTERNAL:
-      return "external";
-
-    default:
-      return "unknown";
+    case HX_STATE_OWNER_SYSTEM:   return "system";
+    case HX_STATE_OWNER_KERNEL:   return "kernel";
+    case HX_STATE_OWNER_USER:     return "user";
+    case HX_STATE_OWNER_INTERNAL: return "internal";
+    case HX_STATE_OWNER_EXTERNAL: return "external";
+    default:                      return "unknown";
   }
 }
 
@@ -192,11 +179,7 @@ static bool StateValidateDef(const HxStateKeyDef* def) {
     return false;
   }
 
-  if (!StateValidateOwnerClass(def->owner_class)) {
-    return false;
-  }
-
-  if (def->owner_class == HX_STATE_OWNER_SYSTEM) {
+  if (!StateOwnerClassIsValid(def->owner_class)) {
     return false;
   }
 
@@ -489,7 +472,7 @@ static bool StateCommitIsDue() {
   return (int32_t)(now - deadline_ms) >= 0;
 }
 
-static bool StateScheduleCommit() {
+static bool StateScheduleValueCommit() {
   if (!g_state_ready) {
     return false;
   }
@@ -939,12 +922,12 @@ static void StateClearCommittedPendingItems(const HxStatePendingCommitItem* item
   taskEXIT_CRITICAL(&g_state_pending_mux);
 }
 
-static bool StateStageRuntimeCatalog() {
+static bool StatePersistRuntimeCatalog() {
   if (!StateWriteRuntimeCatalog(false)) {
     return false;
   }
 
-  return StateScheduleCommit();
+  return StateCommit();
 }
 
 static bool StateDefsCompatible(const HxStateKeyDef* existing, const HxStateKeyDef* requested) {
@@ -960,16 +943,15 @@ static bool StateDefsCompatible(const HxStateKeyDef* existing, const HxStateKeyD
     return false;
   }
 
+  if (existing->flags != requested->flags) {
+    return false;
+  }
+
   if (existing->console_visible != requested->console_visible) {
     return false;
   }
 
   if (existing->owner_class != requested->owner_class) {
-    return false;
-  }
-
-  constexpr uint16_t kComparableFlags = HX_STATE_FLAG_WRITE_RESTRICTED;
-  if ((existing->flags & kComparableFlags) != (requested->flags & kComparableFlags)) {
     return false;
   }
 
@@ -1059,9 +1041,11 @@ static bool StateInsertRuntimeDef(const HxStateKeyDef* def, bool persist_catalog
 
   taskEXIT_CRITICAL(&g_state_registry_mux);
 
-  HX_LOGD("STA", "register runtime key=%s owner=%s", slot->def.key, StateOwnerClassText(slot->def.owner_class));
+  HX_LOGD("STA", "register runtime key=%s owner=%s",
+          slot->def.key,
+          StateOwnerClassText(slot->def.owner_class));
 
-  if (persist_catalog && !StateStageRuntimeCatalog()) {
+  if (persist_catalog && !StatePersistRuntimeCatalog()) {
     taskENTER_CRITICAL(&g_state_registry_mux);
     int rollback_index = StateFindRuntimeSlotIndexLocked(def->key);
     if (rollback_index >= 0) {
@@ -1221,11 +1205,6 @@ static bool StateLoadRuntimeCatalog() {
       continue;
     }
 
-    if ((owner_class_i32 < (int32_t)HX_STATE_OWNER_SYSTEM) ||
-        (owner_class_i32 > (int32_t)HX_STATE_OWNER_EXTERNAL)) {
-      continue;
-    }
-
     HxStateKeyDef def = {
       .key = fields[0],
       .type = (HxSchemaValueType)type_i32,
@@ -1361,7 +1340,7 @@ bool StateCreate(const char* key,
     case HX_SCHEMA_VALUE_BOOL: {
       bool current = false;
       if (!StateReadBool(key, &current)) {
-        if (!StateSetBoolEx(key, false, HX_STATE_WRITE_SOURCE_SYSTEM)) {
+        if (!StateSetBoolEx(key, false, HX_STATE_WRITE_SOURCE_SYSTEM) || !StateCommit()) {
           StateDelete(key);
           return false;
         }
@@ -1372,14 +1351,17 @@ bool StateCreate(const char* key,
     case HX_SCHEMA_VALUE_INT32: {
       int32_t current = 0;
       if (!StateReadInt(key, &current)) {
-        int32_t initial_value = 0;
-        if (initial_value < min_i32) {
-          initial_value = min_i32;
-        } else if (initial_value > max_i32) {
-          initial_value = max_i32;
+        int32_t initial = 0;
+
+        if (initial < min_i32) {
+          initial = min_i32;
         }
 
-        if (!StateSetIntEx(key, initial_value, HX_STATE_WRITE_SOURCE_SYSTEM)) {
+        if (initial > max_i32) {
+          initial = max_i32;
+        }
+
+        if (!StateSetIntEx(key, initial, HX_STATE_WRITE_SOURCE_SYSTEM) || !StateCommit()) {
           StateDelete(key);
           return false;
         }
@@ -1390,7 +1372,7 @@ bool StateCreate(const char* key,
     case HX_SCHEMA_VALUE_STRING: {
       char current[2];
       if (!StateReadString(key, current, sizeof(current))) {
-        if (!StateSetStringEx(key, "", HX_STATE_WRITE_SOURCE_SYSTEM)) {
+        if (!StateSetStringEx(key, "", HX_STATE_WRITE_SOURCE_SYSTEM) || !StateCommit()) {
           StateDelete(key);
           return false;
         }
@@ -1465,12 +1447,7 @@ bool StateDelete(const char* key) {
 
   HX_LOGD("STA", "delete runtime key=%s", key);
 
-  if (!StateStageRuntimeCatalog()) {
-    StateScheduleCommit();
-    return false;
-  }
-
-  return true;
+  return StatePersistRuntimeCatalog();
 }
 
 bool StateExists(const char* key) {
@@ -1498,7 +1475,7 @@ static bool StateEraseEx(const char* key, HxStateWriteSource source) {
   }
 
   HX_LOGD("STA", "stage erase key=%s", def->key);
-  return StateScheduleCommit();
+  return StateCommit();
 }
 
 bool StateValueToString(const HxStateKeyDef* item, char* out, size_t out_size) {
@@ -1948,7 +1925,7 @@ static bool StateSetBoolEx(const char* key, bool value, HxStateWriteSource sourc
   }
 
   HX_LOGD("STA", "stage bool key=%s value=%s", def->key, value ? "true" : "false");
-  return StateScheduleCommit();
+  return StateScheduleValueCommit();
 }
 
 static bool StateSetIntEx(const char* key, int32_t value, HxStateWriteSource source) {
@@ -1980,7 +1957,7 @@ static bool StateSetIntEx(const char* key, int32_t value, HxStateWriteSource sou
   }
 
   HX_LOGD("STA", "stage int key=%s value=%ld", def->key, (long)value);
-  return StateScheduleCommit();
+  return StateScheduleValueCommit();
 }
 
 static bool StateSetStringEx(const char* key, const char* value, HxStateWriteSource source) {
@@ -2013,7 +1990,7 @@ static bool StateSetStringEx(const char* key, const char* value, HxStateWriteSou
   }
 
   HX_LOGD("STA", "stage string key=%s len=%lu", def->key, (unsigned long)len);
-  return StateScheduleCommit();
+  return StateScheduleValueCommit();
 }
 
 bool StateErase(const char* key) {

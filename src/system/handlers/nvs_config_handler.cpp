@@ -21,13 +21,6 @@
 
 static bool g_config_ready = false;
 
-#define HX_CFG_TYPE_ENUM_STRING HX_SCHEMA_VALUE_STRING
-#define HX_CFG_TYPE_ENUM_BOOL HX_SCHEMA_VALUE_BOOL
-#define HX_CFG_TYPE_ENUM_INT32 HX_SCHEMA_VALUE_INT32
-
-#define HX_CFG_TYPE_ENUM_SELECT_(type_id) HX_CFG_TYPE_ENUM_##type_id
-#define HX_CFG_TYPE_ENUM_SELECT(type_id) HX_CFG_TYPE_ENUM_SELECT_(type_id)
-
 HxConfig HxConfigData = {};
 const HxConfig HxConfigDefaults = {
 #define HX_CONFIG_DEFAULT_ITEM(id, key_text, type_id, field_name, storage_size, max_len_value, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
@@ -42,7 +35,7 @@ static const HxConfigKeyDef kHxConfigKeys[] = {
 #define HX_CONFIG_ITEM(id, key_text, type_id, field_name, storage_size, max_len_value, min_i32_value, max_i32_value, default_value, console_visible_value, console_writable_value) \
   { \
     .key = key_text, \
-    .type = HX_CFG_TYPE_ENUM_SELECT(type_id), \
+    .type = type_id, \
     .config_offset = offsetof(HxConfig, field_name), \
     .value_size = sizeof(((HxConfig*)0)->field_name), \
     .min_i32 = (int32_t)(min_i32_value), \
@@ -50,18 +43,12 @@ static const HxConfigKeyDef kHxConfigKeys[] = {
     .max_len = (size_t)(max_len_value), \
     .console_visible = (console_visible_value), \
     .console_writable = (console_writable_value) \
-  },
+  }, 
 
   HX_CONFIG_SCHEMA(HX_CONFIG_ITEM)
 
 #undef HX_CONFIG_ITEM
 };
-
-#undef HX_CFG_TYPE_ENUM_SELECT
-#undef HX_CFG_TYPE_ENUM_SELECT_
-#undef HX_CFG_TYPE_ENUM_INT32
-#undef HX_CFG_TYPE_ENUM_BOOL
-#undef HX_CFG_TYPE_ENUM_STRING
 
 
 static void* ConfigFieldPtr(HxConfig* config, const HxConfigKeyDef* item) {
@@ -425,15 +412,6 @@ bool ConfigConfigResetValue(const HxConfigKeyDef* item) {
 
   memcpy(current_ptr, default_ptr, item->value_size);
   return true;
-}
-
-bool ConfigSetDeviceName(const char* value) {
-  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_DEVICE_NAME);
-  if (!item) {
-    return false;
-  }
-
-  return ConfigAssignStringField(&HxConfigData, item, value);
 }
 
 bool ConfigSetLogLevel(HxLogLevel value) {

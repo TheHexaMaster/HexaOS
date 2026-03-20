@@ -42,23 +42,12 @@ static const char* CmdStateOwnerText(const HxStateKeyDef* item) {
   }
 
   switch (item->owner_class) {
-    case HX_STATE_OWNER_SYSTEM:
-      return "system";
-
-    case HX_STATE_OWNER_KERNEL:
-      return "kernel";
-
-    case HX_STATE_OWNER_USER:
-      return "user";
-
-    case HX_STATE_OWNER_INTERNAL:
-      return "internal";
-
-    case HX_STATE_OWNER_EXTERNAL:
-      return "external";
-
-    default:
-      return "unknown";
+    case HX_STATE_OWNER_SYSTEM:   return "system";
+    case HX_STATE_OWNER_KERNEL:   return "kernel";
+    case HX_STATE_OWNER_USER:     return "user";
+    case HX_STATE_OWNER_INTERNAL: return "internal";
+    case HX_STATE_OWNER_EXTERNAL: return "external";
+    default:                      return "unknown";
   }
 }
 
