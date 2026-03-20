@@ -2,48 +2,137 @@
 
 ## Purpose
 
-This document defines the architectural model of **HexaOS** and explains how the source tree is organized, how responsibilities are split, and how new code should be placed.
+This document defines the **current architectural state** of HexaOS based on the latest source archive and records the **agreed target direction** for the next structural refactor.
 
-HexaOS is designed to be:
+It is not intended as dogma. It is a working architecture definition that must follow the real codebase and evolve when the design becomes clearer.
 
-* simple,
-* explicit,
-* modular,
-* easy to audit,
-* easy to extend without turning into a framework maze.
+HexaOS should remain:
 
-The project intentionally avoids unnecessary abstraction and prefers clear ownership, stable boundaries, and predictable execution flow.
-
----
-
-## Architectural Philosophy
-
-HexaOS is structured around a small number of clearly defined layers.
-
-The core idea is:
-
-* **Core** provides the permanent system foundation.
-* **Adapters** connect HexaOS to external APIs, frameworks, SDKs, or libraries.
-* **Handlers** own internal system domains and policies.
-* **Modules** are runtime participants with lifecycle hooks.
-* **Commands** expose operator-facing control surfaces.
-* **Headers** define the public and internal interfaces used by the rest of the source tree.
-
-The architecture is intentionally not class-heavy. It is designed around explicit C/C++ translation units, clear ownership, and narrow interfaces.
+- explicit,
+- small in concept,
+- easy to audit,
+- easy to extend,
+- resistant to layer mixing.
 
 ---
 
-## Design Goals
+## Core Principle
 
-The source tree should make the following questions easy to answer:
+HexaOS is not built around classes or framework-style abstraction.
 
-* Where does this code belong?
-* Who owns this state?
-* Is this code part of the system core, a domain service, a backend bridge, or a module?
-* What is public API and what is internal implementation detail?
-* What can depend on what?
+It is built around **clear ownership**:
 
-If the answer is not obvious, the structure is wrong.
+- **Core** holds the permanent system foundation and runtime skeleton.
+- **Adapters** bridge HexaOS to external APIs, SDKs, framework layers, or low-level hardware backends.
+- **Handlers** own internal HexaOS domains and their policy.
+- **Modules** are cooperative runtime participants registered into the lifecycle dispatcher.
+- **Commands** provide user/operator command dispatch.
+- **Drivers** will represent reusable device/protocol implementations above adapters.
+- **Services** will represent composed runtime services built on top of handlers, drivers, and adapters.
+
+---
+
+## Important Clarification
+
+HexaOS must distinguish between:
+
+1. **core**
+2. **mandatory for a given product build**
+3. **optional runtime feature**
+
+These are not the same thing.
+
+A component may be mandatory for a product profile without belonging to Core.
+
+**Core** must stay small.
+
+---
+
+## Current Source Tree (latest archive)
+
+```text
+src/
+  headers/
+    hx_build.h
+    hx_config.h
+    include/
+      pre_build.h
+      pos_build.h
+      pre_config.h
+      pos_config.h
+
+  hexaos.cpp
+  hexaos.h
+
+  system/
+    core/
+      boot.*
+      log.*
+      module_registry.*
+      panic.*
+      rtos.*
+      runtime.*
+
+    adapters/
+      console_adapter.*
+      nvs_adapter.*
+      rtos_adapter.*
+
+    commands/
+      command_engine.*
+      command_builtin.*
+
+    handlers/
+      littlefs_handler.*
+      nvs_config_handler.*
+      nvs_state_handler.*
+
+    modules/
+      mod_system.*
+      mod_console.*
+      mod_storage.*
+      mod_web.*
+      mod_lvgl.*
+      mod_berry.*
+
+    drivers/
+      (currently empty)
+```
+
+---
+
+## Current Runtime Flow
+
+The current runtime flow in the latest archive is:
+
+### setup()
+
+- RTOS init
+- Log init
+- Boot init
+
+### BootInit()
+
+- board / reset / chip boot reporting
+- Config init
+- Config load
+- Config apply
+- State init
+- Files init
+- State load
+- Files mount
+- Command init
+- Module init all
+- Module start all
+
+### loop()
+
+- `ModuleLoopAll()`
+- `StateLoop()`
+- `ModuleEvery100ms()`
+- `ModuleEverySecond()`
+
+This means the current model is **mostly module-driven**, but not absolutely. `StateLoop()` still runs directly from the main loop.
 
 ---
 
@@ -53,29 +142,20 @@ If the answer is not obvious, the structure is wrong.
 
 `system/core/`
 
-Core contains the permanent foundation of HexaOS. These pieces are always central to the system and should remain conceptually stable over time.
+Core contains the permanent HexaOS foundation.
 
-Core is responsible for things such as:
+Current real Core responsibilities:
 
-* boot orchestration,
-* runtime state,
-* logging,
-* panic handling,
-* RTOS abstraction entry points,
-* module registration and lifecycle dispatch.
+- boot orchestration,
+- runtime values,
+- panic,
+- logging,
+- RTOS entry,
+- module registry and lifecycle fan-out.
 
-Core code should not contain domain-specific business logic.
+Core should remain free of feature-domain policy such as web logic, storage policy, network policy, or device-specific business rules.
 
-Examples:
-
-* `boot.*`
-* `runtime.*`
-* `log.*`
-* `panic.*`
-* `rtos.*`
-* `module_registry.*`
-
-**Rule:** if a component is fundamental to the existence of HexaOS itself, it belongs to Core.
+**Core is the system skeleton, not the feature layer.**
 
 ---
 
@@ -83,38 +163,35 @@ Examples:
 
 `system/adapters/`
 
-An adapter is the boundary layer between HexaOS and something external.
-
-That external side may be:
-
-* Arduino APIs,
-* ESP-IDF APIs,
-* FreeRTOS,
-* NVS,
-* LittleFS,
-* Wi-Fi stack,
-* OTA backend,
-* USB serial,
-* third-party libraries.
-
-An adapter should translate external implementation details into a small and stable internal interface.
-
-Adapters should be:
-
-* narrow,
-* backend-aware,
-* implementation-specific,
-* as non-magical as possible.
-
-Adapters should **not** own high-level system policy.
+An adapter is the boundary to something external.
 
 Examples:
 
-* `console_adapter.*`
-* `nvs_adapter.*`
-* `rtos_adapter.*`
+- Arduino or ESP-IDF APIs,
+- FreeRTOS,
+- NVS,
+- USB Serial/JTAG backend,
+- UART backend,
+- Wi-Fi stack,
+- Ethernet stack,
+- TCP/IP stack,
+- external storage or peripheral libraries.
 
-**Rule:** if a file mostly exists to bridge HexaOS to external APIs or libraries, it is an adapter.
+**Rule:** an adapter should exist once per backend/resource boundary, not once per use-case.
+
+Good examples:
+
+- `uart_adapter.*`
+- `usb_cdc_jtag_adapter.*`
+- `wifi_adapter.*`
+- `ethernet_adapter.*`
+- `lwip_adapter.*`
+
+Bad pattern:
+
+- creating `*_console_adapter` and `uart_adapter` for the same UART backend.
+
+That would duplicate the same external boundary under two different names.
 
 ---
 
@@ -122,27 +199,24 @@ Examples:
 
 `system/handlers/`
 
-A handler owns an internal system domain.
+A handler owns an internal HexaOS domain.
 
-A handler is where HexaOS keeps policy, validation, internal state management, domain semantics, and stable internal API for that domain.
+A handler is where policy, domain semantics, validation, domain state, and reusable internal API belong.
 
-A handler may use one or more adapters underneath, but it is not itself a low-level backend bridge.
+Current real handlers already show this well:
 
-Typical handler responsibilities:
+- `nvs_config_handler.*`
+- `nvs_state_handler.*`
+- `littlefs_handler.*`
 
-* domain state ownership,
-* validation,
-* policy decisions,
-* lifecycle-independent service logic,
-* stable functions used by commands, modules, or core.
+Future examples:
 
-Examples:
+- `uart_handler.*`
+- `network_handler.*`
+- `user_interface_handler.*`
+- `files_handler.*`
 
-* config handler,
-* state handler,
-* files handler.
-
-**Rule:** if a component owns the internal logic of a system domain, it is a handler.
+**Rule:** a handler owns a HexaOS domain. It is not just a thin wrapper around an SDK.
 
 ---
 
@@ -150,28 +224,19 @@ Examples:
 
 `system/modules/`
 
-A module is a runtime participant registered into the HexaOS lifecycle.
+A module is a cooperative runtime participant.
 
-Modules are the units that participate in:
+Modules currently participate in:
 
-* init,
-* start,
-* loop,
-* every-100ms hooks,
-* every-second hooks.
+- init,
+- start,
+- loop,
+- every-100ms,
+- every-second.
 
-Modules may depend on core, handlers, and adapters, but they are not the correct place to store central domain logic if that logic must exist independently of the module lifecycle.
+A module provides runtime heartbeat, but should not become a dump zone for policy, low-level backend glue, and user-facing logic all at once.
 
-Examples:
-
-* `mod_system.*`
-* `mod_console.*`
-* `mod_storage.*`
-* `mod_web.*`
-* `mod_lvgl.*`
-* `mod_berry.*`
-
-**Rule:** if a component participates in runtime lifecycle scheduling, it is a module.
+**Rule:** a module moves the system in time. It should not automatically own a domain just because it has a loop.
 
 ---
 
@@ -179,83 +244,273 @@ Examples:
 
 `system/commands/`
 
-Commands provide operator-facing or user-facing control entry points.
+Commands provide a frontend-agnostic command surface.
 
-This layer should do parsing, dispatch, and controlled invocation of core or handler APIs.
+The command layer should:
 
-Commands should not become the place where domain logic lives.
+- parse command text,
+- dispatch to the correct internal API,
+- return output through an abstract output sink.
+
+The command layer should not become the owner of the system model.
+
+Current code already follows this direction well through `command_engine.*` and `command_builtin.*`.
+
+---
+
+### 6. Drivers
+
+`system/drivers/`
+
+The `drivers/` directory already exists and should become the layer for **device/protocol implementations** above low-level adapters.
 
 Examples:
 
-* `command_engine.*`
-* `command_builtin.*`
+- RTC chip drivers,
+- EEPROM drivers,
+- display drivers,
+- IO expander drivers,
+- sensor protocol drivers.
 
-**Rule:** command code should orchestrate, not own the system model.
+A driver should not talk directly to product policy.
 
----
+Example direction:
 
-### 6. Headers
-
-`headers/`
-
-Headers define interfaces and shared definitions.
-
-This area should distinguish between:
-
-* public system-facing headers,
-* internal schema or meta-expansion helpers,
-* build-time definitions.
-
-Headers should remain readable and intentional. If a header mixes too many domains, it should be split.
-
-Recommended categories:
-
-* public API headers,
-* shared type/schema headers,
-* internal meta headers,
-* build configuration headers.
+- `ds3231_driver.*` -> uses `i2c_adapter.*`
+- `at24c32_driver.*` -> uses `i2c_adapter.*`
+- `xl9535_driver.*` -> uses `i2c_adapter.*`
 
 ---
 
-## Source Tree Overview
+### 7. Services
 
-A clean target structure looks like this:
+`system/services/` (proposed)
+
+A service is a composed runtime function built on top of handlers, drivers, and adapters.
+
+Services are useful when something is not the owner of a full HexaOS domain but is more than a thin backend bridge.
+
+Examples:
+
+- web console service,
+- telnet console service,
+- async HTTP client service,
+- web server service,
+- hosted API service.
+
+A service is not automatically a handler.
+
+---
+
+## Current Transitional Problem Areas
+
+### mod_console is a hybrid
+
+In the current codebase, `mod_console.*` is not a clean single-role module.
+
+It currently mixes:
+
+- runtime polling,
+- prompt redraw logic,
+- shell line editing,
+- interactive state,
+- command dispatch glue,
+- direct use of `console_adapter`.
+
+This should be treated as a **transitional implementation**, not as the final architectural shape.
+
+### modules are not yet the final stable layer model
+
+`mod_system` is small and clear.
+
+`mod_storage`, `mod_web`, `mod_lvgl`, and `mod_berry` are still largely placeholder lifecycle shells.
+
+This means the module layer is still under construction and can be redesigned cleanly without breaking a mature final model.
+
+---
+
+## Agreed Direction: User Interface
+
+### Why console should not remain a standalone module identity
+
+The system should not think in terms of:
+
+- console module,
+- web console module,
+- telnet module,
+- LVGL control module.
+
+Those are all just **different control-plane / user-interface endpoints**.
+
+The architectural concept should be broader than `console`.
+
+### Agreed target model
+
+HexaOS should move toward a **mandatory control-plane nucleus** with a clear separation of concerns.
+
+#### Core
+
+Add:
+
+- `core/user_interface.*`
+
+This should be the mandatory runtime bridge for the local and attached user-control plane.
+
+It should:
+
+- participate directly in the core-controlled execution path,
+- attach local boot-time control transports if enabled,
+- poll mandatory local control endpoints,
+- route interaction to the UI domain owner,
+- remain small.
+
+It should **not** become the place where full shell semantics live.
+
+#### Handler
+
+Add:
+
+- `handlers/user_interface_handler.*`
+
+This should own:
+
+- line editing,
+- session state,
+- prompt state,
+- input/output routing policy,
+- command dispatch bridge,
+- redraw behavior,
+- future multi-endpoint session logic.
+
+This is the real owner of the user interaction domain.
+
+#### Resource sharing
+
+For shared resources such as UART, the model should be:
+
+- `uart_adapter.*` -> low-level UART backend bridge
+- `uart_handler.*` -> UART domain owner / channel manager
+- `user_interface` uses `uart_handler` when a UART-backed local console is configured
+
+This avoids duplicating the UART backend behind multiple different adapter names.
+
+#### External control endpoints
+
+Future remote or hosted control channels should become **services**, not extra core logic and not duplicated handlers.
+
+Examples:
+
+- `web_console_service.*`
+- `telnet_console_service.*`
+
+These services should feed the same `user_interface_handler` domain rather than owning their own shell implementation.
+
+---
+
+## Agreed Direction: Networking
+
+Networking should be split into three separate concepts.
+
+### 1. Uplink backends
+
+Adapters:
+
+- `wifi_adapter.*`
+- `ethernet_adapter.*`
+- optionally `lwip_adapter.*` or another TCP/IP boundary adapter
+
+These are backend/resource boundaries only.
+
+### 2. Network domain owner
+
+Handler:
+
+- `network_handler.*`
+
+This should own:
+
+- active uplink state,
+- network readiness,
+- addressing state,
+- reconnect / fallback policy,
+- uniform API for the rest of HexaOS.
+
+### 3. Services above network
+
+Module + services pattern:
+
+- `mod_network.*` -> runtime heartbeat for network domain
+- `mod_services.*` -> runtime heartbeat for hosted/client services
+- `web_service.*`
+- `async_http_client_service.*`
+- `mqtt_service.*`
+- other future services
+
+Important design decision:
+
+**Web is not the network domain itself.**
+It is a service that runs above networking.
+
+---
+
+## Recommended Future Tree
 
 ```text
 src/
   headers/
     hx_build.h
-    hx_schema.h
     hx_config.h
     hx_state.h
     hx_files.h
-    internal/
-      build_pre.h
-      build_post.h
-      schema_pre.h
-      schema_post.h
+    hx_network.h
+    hx_user_interface.h
+    include/
+      pre_build.h
+      pos_build.h
+      pre_config.h
+      pos_config.h
 
   system/
     core/
       boot.*
       log.*
       panic.*
-      runtime.*
       rtos.*
+      runtime.*
       module_registry.*
+      user_interface.*
 
     adapters/
-      console_adapter.*
       nvs_adapter.*
       rtos_adapter.*
-      littlefs_adapter.*        # optional future split
-      wifi_adapter.*            # future
-      ota_adapter.*             # future
+      usb_cdc_jtag_adapter.*
+      uart_adapter.*
+      wifi_adapter.*
+      ethernet_adapter.*
+      lwip_adapter.*
 
     handlers/
       nvs_config_handler.*
       nvs_state_handler.*
-      files_handler.*           # optional future split
+      littlefs_handler.*
+      user_interface_handler.*
+      uart_handler.*
+      network_handler.*
+      files_handler.*
+
+    drivers/
+      rtc/
+        ds3231_driver.*
+      eeprom/
+        at24c32_driver.*
+      ioexpander/
+        xl9535_driver.*
+
+    services/
+      web_service.*
+      web_console_service.*
+      telnet_console_service.*
+      async_http_client_service.*
 
     commands/
       command_engine.*
@@ -263,349 +518,134 @@ src/
 
     modules/
       mod_system.*
-      mod_console.*
+      mod_network.*
+      mod_services.*
       mod_storage.*
-      mod_web.*
       mod_lvgl.*
       mod_berry.*
 ```
 
-This is not meant to force unnecessary fragmentation. It is meant to make ownership explicit.
+This is the **target direction**, not a claim that the current archive already implements all of it.
 
 ---
 
 ## Dependency Direction
 
-The architecture should follow a strict dependency direction.
+### Allowed
 
-### Allowed direction
+- Core may depend on shared system headers and core-internal helpers.
+- Adapters may depend on external APIs and internal shared headers.
+- Handlers may depend on adapters, core, and shared headers.
+- Drivers may depend on adapters and shared headers.
+- Services may depend on handlers, drivers, adapters, and shared headers.
+- Modules may depend on handlers, services, core, and shared headers.
+- Commands may depend on handlers, services, core, and shared headers.
 
-* Core may depend on build/types/internal helpers.
-* Adapters may depend on external APIs and internal shared headers.
-* Handlers may depend on adapters, core, and shared headers.
-* Modules may depend on handlers, adapters, core, and shared headers.
-* Commands may depend on handlers, core, and shared headers.
+### Discouraged
 
-### Discouraged direction
-
-* Core should not depend on modules.
-* Adapters should not depend on modules.
-* Adapters should not contain domain policy.
-* Commands should not become domain owners.
-* Modules should not duplicate handler policy.
-
-The dependency graph should trend downward toward implementation detail, not sideways into coupling.
-
----
-
-## Ownership Rules
-
-HexaOS relies on explicit ownership.
-
-### Domain ownership
-
-Every persistent or runtime domain must have a clear owner.
-
-Examples:
-
-* configuration domain -> config handler,
-* runtime state domain -> state handler,
-* filesystem domain -> files handler,
-* NVS backend access -> NVS adapter,
-* console transport bridge -> console adapter.
-
-If two unrelated places both think they own the same domain, the design is wrong.
-
----
-
-## Public API vs Internal Implementation
-
-HexaOS should keep a strong distinction between:
-
-* what other parts of the system are allowed to call,
-* what is only internal implementation detail.
-
-### Public API
-
-Public system APIs should be declared in dedicated headers under `headers/`.
-
-Examples:
-
-* `hx_config.h`
-* `hx_state.h`
-* `hx_files.h`
-
-### Internal implementation
-
-Implementation-specific helpers should stay local to the corresponding `.cpp` file or private layer-local headers.
-
-**Rule:** do not leak implementation structure when a narrow public API is enough.
-
----
-
-## What an Adapter Must Not Become
-
-An adapter must not become:
-
-* a domain owner,
-* a policy engine,
-* a scheduler,
-* a broker for unrelated services,
-* a place where cross-domain business rules accumulate.
-
-Bad adapter smell:
-
-* it knows too much about multiple internal subsystems,
-* it decides high-level behavior,
-* it coordinates unrelated domains,
-* it becomes a hidden service layer.
-
-When that happens, the code probably belongs in a handler or a core service instead.
-
----
-
-## What a Handler Must Not Become
-
-A handler must not become:
-
-* a raw SDK wrapper,
-* a build glue file,
-* a module lifecycle dispatcher,
-* a hardware abstraction layer for an external library.
-
-Bad handler smell:
-
-* most of the code is direct calls into one external backend,
-* it exposes backend-specific semantics everywhere,
-* it contains almost no real domain policy,
-* it behaves like a thin driver bridge.
-
-When that happens, the code is probably an adapter, not a handler.
-
----
-
-## Current Practical Interpretation in HexaOS
-
-The current HexaOS direction is already good and should be preserved.
-
-### Good current patterns
-
-* `console_adapter` is a real adapter.
-* `nvs_adapter` is a real adapter.
-* `rtos_adapter` is a real adapter.
-* `rtos` belongs in core.
-* `module_registry` belongs in core.
-* `mod_*` files are correctly treated as modules.
-* `command_*` files are correctly treated as commands.
-
-### Current area that may later be split
-
-The current filesystem layer is functionally useful, but it may evolve into a cleaner two-part structure:
-
-* `littlefs_adapter.*`
-* `files_handler.*`
-
-This split is not mandatory immediately, but it is the cleaner long-term model if the filesystem domain grows.
+- Core depending on optional feature modules.
+- Adapters containing domain policy.
+- Handlers becoming raw SDK wrappers.
+- Consumer-specific adapters duplicating a generic backend adapter.
+- Modules owning multiple unrelated layers at once.
+- Commands owning domain state.
 
 ---
 
 ## Naming Rules
 
-Naming should reflect role, not implementation accident.
-
 ### Use `*_adapter` when the file:
 
-* primarily bridges to Arduino, ESP-IDF, FreeRTOS, LittleFS, NVS, Wi-Fi, OTA, or any external library,
-* exists mainly to translate backend APIs into HexaOS-facing calls.
+- bridges HexaOS to an external API, SDK, framework, or hardware backend,
+- represents one external/resource boundary once.
 
 ### Use `*_handler` when the file:
 
-* owns a HexaOS domain,
-* stores policy or validation,
-* manages domain semantics,
-* provides stable system-facing functions for that domain.
+- owns a HexaOS domain,
+- contains domain policy,
+- manages state or stable internal API.
+
+### Use `*_driver` when the file:
+
+- implements a reusable device/protocol driver above adapters.
+
+### Use `*_service` when the file:
+
+- composes behavior across handlers/drivers/adapters,
+- provides hosted or client runtime service functionality,
+- is not itself a domain owner.
 
 ### Use `mod_*` when the file:
 
-* registers with the module lifecycle,
-* participates in runtime scheduling.
+- participates in cooperative lifecycle scheduling.
 
-### Use `command_*` when the file:
+### Use `hx_*` when the file:
 
-* parses and dispatches operator-facing commands.
-
-### Use `hx_*` for public shared headers
-
-This keeps the public surface recognizable and consistent.
-
----
-
-## Build and Meta Headers
-
-Build helpers and schema expansion helpers should not be confused with public API.
-
-These should ideally live under a clearly internal area such as:
-
-* `headers/internal/`
-* or `headers/meta/`
-
-Examples:
-
-* build pre/post include helpers,
-* schema expansion helpers,
-* internal X-macro support files.
-
-These files are part of the build or code-generation model of the firmware, not part of the public domain API.
-
----
-
-## Include Discipline
-
-HexaOS should prefer explicit dependencies.
-
-Recommended rule for each `.cpp` file:
-
-1. include its own matching header first,
-2. include only the specific headers it truly depends on,
-3. avoid relying on a large umbrella header everywhere.
-
-Umbrella headers may still exist for convenience, but they should not hide architectural dependencies.
-
-If a file includes one giant header and nothing else, dependency clarity is lost.
-
----
-
-## How to Decide Where New Code Belongs
-
-When adding a new component, ask these questions in order.
-
-### Question 1
-
-Does this file mostly talk to an external SDK, framework, library, or hardware-facing API?
-
-* If yes -> **Adapter**.
-
-### Question 2
-
-Does this file own internal HexaOS policy or domain semantics?
-
-* If yes -> **Handler**.
-
-### Question 3
-
-Does this file need module lifecycle hooks such as init/start/loop/timers?
-
-* If yes -> **Module**.
-
-### Question 4
-
-Does this file exist mainly to parse user or operator input and call internal APIs?
-
-* If yes -> **Commands**.
-
-### Question 5
-
-Is this part of the permanent system foundation required regardless of optional modules?
-
-* If yes -> **Core**.
-
-If the answer is still unclear, the responsibility is probably not yet well defined.
-
----
-
-## Practical Examples
-
-### Example: Wi-Fi integration
-
-* ESP-IDF / Arduino Wi-Fi bridge -> `wifi_adapter.*`
-* HexaOS Wi-Fi policy, state ownership, reconnect rules -> `wifi_handler.*`
-* runtime lifecycle participant -> `mod_wifi.*` if needed
-
-### Example: OTA
-
-* ESP-IDF OTA backend calls -> `ota_adapter.*`
-* update policy, version checks, state transitions -> `ota_handler.*`
-* background runtime integration -> `mod_ota.*` if needed
-
-### Example: Filesystem
-
-* direct LittleFS backend access -> `littlefs_adapter.*`
-* file-domain API, path rules, atomic write policy -> `files_handler.*`
-* storage-related periodic logic -> `mod_storage.*`
-
-### Example: Console
-
-* serial or USB transport bridge -> `console_adapter.*`
-* command interpreter usage -> `command_engine.*`
-* runtime console module -> `mod_console.*`
+- defines public or shared HexaOS-facing headers.
 
 ---
 
 ## Architectural Anti-Patterns
 
-The following patterns should be avoided.
+Avoid these patterns:
 
-### 1. Hybrid files that own too many layers at once
+### 1. Layer hybrids
 
-A file should not simultaneously be:
+One file should not simultaneously be:
 
-* external backend bridge,
-* domain owner,
-* scheduler,
-* module,
-* and command surface.
+- adapter,
+- handler,
+- service,
+- scheduler,
+- command surface.
 
-### 2. Hidden policy inside adapters
+### 2. Duplicate adapters for the same backend
 
-If a backend bridge decides high-level behavior, it is no longer a clean adapter.
+Do not create separate adapters for different consumers of the same UART/TCP/USB backend.
 
-### 3. Domain logic inside commands
+### 3. Mandatory == Core
 
-Commands should trigger actions, not become the place where system semantics are implemented.
+Do not move a feature into Core only because a particular product build requires it.
 
-### 4. Public API scattered without pattern
+### 4. Service logic hidden inside adapters
 
-Public APIs should be easy to find and consistent in placement.
+An adapter must not become the place where reconnect policy, session logic, application routing, or business behavior accumulate.
 
-### 5. Global umbrella includes everywhere
+### 5. Domain logic inside commands
 
-Convenient in the short term, but harmful to dependency clarity over time.
+Commands should trigger domain APIs, not become the domain.
 
 ---
 
-## Recommended Direction for HexaOS
+## Current Working Interpretation
 
-The current architectural direction is correct and should be continued.
+As of the latest archive:
 
-Recommended improvements over time:
-
-1. keep the current layer model,
-2. preserve the adapter definition as the external boundary layer,
-3. preserve handlers as domain owners,
-4. keep core small and permanent,
-5. keep modules lifecycle-focused,
-6. unify placement of public API headers,
-7. split hybrid layers when they become too mixed,
-8. keep include discipline strict.
-
-This will keep HexaOS understandable even as the codebase grows.
+- Core skeleton is already meaningful and usable.
+- Config and state are already strong domain handlers.
+- LittleFS is functionally handler-like today.
+- Module architecture is still transitional.
+- `mod_console` is still a hybrid and should not define the final model.
+- `drivers/` already exists and should be activated architecturally.
+- networking/services/UI structure is still open and can be corrected cleanly now.
 
 ---
 
 ## Final Summary
 
-HexaOS should be understood as a layered embedded operating environment with explicit ownership boundaries.
+HexaOS should be understood with this mental model:
 
-The correct mental model is:
+- **Core** = permanent system skeleton
+- **Adapter** = external/backend boundary
+- **Handler** = owner of a HexaOS domain
+- **Driver** = reusable device/protocol implementation above adapters
+- **Service** = composed runtime function above handlers/drivers/adapters
+- **Module** = lifecycle participant
+- **Commands** = frontend-agnostic command surface
 
-* **Core** = permanent system foundation
-* **Adapter** = bridge to the outside world
-* **Handler** = internal owner of a system domain
-* **Module** = lifecycle participant
-* **Commands** = operator-facing control surface
-* **Headers** = intentional interface definition
+Additional agreed direction:
 
-The architecture should remain simple, explicit, and resistant to accidental layer mixing.
-
-The goal is not abstraction for its own sake.
-The goal is a codebase where the role of each file is obvious, stable, and defensible.
+- user interaction should evolve from a `console`-named module into a broader **user interface / control-plane architecture**,
+- shared resources such as UART must not be wrapped twice through use-case-specific adapters,
+- networking should be treated as a domain distinct from hosted services running above it,
+- the architecture document must follow the real code and remain adjustable as HexaOS evolves.
