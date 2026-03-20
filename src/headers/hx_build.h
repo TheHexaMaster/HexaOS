@@ -18,10 +18,10 @@
 // SYSTEM BUILD DEF
 
 #define HX_SYSTEM_NAME                    "HexaOS"
-#define HX_VERSION                        "0.0.1-alpha"
+#define HX_VERSION                        "0.0.1"
 #define HX_BUILD_BOARD_ID                 "generic"
 #define HX_BUILD_MODEL_ID                 "generic"
-#define HX_CONFIG_DEFAULT_DEVICE_NAME      "HexaOS Device"
+#define HX_CONFIG_DEFAULT_DEVICE_NAME     "HexaOS Device"
 
 // MODULES
 #define HX_ENABLE_MODULE_SYSTEM           true                                    // System module
