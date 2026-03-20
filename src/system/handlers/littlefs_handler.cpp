@@ -11,7 +11,11 @@
   Arduino filesystem primitives directly.
 */
 
-#include "hexaos.h"
+#include "headers/hx_build.h"
+#include "system/core/log.h"
+#include "system/core/rtos.h"
+#include "system/core/runtime.h"
+#include "system/handlers/littlefs_handler.h"
 
 #if HX_ENABLE_HANDLER_LITTLEFS
 

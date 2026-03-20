@@ -9,7 +9,8 @@
   Provides the central synchronization and timing API exposed to the rest of the system while delegating the low-level backend details to the RTOS adapter layer.
 */
 
-#include "hexaos.h"
+#include "system/core/rtos.h"
+#include "system/core/runtime.h"
 #include "system/adapters/rtos_adapter.h"
 
 static bool g_rtos_ready = false;

@@ -9,7 +9,9 @@
   Declares the lifecycle shell for future display and GUI integration so the graphics subsystem can be enabled as a normal HexaOS module.
 */
 
-#include "hexaos.h"
+#include "headers/hx_build.h"
+#include "system/core/log.h"
+#include "system/core/module_registry.h"
 
 #if HX_ENABLE_MODULE_LVGL
 

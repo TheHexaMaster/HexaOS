@@ -9,17 +9,22 @@
   Provides the persistent key-value configuration layer stored in NVS and used to load, query and save mutable HexaOS config values across reboots.
 */
 
-#include "hexaos.h"
-#include "system/adapters/nvs_adapter.h"
+
+#include "system/handlers/nvs_config_handler.h"
 
 #include <errno.h>
-#include <math.h>
 #include <limits.h>
-#include <stddef.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+
+#include "system/adapters/nvs_adapter.h"
+#include "system/core/log.h"
+#include "system/core/rtos.h"
+#include "system/core/runtime.h"
+
 
 static bool g_config_ready = false;
 static HxRtosCritical g_config_critical = HX_RTOS_CRITICAL_INIT;

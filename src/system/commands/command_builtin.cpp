@@ -10,16 +10,24 @@
   command engine.
 */
 
-#include "hexaos.h"
-#include "system/commands/command_engine.h"
 #include "system/commands/command_builtin.h"
 
+#include <Arduino.h>
+
 #include <esp_system.h>
+
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "headers/hx_config.h"
+#include "system/commands/command_engine.h"
+#include "system/core/log.h"
+#include "system/core/runtime.h"
+#include "system/handlers/nvs_config_handler.h"
+#include "system/handlers/nvs_state_handler.h"
 
 static void CmdFormatFloatDisplay(char* out, size_t out_size, float value) {
   if (!out || (out_size == 0)) {

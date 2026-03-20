@@ -11,11 +11,11 @@
   or business logic.
 */
 
-#include "hexaos.h"
 #include "system/commands/command_engine.h"
 #include "system/commands/command_builtin.h"
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
 static constexpr size_t HX_COMMAND_MAX_COUNT = 32;

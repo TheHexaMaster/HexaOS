@@ -11,7 +11,8 @@
   handler and polls incoming user input directly from the core runtime loop.
 */
 
-#include "hexaos.h"
+#include "system/core/user_interface.h"
+#include "system/core/log.h"
 #include "system/adapters/console_adapter.h"
 #include "system/handlers/user_interface_handler.h"
 

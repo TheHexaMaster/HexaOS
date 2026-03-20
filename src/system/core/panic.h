@@ -9,4 +9,6 @@
   Provides the last-resort stop path for unrecoverable startup or runtime failures and keeps the system halted after logging the panic reason.
 */
 
+#pragma once
+
 void Panic(const char* reason);

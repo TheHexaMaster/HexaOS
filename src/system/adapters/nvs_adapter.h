@@ -11,8 +11,9 @@
 
 #pragma once
 
-#include <Arduino.h>
+#include <stddef.h>
 #include <stdint.h>
+#include <WString.h>
 
 enum HxNvsStore : uint8_t {
   HX_NVS_STORE_CONFIG = 0,

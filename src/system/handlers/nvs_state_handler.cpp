@@ -11,9 +11,8 @@
   config. The state layer supports both build-time static keys and runtime
   registered keys used by future modules, drivers and scripting layers.
 */
-
-#include "hexaos.h"
-#include "system/adapters/nvs_adapter.h"
+#include "system/handlers/nvs_state_handler.h"
+#include "system/handlers/nvs_config_handler.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -22,6 +21,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <esp32-hal.h>
+
+#include "system/adapters/nvs_adapter.h"
+#include "system/core/log.h"
+#include "system/core/rtos.h"
+#include "system/core/runtime.h"
+
 
 static constexpr const char* HX_STATE_CATALOG_KEY = "CATALOG_STATE";
 

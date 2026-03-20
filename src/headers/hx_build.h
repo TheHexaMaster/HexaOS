@@ -11,6 +11,12 @@
 
 #pragma once
 
+
+
+// CONSOLE ADAPTERS VARIANTS
+#define HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC      1
+#define HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  2
+
 // SYSTEM BUILD DEF
 
 #define HX_SYSTEM_NAME                    "HexaOS"
@@ -24,8 +30,8 @@
 #define HX_ENABLE_MODULE_CONSOLE          false                                   // Legacy module disabled. Interactive console moved into core user interface.
 
 // USER INTERFACE
-#define HX_ENABLE_CORE_USER_INTERFACE     true
-  #define HX_BUILD_CONSOLE_ADAPTER        HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC (IDF JTAG shall be more stable because of Arduino CDC bug causing random crash issue - MTVAL: 0x500d2000)
+
+#define HX_BUILD_CONSOLE_ADAPTER          HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC (IDF JTAG shall be more stable because of Arduino CDC bug causing random crash issue - MTVAL: 0x500d2000)
 #define HX_ENABLE_MODULE_STORAGE          false
 #define HX_ENABLE_MODULE_BERRY            false
 #define HX_ENABLE_MODULE_WEB              false
@@ -52,5 +58,36 @@
 #define HX_BUILD_DEFAULT_SAFEBOOT_ENABLE  false
 #define HX_CONFIG_DEFAULT_STATE_DELAY     2000
 
+
+
+
+
+
+
+
+
+// ENV Definition
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+  #define HX_TARGET_NAME "esp32p4"
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+  #define HX_TARGET_NAME "esp32s3"
+#else
+  #define HX_TARGET_NAME "esp32"
+#endif
+
+// USER INTERFACE CONSOLE ADAPTER SELECTOR
+
+  #if (HX_BUILD_CONSOLE_ADAPTER == HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC)
+    #ifndef ARDUINO_USB_MODE
+      #define ARDUINO_USB_MODE 1
+    #endif
+    #ifndef ARDUINO_USB_CDC_ON_BOOT
+      #define ARDUINO_USB_CDC_ON_BOOT 1
+    #endif
+  #else
+    #ifndef ARDUINO_USB_CDC_ON_BOOT
+      #define ARDUINO_USB_CDC_ON_BOOT 0
+    #endif
+  #endif
 
 

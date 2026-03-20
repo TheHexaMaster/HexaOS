@@ -9,8 +9,7 @@
   Creates the single Hx runtime instance that holds shared system flags, uptime and boot-related state accessible across the whole operating system.
 */
 
-#include "hexaos.h"
-
+#include "system/core/runtime.h"
 HxRuntime Hx = {
   .rtos_ready = false,
   .safeboot = false,

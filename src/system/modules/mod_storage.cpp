@@ -10,7 +10,8 @@
 */
 
 
-#include "hexaos.h"
+#include "system/core/log.h"
+#include "system/core/module_registry.h"
 
 static bool StorageInit() {
   LogInfo("STO: init");

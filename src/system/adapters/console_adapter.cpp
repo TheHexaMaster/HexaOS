@@ -9,14 +9,14 @@
   Selects either Arduino USB CDC or the native ESP-IDF USB Serial/JTAG driver at build time and exposes one uniform API to the rest of the firmware.
 */
 
-#include "hexaos.h"
+#include "headers/hx_build.h"
 #include "console_adapter.h"
-
 #include <string.h>
 
 #if (HX_BUILD_CONSOLE_ADAPTER == HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG)
   #include <esp_err.h>
   #include <driver/usb_serial_jtag.h>
+  #include <freertos/FreeRTOS.h>
 #endif
 
 static bool g_console_adapter_ready = false;

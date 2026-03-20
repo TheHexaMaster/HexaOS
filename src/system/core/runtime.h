@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 struct HxRuntime {
   bool rtos_ready;
   bool safeboot;

@@ -9,7 +9,9 @@
   Provides basic system-level runtime reporting and periodic telemetry such as uptime and boot counters to validate that the scheduler and runtime are alive.
 */
 
-#include "hexaos.h"
+#include "system/core/log.h"
+#include "system/core/module_registry.h"
+#include "system/core/runtime.h"
 
 static bool SystemInit() {
   LogInfo("SYS: init");

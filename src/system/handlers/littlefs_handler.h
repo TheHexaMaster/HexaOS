@@ -1,8 +1,9 @@
 #pragma once
 
-#include <Arduino.h>
+
 #include <stddef.h>
 #include <stdint.h>
+#include <Wstring.h>
 
 struct HxFileInfo {
   char path[256];
