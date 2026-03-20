@@ -6,7 +6,7 @@
 
   Description
   Platform abstraction for NVS storage access.
-  Declares the low-level read, write and commit helpers used by higher-level services to persist configuration, runtime state and factory data.
+  Declares the low-level read, write and commit helpers used by higher-level services to persist configuration and runtime state.
 */
 
 #pragma once
@@ -16,14 +16,12 @@
 
 enum HxNvsStore : uint8_t {
   HX_NVS_STORE_CONFIG = 0,
-  HX_NVS_STORE_STATE = 1,
-  HX_NVS_STORE_FACTORY = 2
+  HX_NVS_STORE_STATE = 1
 };
 
 
 bool EspNvsOpenConfig();
 bool EspNvsOpenState();
-bool EspNvsOpenFactory();
 
 
 struct HxNvsStats {

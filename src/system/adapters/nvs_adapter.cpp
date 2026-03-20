@@ -19,18 +19,15 @@
 
 static constexpr const char* HX_NVS_PARTITION_CONFIG = "nvs";
 static constexpr const char* HX_NVS_PARTITION_STATE = "nvs_state";
-static constexpr const char* HX_NVS_PARTITION_FACTORY = "nvs_factory";
 static constexpr const char* HX_NVS_NAMESPACE = "hx";
 
 static nvs_handle_t g_nvs_config = 0;
 static nvs_handle_t g_nvs_state = 0;
-static nvs_handle_t g_nvs_factory = 0;
 
 static const char* GetStorePartitionLabel(HxNvsStore store) {
   switch (store) {
     case HX_NVS_STORE_CONFIG:  return HX_NVS_PARTITION_CONFIG;
     case HX_NVS_STORE_STATE:   return HX_NVS_PARTITION_STATE;
-    case HX_NVS_STORE_FACTORY: return HX_NVS_PARTITION_FACTORY;
     default:                   return nullptr;
   }
 }
@@ -39,7 +36,6 @@ static nvs_handle_t* GetStoreHandlePtr(HxNvsStore store) {
   switch (store) {
     case HX_NVS_STORE_CONFIG:  return &g_nvs_config;
     case HX_NVS_STORE_STATE:   return &g_nvs_state;
-    case HX_NVS_STORE_FACTORY: return &g_nvs_factory;
     default:                   return nullptr;
   }
 }
@@ -48,7 +44,6 @@ static nvs_handle_t GetStoreHandle(HxNvsStore store) {
   switch (store) {
     case HX_NVS_STORE_CONFIG:  return g_nvs_config;
     case HX_NVS_STORE_STATE:   return g_nvs_state;
-    case HX_NVS_STORE_FACTORY: return g_nvs_factory;
     default:                   return 0;
   }
 }
@@ -131,18 +126,6 @@ bool EspNvsOpenState() {
   LogInfo("State NVS init OK (%s)", HX_NVS_PARTITION_STATE);
   
   return OpenPartitionHandle(HX_NVS_PARTITION_STATE, &g_nvs_state);
-}
-
-bool EspNvsOpenFactory() {
-
-  if (!InitPartition(HX_NVS_PARTITION_FACTORY)) {
-    Panic("Factory NVS init failed");
-    return false;
-  }
-
-  LogInfo("Factory NVS init OK (%s)", HX_NVS_PARTITION_FACTORY);
-
-  return OpenPartitionHandle(HX_NVS_PARTITION_FACTORY, &g_nvs_factory);
 }
 
 bool HxNvsGetBool(HxNvsStore store, const char* key, bool* value) {

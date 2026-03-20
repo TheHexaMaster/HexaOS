@@ -59,10 +59,6 @@ void BootInit() {
   BootPrintResetInfo();
   BootPrintChipInfo();
 
-  if (!FactoryDataInit()) {
-    LogWarn("FACT: init failed");
-  }
-
   if (!ConfigInit()) {
     LogWarn("Config: init failed");
   }
