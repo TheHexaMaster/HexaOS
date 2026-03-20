@@ -29,13 +29,13 @@
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling
 - [ ] LOG - Feature - color / font difference for various log levels / command inputs / outputs
 - [ ] LOG - Replace timming from TICK to real time (00:00:00 from boot, time after sync from external RTC)
-- [ ] COMMANDS - Refactor and prototype of central command register and execution buffer (callbacks, scheduling, priorites, etc) (maybe RTOS adapter / handler first?)
-- [ ] CONSOLE - Now we have defined only SERIAL console trought HWCDC / JTAG build selector. Need to add typical SERIAL UART as a build selector option (possible serial fallback as optional setting from config with default false.)
+- [ ] ARCH - Deeper lookup on architecture, define extented options, potential refactor of arch structure if necessary.
 - [ ] REFACTOR - Final pre-release code refactor.
 
 ## Future versions todo by priority
 
-- 
+- COMMANDS - Refactor and prototype of central command register and execution buffer (callbacks, scheduling, priorites, etc) (maybe RTOS adapter / handler first?)
+- CONSOLE - Now we have defined only SERIAL console trought HWCDC / JTAG build selector. Need to add typical SERIAL UART as a build selector option (possible serial fallback as optional setting from config with default false.)
 - JSON parsing implementation
 - Solve pinout definition mechanism
 - filesystem console data handler
