@@ -7,12 +7,11 @@
   Description
   Central logging backend for HexaOS.
   Implements formatted log output, log level filtering, in-memory history
-  buffering and synchronized console-safe printing so log lines do not break
-  interactive shell input.
+  buffering and synchronized sink-safe printing so log lines do not break
+  interactive shell input while the active output transport remains pluggable.
 */
 
 #include "hexaos.h"
-#include "system/adapters/console_adapter.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -24,6 +23,7 @@ static HxRtosCritical g_log_state_critical = HX_RTOS_CRITICAL_INIT;
 static HxRtosMutex g_log_sink_mutex = HX_RTOS_MUTEX_INIT;
 
 static volatile HxLogLevel g_log_level = HX_LOG_INFO;
+static HxLogSinkWriteOps g_log_sink_write_ops = {};
 static char g_log_history[HX_LOG_HISTORY_BYTES];
 static size_t g_log_head = 0;
 static size_t g_log_tail = 0;
@@ -53,6 +53,47 @@ static void LogGetSinkLineHooks(HxLogSinkLineHook* pre_write_line, HxLogSinkLine
   }
 
   LogStateExit();
+}
+
+static HxLogSinkWriteOps LogGetSinkWriteOps() {
+  HxLogSinkWriteOps ops = {};
+
+  LogStateEnter();
+  ops = g_log_sink_write_ops;
+  LogStateExit();
+
+  return ops;
+}
+
+static size_t LogWriteSinkData(const uint8_t* data, size_t len) {
+  HxLogSinkWriteOps ops = LogGetSinkWriteOps();
+  if (!ops.write_data) {
+    return 0;
+  }
+  return ops.write_data(data, len);
+}
+
+static size_t LogWriteSinkText(const char* text) {
+  HxLogSinkWriteOps ops = LogGetSinkWriteOps();
+  if (!ops.write_text) {
+    return 0;
+  }
+  return ops.write_text(text ? text : "");
+}
+
+static size_t LogWriteSinkChar(char ch) {
+  HxLogSinkWriteOps ops = LogGetSinkWriteOps();
+  if (!ops.write_char) {
+    return 0;
+  }
+  return ops.write_char(ch);
+}
+
+static void LogFlushSink() {
+  HxLogSinkWriteOps ops = LogGetSinkWriteOps();
+  if (ops.flush) {
+    ops.flush();
+  }
 }
 
 static const char* LogLevelText(HxLogLevel level) {
@@ -183,9 +224,9 @@ static void LogEmitLine(const char* line) {
       pre_hook();
     }
 
-    ConsoleAdapterWriteText(line);
-    ConsoleAdapterWriteText("\r\n");
-    ConsoleAdapterFlush();
+    LogWriteSinkText(line);
+    LogWriteSinkText("\r\n");
+    LogFlushSink();
     LogStoreLine(line);
 
     if (post_hook) {
@@ -197,66 +238,6 @@ static void LogEmitLine(const char* line) {
   }
 
   LogStoreLine(line);
-}
-
-void LogSinkWriteRaw(const char* text) {
-  if (LogIsInIsr()) {
-    LogRecordIsrDrop();
-    return;
-  }
-
-  if (!text) {
-    text = "";
-  }
-
-  if (LogTakeSinkLock()) {
-    ConsoleAdapterWriteText(text);
-    LogGiveSinkLock();
-  }
-}
-
-void LogSinkWriteChar(char ch) {
-  if (LogIsInIsr()) {
-    LogRecordIsrDrop();
-    return;
-  }
-
-  if (LogTakeSinkLock()) {
-    ConsoleAdapterWriteChar(ch);
-    LogGiveSinkLock();
-  }
-}
-
-void LogSinkWriteLineRaw(const char* text) {
-  if (LogIsInIsr()) {
-    LogRecordIsrDrop();
-    return;
-  }
-
-  if (!text) {
-    text = "";
-  }
-
-  if (LogTakeSinkLock()) {
-    HxLogSinkLineHook pre_hook = nullptr;
-    HxLogSinkLineHook post_hook = nullptr;
-
-    LogGetSinkLineHooks(&pre_hook, &post_hook);
-
-    if (pre_hook) {
-      pre_hook();
-    }
-
-    ConsoleAdapterWriteText(text);
-    ConsoleAdapterWriteText("\r\n");
-    ConsoleAdapterFlush();
-
-    if (post_hook) {
-      post_hook();
-    }
-
-    LogGiveSinkLock();
-  }
 }
 
 static void LogWriteV(HxLogLevel level, const char* tag, const char* fmt, va_list ap) {
@@ -304,8 +285,6 @@ static void LogWriteV(HxLogLevel level, const char* tag, const char* fmt, va_lis
 }
 
 void LogInit() {
-  ConsoleAdapterInit();
-
   if (!RtosCriticalReady(&g_log_state_critical)) {
     RtosCriticalInit(&g_log_state_critical);
   }
@@ -322,6 +301,18 @@ void LogInit() {
   }
 
   LogSetLevel(level);
+}
+
+void LogSetSinkWriteOps(const HxLogSinkWriteOps* ops) {
+  LogStateEnter();
+
+  if (ops) {
+    g_log_sink_write_ops = *ops;
+  } else {
+    memset(&g_log_sink_write_ops, 0, sizeof(g_log_sink_write_ops));
+  }
+
+  LogStateExit();
 }
 
 void LogSetSinkLineHooks(HxLogSinkLineHook pre_write_line, HxLogSinkLineHook post_write_line) {
@@ -462,4 +453,64 @@ uint32_t LogDroppedIsr() {
   dropped = g_log_dropped_isr;
   LogStateExit();
   return dropped;
+}
+
+void LogSinkWriteRaw(const char* text) {
+  if (LogIsInIsr()) {
+    LogRecordIsrDrop();
+    return;
+  }
+
+  if (!text) {
+    text = "";
+  }
+
+  if (LogTakeSinkLock()) {
+    LogWriteSinkText(text);
+    LogGiveSinkLock();
+  }
+}
+
+void LogSinkWriteChar(char ch) {
+  if (LogIsInIsr()) {
+    LogRecordIsrDrop();
+    return;
+  }
+
+  if (LogTakeSinkLock()) {
+    LogWriteSinkChar(ch);
+    LogGiveSinkLock();
+  }
+}
+
+void LogSinkWriteLineRaw(const char* text) {
+  if (LogIsInIsr()) {
+    LogRecordIsrDrop();
+    return;
+  }
+
+  if (!text) {
+    text = "";
+  }
+
+  if (LogTakeSinkLock()) {
+    HxLogSinkLineHook pre_hook = nullptr;
+    HxLogSinkLineHook post_hook = nullptr;
+
+    LogGetSinkLineHooks(&pre_hook, &post_hook);
+
+    if (pre_hook) {
+      pre_hook();
+    }
+
+    LogWriteSinkText(text);
+    LogWriteSinkText("\r\n");
+    LogFlushSink();
+
+    if (post_hook) {
+      post_hook();
+    }
+
+    LogGiveSinkLock();
+  }
 }

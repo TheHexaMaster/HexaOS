@@ -24,9 +24,6 @@ typedef struct {
 
 extern const HxModule ModuleSystem;
 
-#if HX_ENABLE_MODULE_CONSOLE
-  extern const HxModule ModuleConsole;
-#endif
 
 extern const HxModule ModuleStorage;
 extern const HxModule ModuleBerry;

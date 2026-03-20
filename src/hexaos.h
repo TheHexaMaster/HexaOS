@@ -29,3 +29,4 @@
 #include "system/core/rtos.h"
 #include "system/core/runtime.h"
 #include "system/core/module_registry.h"
+#include "system/core/user_interface.h"

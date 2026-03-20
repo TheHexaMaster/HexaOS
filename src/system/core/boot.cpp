@@ -89,6 +89,10 @@ void BootInit() {
     LogWarn("CMD: init failed");
   }
 
+#if HX_ENABLE_CORE_USER_INTERFACE
+  UserInterfaceStart();
+#endif
+
   ModuleInitAll();
   ModuleStartAll();
 }

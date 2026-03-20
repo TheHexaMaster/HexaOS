@@ -15,9 +15,6 @@ static const HxModule* kModules[] = {
 #if HX_ENABLE_MODULE_SYSTEM
   &ModuleSystem,
 #endif
-#if HX_ENABLE_MODULE_CONSOLE
-  &ModuleConsole,
-#endif
 #if HX_ENABLE_MODULE_STORAGE
   &ModuleStorage,
 #endif

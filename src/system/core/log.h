@@ -7,11 +7,14 @@
   Description
   Central logging backend for HexaOS.
   Implements formatted log output, log level filtering, in-memory history
-  buffering and synchronized console-safe printing so log lines do not break
-  interactive shell input.
+  buffering and synchronized sink-safe printing so log lines do not break
+  interactive shell input while the active output transport remains pluggable.
 */
 
 #pragma once
+
+#include <stddef.h>
+#include <stdint.h>
 
 enum HxLogLevel : uint8_t {
   HX_LOG_ERROR = 0,
@@ -22,7 +25,15 @@ enum HxLogLevel : uint8_t {
 
 typedef void (*HxLogSinkLineHook)();
 
+typedef struct {
+  size_t (*write_data)(const uint8_t* data, size_t len);
+  size_t (*write_text)(const char* text);
+  size_t (*write_char)(char ch);
+  void (*flush)();
+} HxLogSinkWriteOps;
+
 void LogInit();
+void LogSetSinkWriteOps(const HxLogSinkWriteOps* ops);
 void LogSetLevel(HxLogLevel level);
 HxLogLevel LogGetLevel();
 void LogSetSinkLineHooks(HxLogSinkLineHook pre_write_line, HxLogSinkLineHook post_write_line);

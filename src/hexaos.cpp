@@ -22,6 +22,12 @@ void setup() {
   // We need log system first for debug
   LogInit();
 
+#if HX_ENABLE_CORE_USER_INTERFACE
+  if (!UserInterfaceInit()) {
+    LogWarn("UI: init failed");
+  }
+#endif
+
 #if HX_ENABLE_CORE_RTOS
   if (!Hx.rtos_ready) {
     LogError("RTS: init failed");
@@ -42,6 +48,10 @@ void loop() {
 
   uint32_t now = millis();
   Hx.uptime_ms = now;
+
+#if HX_ENABLE_CORE_USER_INTERFACE
+  UserInterfaceLoop();
+#endif
 
   ModuleLoopAll();
   StateLoop();

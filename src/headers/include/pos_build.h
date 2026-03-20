@@ -9,28 +9,22 @@
   #define HX_TARGET_NAME "esp32"
 #endif
 
-// CONSOLE ADAPTER SELECTOR
+// USER INTERFACE CONSOLE ADAPTER SELECTOR
+#if HX_ENABLE_CORE_USER_INTERFACE
+  #include "system/adapters/console_adapter.h"
 
-#ifndef HX_BUILD_CONSOLE_ADAPTER
-  #define HX_ENABLE_MODULE_CONSOLE      false
-#endif
-
-#if HX_ENABLE_MODULE_CONSOLE
-#include "system/adapters/console_adapter.h"
-
-#if (HX_BUILD_CONSOLE_ADAPTER == HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC)
-  #ifndef ARDUINO_USB_MODE
-    #define ARDUINO_USB_MODE 1
+  #if (HX_BUILD_CONSOLE_ADAPTER == HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC)
+    #ifndef ARDUINO_USB_MODE
+      #define ARDUINO_USB_MODE 1
+    #endif
+    #ifndef ARDUINO_USB_CDC_ON_BOOT
+      #define ARDUINO_USB_CDC_ON_BOOT 1
+    #endif
+  #else
+    #ifndef ARDUINO_USB_CDC_ON_BOOT
+      #define ARDUINO_USB_CDC_ON_BOOT 0
+    #endif
   #endif
-  #ifndef ARDUINO_USB_CDC_ON_BOOT
-    #define ARDUINO_USB_CDC_ON_BOOT 1
-  #endif
-#else
-  #ifndef ARDUINO_USB_CDC_ON_BOOT
-    #define ARDUINO_USB_CDC_ON_BOOT 0
-  #endif
-#endif
-
 #endif
 
 // HANDLERS

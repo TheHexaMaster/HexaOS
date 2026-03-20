@@ -21,8 +21,11 @@
 
 // MODULES
 #define HX_ENABLE_MODULE_SYSTEM           true                                    // System module
-#define HX_ENABLE_MODULE_CONSOLE          true                                    // Console module (in actual stage of developemnt, its mandatory to stay TRUE)
-  #define HX_BUILD_CONSOLE_ADAPTER        HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC (IDF JTAG Shall be more stable because of Arduino CDC bug causing random crash issue - MTVAL: 0x500d2000)
+#define HX_ENABLE_MODULE_CONSOLE          false                                   // Legacy module disabled. Interactive console moved into core user interface.
+
+// USER INTERFACE
+#define HX_ENABLE_CORE_USER_INTERFACE     true
+  #define HX_BUILD_CONSOLE_ADAPTER        HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC (IDF JTAG shall be more stable because of Arduino CDC bug causing random crash issue - MTVAL: 0x500d2000)
 #define HX_ENABLE_MODULE_STORAGE          false
 #define HX_ENABLE_MODULE_BERRY            false
 #define HX_ENABLE_MODULE_WEB              false
