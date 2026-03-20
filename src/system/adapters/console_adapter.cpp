@@ -17,7 +17,7 @@
 #if (HX_BUILD_CONSOLE_ADAPTER == HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG)
   #include <esp_err.h>
   #include <driver/usb_serial_jtag.h>
-  #include <freertos/FreeRTOS.h>
+  #include "system/core/rtos.h"
 #endif
 
 static bool g_console_adapter_ready = false;
@@ -82,14 +82,14 @@ size_t ConsoleAdapterWriteData(const uint8_t* data, size_t len) {
   size_t total = 0;
 
   while (total < len) {
-    int wr = usb_serial_jtag_write_bytes(data + total, len - total, pdMS_TO_TICKS(20));
+    int wr = usb_serial_jtag_write_bytes(data + total, len - total, RtosMsToTicks(20));
     if (wr <= 0) {
       break;
     }
     total += (size_t)wr;
   }
 
-  usb_serial_jtag_wait_tx_done(pdMS_TO_TICKS(20));
+  usb_serial_jtag_wait_tx_done(RtosMsToTicks(20)); 
   return total;
 #else
   return 0;
@@ -115,6 +115,6 @@ void ConsoleAdapterFlush() {
 #if (HX_BUILD_CONSOLE_ADAPTER == HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC)
   Serial.flush();
 #elif (HX_BUILD_CONSOLE_ADAPTER == HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG)
-  usb_serial_jtag_wait_tx_done(pdMS_TO_TICKS(20));
+  usb_serial_jtag_wait_tx_done(RtosMsToTicks(20));
 #endif
 }
