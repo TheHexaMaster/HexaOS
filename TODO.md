@@ -12,6 +12,7 @@
 - [x] STATES - Define write restriction flag for build-generated states. If true, user / runtime EXCEPT system self cannot change the value. 
 - [x] STATES - Refactor ownership system - no strings, only enums and different logic.
 - [x] STATES - Bugfix - delay shall apply only on value writes, not on creation / deletion / format / another commands. 
+- [x] STATES - Bugfix - catalog data inconsistency 
 - [ ] STATES - Stable and tested release.
 - [ ] CONFIG - Rebuild only AS system (at build) hosted mechanism for configs AND some necessary system counters (reboot counter, last reboot etc). Configs cannot be created / deleted by runtime - only changed by specific rules.
 - [ ] FACTORY NVS - Because of lack of use, this NVS will be deleted and not supported in later models. 

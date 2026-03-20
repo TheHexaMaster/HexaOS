@@ -33,6 +33,20 @@ static constexpr size_t HX_STATE_CATALOG_RESERVE = 4096;
 static constexpr size_t HX_STATE_PENDING_MAX = 96;
 static constexpr size_t HX_STATE_NVS_ENTRY_SIZE = 32;
 
+static constexpr uint16_t HX_STATE_RUNTIME_CATALOG_FLAGS_MASK =
+    (HX_STATE_FLAG_CONSOLE_VISIBLE | HX_STATE_FLAG_WRITE_RESTRICTED);
+
+static constexpr uint16_t HX_STATE_RUNTIME_FORCED_FLAGS =
+    (HX_STATE_FLAG_RUNTIME | HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE);
+
+static uint16_t StateRuntimeCatalogFlags(uint16_t flags) {
+  return (uint16_t)(flags & HX_STATE_RUNTIME_CATALOG_FLAGS_MASK);
+}
+
+static uint16_t StateMakeRuntimeFlags(uint16_t flags) {
+  return (uint16_t)(StateRuntimeCatalogFlags(flags) | HX_STATE_RUNTIME_FORCED_FLAGS);
+}
+
 enum HxStatePendingKind : uint8_t {
   HX_STATE_PENDING_NONE = 0,
   HX_STATE_PENDING_ERASE = 1,
@@ -942,12 +956,21 @@ static bool StateDefsCompatible(const HxStateKeyDef* existing, const HxStateKeyD
     return false;
   }
 
-  if (existing->flags != requested->flags) {
+  if (existing->owner_class != requested->owner_class) {
     return false;
   }
 
-  if (existing->owner_class != requested->owner_class) {
-    return false;
+  uint16_t existing_flags = existing->flags;
+  uint16_t requested_flags = requested->flags;
+
+  if (existing->owner_class == HX_STATE_OWNER_SYSTEM) {
+    if (existing_flags != requested_flags) {
+      return false;
+    }
+  } else {
+    if (StateMakeRuntimeFlags(existing_flags) != StateMakeRuntimeFlags(requested_flags)) {
+      return false;
+    }
   }
 
   switch (existing->type) {
@@ -1024,7 +1047,7 @@ static bool StateInsertRuntimeDef(const HxStateKeyDef* def, bool persist_catalog
   slot->owned_key = key_copy;
   slot->def = *def;
   slot->def.key = slot->owned_key;
-  slot->def.flags |= (HX_STATE_FLAG_RUNTIME | HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE);
+  slot->def.flags = StateMakeRuntimeFlags(slot->def.flags);
 
   taskEXIT_CRITICAL(&g_state_registry_mux);
 
@@ -1074,6 +1097,8 @@ static bool StateBuildRuntimeCatalog(String& manifest) {
       continue;
     }
 
+    uint16_t catalog_flags = StateRuntimeCatalogFlags(def_copy.flags);
+
     char line[HX_STATE_CATALOG_LINE_MAX];
     int written = snprintf(line,
                            sizeof(line),
@@ -1083,7 +1108,7 @@ static bool StateBuildRuntimeCatalog(String& manifest) {
                            (long)def_copy.min_i32,
                            (long)def_copy.max_i32,
                            (unsigned long)def_copy.max_len,
-                           (unsigned int)def_copy.flags,
+                           (unsigned int)catalog_flags,
                            (unsigned int)def_copy.owner_class);
 
     if ((written <= 0) || ((size_t)written >= sizeof(line))) {
@@ -1195,11 +1220,9 @@ static bool StateLoadRuntimeCatalog() {
       .min_i32 = min_i32,
       .max_i32 = max_i32,
       .max_len = (size_t)max_len_i32,
-      .flags = (uint16_t)flags_i32,
+      .flags = StateMakeRuntimeFlags((uint16_t)flags_i32),
       .owner_class = (HxStateOwnerClass)owner_class_i32
     };
-
-    def.flags |= (HX_STATE_FLAG_RUNTIME | HX_STATE_FLAG_PERSISTENT | HX_STATE_FLAG_API_VISIBLE);
 
     if (!StateValidateDef(&def)) {
       continue;
