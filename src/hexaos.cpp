@@ -10,6 +10,7 @@
 */
 
 #include <Arduino.h>
+#include "esp_chip_info.h"
 
 #include "headers/hx_build.h"
 #include "system/commands/command_engine.h"
@@ -21,9 +22,6 @@
 #include "system/handlers/littlefs_handler.h"
 #include "system/handlers/nvs_config_handler.h"
 #include "system/handlers/nvs_state_handler.h"
-
-#include <esp_system.h>
-#include "esp_chip_info.h"
 
 
 static const char* EspResetReasonText(uint32_t reason) {
@@ -111,11 +109,7 @@ static void BootInit() {
 
 void setup() {
 
-#if HX_ENABLE_CORE_RTOS
   Hx.rtos_ready = RtosInit();
-#else
-  Hx.rtos_ready = false;
-#endif
 
   // We need log system first for debug
   LogInit();
@@ -125,13 +119,12 @@ void setup() {
   }
 
 
-#if HX_ENABLE_CORE_RTOS
   if (!Hx.rtos_ready) {
     LogError("RTS: init failed");
   } else {
     HX_LOGI("RTS", "init OK");
   }
-#endif
+
 
   // Standard boot procedure
   BootInit();

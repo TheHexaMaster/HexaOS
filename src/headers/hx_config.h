@@ -17,7 +17,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <limits.h>
+
 
 // Schema ENUM definition
 enum HxSchemaValueType : uint8_t {

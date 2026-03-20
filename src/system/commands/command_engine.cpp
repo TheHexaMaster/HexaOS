@@ -11,8 +11,8 @@
   or business logic.
 */
 
-#include "system/commands/command_engine.h"
-#include "system/commands/command_builtin.h"
+#include "command_engine.h"
+#include "command_builtin.h"
 
 #include <stdio.h>
 #include <stdarg.h>

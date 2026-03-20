@@ -11,10 +11,11 @@
   core user interface runtime bridge.
 */
 
+#include "user_interface_handler.h"
+
 #include "system/core/log.h"
 #include "system/core/rtos.h"
 #include "system/commands/command_engine.h"
-#include "system/handlers/user_interface_handler.h"
 
 #include <stdio.h>
 #include <string.h>

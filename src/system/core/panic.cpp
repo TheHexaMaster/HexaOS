@@ -9,11 +9,12 @@
   Provides the last-resort stop path for unrecoverable startup or runtime failures and keeps the system halted after logging the panic reason.
 */
 
-#include <esp32-hal.h>
+#include "panic.h"
 
-#include "system/core/panic.h"
 #include "system/core/log.h"
 #include "system/adapters/console_adapter.h"
+
+#include <esp32-hal.h>
 
 void Panic(const char* reason) {
   ConsoleAdapterInit();

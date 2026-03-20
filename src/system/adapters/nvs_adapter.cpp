@@ -10,6 +10,7 @@
 */
 
 #include "nvs_adapter.h"
+
 #include "system/core/log.h"
 #include "system/core/panic.h"
 

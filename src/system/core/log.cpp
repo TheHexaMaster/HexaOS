@@ -11,12 +11,11 @@
   interactive shell input while the active output transport remains pluggable.
 */
 
-
+#include "log.h"
 #include "headers/hx_build.h"
-#include "system/core/log.h"
 #include "system/core/rtos.h"
 
-#include <Arduino.h>
+#include <esp32-hal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>

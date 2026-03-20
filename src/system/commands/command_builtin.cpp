@@ -10,11 +10,9 @@
   command engine.
 */
 
-#include "system/commands/command_builtin.h"
+#include "command_builtin.h"
 
-#include <Arduino.h>
-
-#include <esp_system.h>
+#include <esp32-hal.h>
 
 #include <errno.h>
 #include <math.h>

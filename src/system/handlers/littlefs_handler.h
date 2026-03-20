@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <Wstring.h>
+#include <WString.h>
 
 struct HxFileInfo {
   char path[256];

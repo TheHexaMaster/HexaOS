@@ -1,5 +1,5 @@
 /*
-  HexaOS - state.cpp
+  HexaOS - nvs_state_handler.cpp
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
@@ -11,8 +11,8 @@
   config. The state layer supports both build-time static keys and runtime
   registered keys used by future modules, drivers and scripting layers.
 */
-#include "system/handlers/nvs_state_handler.h"
-#include "system/handlers/nvs_config_handler.h"
+#include "nvs_state_handler.h"
+#include "nvs_config_handler.h"
 
 #include <errno.h>
 #include <limits.h>

@@ -11,8 +11,6 @@
 
 #pragma once
 
-
-
 // CONSOLE ADAPTERS VARIANTS
 #define HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC      1
 #define HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  2
@@ -27,34 +25,21 @@
 
 // MODULES
 #define HX_ENABLE_MODULE_SYSTEM           true                                    // System module
-#define HX_ENABLE_MODULE_CONSOLE          false                                   // Legacy module disabled. Interactive console moved into core user interface.
-
-// USER INTERFACE
-
-#define HX_BUILD_CONSOLE_ADAPTER          HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC (IDF JTAG shall be more stable because of Arduino CDC bug causing random crash issue - MTVAL: 0x500d2000)
 #define HX_ENABLE_MODULE_STORAGE          false
 #define HX_ENABLE_MODULE_BERRY            false
 #define HX_ENABLE_MODULE_WEB              false
 #define HX_ENABLE_MODULE_LVGL             false
-
-// States Settings
-
-
-
-// CORES
-
-#define HX_ENABLE_CORE_RTOS               true
 
 // HANDLERS
 
 #define HX_ENABLE_HANDLER_LITTLEFS        true   
 
 // FEATURES
-
+#define HX_BUILD_CONSOLE_ADAPTER          HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC (IDF JTAG shall be more stable because of Arduino CDC bug causing random crash issue - MTVAL: 0x500d2000)
 #define HX_ENABLE_FEATURE_WIFI            true
 #define HX_ENABLE_FEATURE_ETH             true
 #define HX_ENABLE_FEATURE_LITTLEFS        true
-#define HX_BUILD_DEFAULT_LOG_LEVEL        HX_LOG_DEBUG            // Default LOG Level configuration.   
+#define HX_BUILD_DEFAULT_LOG_LEVEL        3                 // 0-err, 1-warn, 2-info, 3-debug   
 #define HX_BUILD_DEFAULT_SAFEBOOT_ENABLE  false
 #define HX_CONFIG_DEFAULT_STATE_DELAY     2000
 

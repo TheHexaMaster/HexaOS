@@ -9,10 +9,10 @@
   Owns the ordered list of compiled HexaOS modules and fans out init, start, loop and periodic callbacks to each registered module.
 */
 
+#include "module_registry.h"
 
 #include <stddef.h>
 #include "headers/hx_build.h"
-#include "system/core/module_registry.h"
 #include "system/core/log.h"
 
 static const HxModule* kModules[] = {

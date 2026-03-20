@@ -10,7 +10,7 @@
 */
 
 
-#include "system/handlers/nvs_config_handler.h"
+#include "nvs_config_handler.h"
 
 #include <errno.h>
 #include <limits.h>

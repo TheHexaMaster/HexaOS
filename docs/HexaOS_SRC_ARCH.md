@@ -2,33 +2,34 @@
 
 ## Purpose
 
-This document defines the **current architectural state** of HexaOS based on the latest source archive and records the **agreed target direction** for the next structural refactor.
+This document describes the **current source architecture** of HexaOS based on the reviewed `src1617` archive and records the **target direction** that the tree is moving toward.
 
-It is not intended as dogma. It is a working architecture definition that must follow the real codebase and evolve when the design becomes clearer.
+It is not a frozen doctrine. It should track the real codebase and be updated whenever the implementation materially changes.
 
 HexaOS should remain:
 
 - explicit,
-- small in concept,
+- compact in concept,
 - easy to audit,
 - easy to extend,
-- resistant to layer mixing.
+- resistant to layer mixing,
+- honest about what is current versus what is only planned.
 
 ---
 
 ## Core Principle
 
-HexaOS is not built around classes or framework-style abstraction.
+HexaOS is not built around heavy class hierarchies or framework-style abstraction.
 
 It is built around **clear ownership**:
 
-- **Core** holds the permanent system foundation and runtime skeleton.
-- **Adapters** bridge HexaOS to external APIs, SDKs, framework layers, or low-level hardware backends.
+- **Core** holds the permanent system skeleton and execution bridge.
+- **Adapters** bridge HexaOS to external APIs, SDK layers, framework backends, or low-level platform resources.
 - **Handlers** own internal HexaOS domains and their policy.
-- **Modules** are cooperative runtime participants registered into the lifecycle dispatcher.
-- **Commands** provide user/operator command dispatch.
-- **Drivers** will represent reusable device/protocol implementations above adapters.
-- **Services** will represent composed runtime services built on top of handlers, drivers, and adapters.
+- **Modules** are cooperative lifecycle participants registered into the runtime dispatcher.
+- **Commands** provide frontend-agnostic command dispatch.
+- **Drivers** are reserved for reusable device/protocol implementations above adapters.
+- **Services** are reserved for composed hosted/client runtime functions above handlers, drivers, and adapters.
 
 ---
 
@@ -42,118 +43,134 @@ HexaOS must distinguish between:
 
 These are not the same thing.
 
-A component may be mandatory for a product profile without belonging to Core.
+A component may be mandatory for a given product profile without belonging to Core.
 
-**Core** must stay small.
+**Core must remain small.**
 
 ---
 
-## Current Source Tree (latest archive)
+## Current Source Tree (reviewed archive)
 
 ```text
 src/
   headers/
     hx_build.h
     hx_config.h
-    include/
-      pre_build.h
-      pos_build.h
-      pre_config.h
-      pos_config.h
 
   hexaos.cpp
-  hexaos.h
 
   system/
-    core/
-      boot.*
-      log.*
-      module_registry.*
-      panic.*
-      rtos.*
-      runtime.*
-
     adapters/
       console_adapter.*
       nvs_adapter.*
       rtos_adapter.*
 
     commands/
-      command_engine.*
       command_builtin.*
+      command_engine.*
+
+    core/
+      log.*
+      module_registry.*
+      panic.*
+      rtos.*
+      runtime.*
+      user_interface.*
+
+    drivers/
+      (currently empty)
 
     handlers/
       littlefs_handler.*
       nvs_config_handler.*
       nvs_state_handler.*
+      user_interface_handler.*
 
     modules/
-      mod_system.*
-      mod_console.*
-      mod_storage.*
-      mod_web.*
-      mod_lvgl.*
-      mod_berry.*
-
-    drivers/
-      (currently empty)
+      mod_berry.cpp
+      mod_lvgl.cpp
+      mod_storage.cpp
+      mod_system.cpp
+      mod_web.cpp
 ```
+
+Notes about the current tree:
+
+- There is **no `hexaos.h`** in the reviewed archive.
+- There is **no `system/core/boot.*`** yet. Boot orchestration currently lives inside `hexaos.cpp` as file-local helpers.
+- There is **no `mod_console.*`** anymore. Interactive shell control has already been split into `core/user_interface.*` and `handlers/user_interface_handler.*`.
+- There is **no `headers/include/`** subtree in the reviewed archive.
 
 ---
 
 ## Current Runtime Flow
 
-The current runtime flow in the latest archive is:
+The current runtime flow in the reviewed archive is:
 
-### setup()
+### `setup()`
 
-- RTOS init
+- RTOS init flag setup
 - Log init
-- Boot init
+- User interface init
+- Boot init sequence
 
-### BootInit()
+### `BootInit()` inside `hexaos.cpp`
 
-- board / reset / chip boot reporting
-- Config init
-- Config load
-- Config apply
-- State init
-- Files init
-- State load
-- Files mount
-- Command init
-- Module init all
-- Module start all
+- boot banner
+- reset reporting
+- chip reporting
+- config init
+- config load
+- config apply
+- state init
+- files init
+- state load
+- files mount
+- command init
+- user interface start
+- module init all
+- module start all
 
-### loop()
+### `loop()`
 
+- uptime update
+- `UserInterfaceLoop()`
 - `ModuleLoopAll()`
 - `StateLoop()`
 - `ModuleEvery100ms()`
 - `ModuleEverySecond()`
 
-This means the current model is **mostly module-driven**, but not absolutely. `StateLoop()` still runs directly from the main loop.
+This means the current system is **not purely module-driven**.
+
+Two important runtime parts already bypass the module layer by design:
+
+- the local control plane (`UserInterfaceLoop()`),
+- the delayed state-commit scheduler (`StateLoop()`).
+
+That is acceptable in the current architecture because both are acting as mandatory runtime services rather than optional feature modules.
 
 ---
 
-## Layer Definitions
+## Current Layer Definitions
 
 ### 1. Core
 
 `system/core/`
 
-Core contains the permanent HexaOS foundation.
+Core currently contains the permanent system skeleton.
 
 Current real Core responsibilities:
 
-- boot orchestration,
-- runtime values,
-- panic,
 - logging,
-- RTOS entry,
-- module registry and lifecycle fan-out.
+- runtime flags/state container,
+- panic path,
+- RTOS wrapper,
+- module registry and lifecycle fan-out,
+- mandatory local control-plane bridge.
 
-Core should remain free of feature-domain policy such as web logic, storage policy, network policy, or device-specific business rules.
+Important current note:
+
+- Boot orchestration is **conceptually core-like**, but it is **not yet in `system/core/boot.*`**. It still lives in `hexaos.cpp`.
 
 **Core is the system skeleton, not the feature layer.**
 
@@ -165,33 +182,21 @@ Core should remain free of feature-domain policy such as web logic, storage poli
 
 An adapter is the boundary to something external.
 
-Examples:
+Current real adapters:
 
-- Arduino or ESP-IDF APIs,
-- FreeRTOS,
-- NVS,
-- USB Serial/JTAG backend,
-- UART backend,
-- Wi-Fi stack,
-- Ethernet stack,
-- TCP/IP stack,
-- external storage or peripheral libraries.
+- `console_adapter.*` -> local console transport backend abstraction
+- `nvs_adapter.*` -> ESP NVS backend abstraction
+- `rtos_adapter.*` -> FreeRTOS backend abstraction
 
-**Rule:** an adapter should exist once per backend/resource boundary, not once per use-case.
+Adapter rule:
 
-Good examples:
+- an adapter should bridge one external/backend/resource boundary,
+- it should not become the owner of HexaOS domain policy.
 
-- `uart_adapter.*`
-- `usb_cdc_jtag_adapter.*`
-- `wifi_adapter.*`
-- `ethernet_adapter.*`
-- `lwip_adapter.*`
+Current interpretation note:
 
-Bad pattern:
-
-- creating `*_console_adapter` and `uart_adapter` for the same UART backend.
-
-That would duplicate the same external boundary under two different names.
+- `console_adapter.*` is acceptable in the current tree because it abstracts the active **local control transport backend**.
+- If UART later becomes a broader shared platform resource, the architecture should split that into a generic `uart_adapter.*` plus a higher-level consumer.
 
 ---
 
@@ -201,22 +206,17 @@ That would duplicate the same external boundary under two different names.
 
 A handler owns an internal HexaOS domain.
 
-A handler is where policy, domain semantics, validation, domain state, and reusable internal API belong.
+Current real handlers:
 
-Current real handlers already show this well:
+- `nvs_config_handler.*` -> configuration domain
+- `nvs_state_handler.*` -> runtime state persistence domain
+- `littlefs_handler.*` -> filesystem domain on top of LittleFS
+- `user_interface_handler.*` -> shell/session/input domain
 
-- `nvs_config_handler.*`
-- `nvs_state_handler.*`
-- `littlefs_handler.*`
+Handler rule:
 
-Future examples:
-
-- `uart_handler.*`
-- `network_handler.*`
-- `user_interface_handler.*`
-- `files_handler.*`
-
-**Rule:** a handler owns a HexaOS domain. It is not just a thin wrapper around an SDK.
+- a handler owns validation, state, policy, and stable internal API for a HexaOS domain,
+- it is not merely a thin SDK wrapper.
 
 ---
 
@@ -224,19 +224,26 @@ Future examples:
 
 `system/modules/`
 
-A module is a cooperative runtime participant.
+A module is a cooperative lifecycle participant.
 
-Modules currently participate in:
+Current modules:
 
-- init,
-- start,
-- loop,
-- every-100ms,
-- every-second.
+- `mod_system.cpp`
+- `mod_storage.cpp`
+- `mod_web.cpp`
+- `mod_lvgl.cpp`
+- `mod_berry.cpp`
 
-A module provides runtime heartbeat, but should not become a dump zone for policy, low-level backend glue, and user-facing logic all at once.
+Current module reality:
 
-**Rule:** a module moves the system in time. It should not automatically own a domain just because it has a loop.
+- `mod_system` is the only meaningful active runtime example today,
+- the remaining modules are mostly lifecycle shells/placeholders,
+- modules are currently compiled from `.cpp` only; there are no dedicated module headers yet.
+
+Module rule:
+
+- a module moves the system in time,
+- it should not automatically become the owner of a domain just because it has periodic hooks.
 
 ---
 
@@ -246,15 +253,17 @@ A module provides runtime heartbeat, but should not become a dump zone for polic
 
 Commands provide a frontend-agnostic command surface.
 
-The command layer should:
+Current command layer responsibilities:
 
-- parse command text,
-- dispatch to the correct internal API,
-- return output through an abstract output sink.
+- command registry,
+- command lookup,
+- line execution,
+- help/inspection/mutation commands for config/state/log/files/runtime.
 
-The command layer should not become the owner of the system model.
+Command rule:
 
-Current code already follows this direction well through `command_engine.*` and `command_builtin.*`.
+- commands trigger internal APIs,
+- commands should not become the owner of domain state or persistence rules.
 
 ---
 
@@ -262,194 +271,156 @@ Current code already follows this direction well through `command_engine.*` and 
 
 `system/drivers/`
 
-The `drivers/` directory already exists and should become the layer for **device/protocol implementations** above low-level adapters.
+The directory already exists but is not yet populated in the reviewed archive.
 
-Examples:
+Planned meaning:
 
-- RTC chip drivers,
-- EEPROM drivers,
-- display drivers,
+- reusable device/protocol implementations above adapters.
+
+Examples for the future:
+
+- I2C device drivers,
+- RTC drivers,
+- EEPROM/FRAM drivers,
 - IO expander drivers,
-- sensor protocol drivers.
-
-A driver should not talk directly to product policy.
-
-Example direction:
-
-- `ds3231_driver.*` -> uses `i2c_adapter.*`
-- `at24c32_driver.*` -> uses `i2c_adapter.*`
-- `xl9535_driver.*` -> uses `i2c_adapter.*`
+- display or sensor protocol drivers.
 
 ---
 
 ### 7. Services
 
-`system/services/` (proposed)
+`system/services/` (planned, not present yet)
 
-A service is a composed runtime function built on top of handlers, drivers, and adapters.
+A service should represent a composed runtime function above handlers/drivers/adapters.
 
-Services are useful when something is not the owner of a full HexaOS domain but is more than a thin backend bridge.
+Examples for the future:
 
-Examples:
-
-- web console service,
-- telnet console service,
+- web service,
+- hosted API service,
 - async HTTP client service,
-- web server service,
-- hosted API service.
+- telnet/web console service.
 
 A service is not automatically a handler.
 
 ---
 
-## Current Transitional Problem Areas
+## Current Transitional Reality
 
-### mod_console is a hybrid
+### User interaction is already no longer a module
 
-In the current codebase, `mod_console.*` is not a clean single-role module.
+The reviewed code has already moved away from `mod_console`.
 
-It currently mixes:
+Current split:
 
-- runtime polling,
-- prompt redraw logic,
-- shell line editing,
-- interactive state,
-- command dispatch glue,
-- direct use of `console_adapter`.
+- `core/user_interface.*` -> mandatory runtime bridge and transport polling
+- `handlers/user_interface_handler.*` -> shell/session/prompt/command handling
+- `adapters/console_adapter.*` -> backend transport boundary
 
-This should be treated as a **transitional implementation**, not as the final architectural shape.
+That is a meaningful improvement and should now be reflected in the architecture text instead of still describing `mod_console` as the current implementation.
 
-### modules are not yet the final stable layer model
+### Boot is still entrypoint-local
 
-`mod_system` is small and clear.
+The current boot sequence is conceptually core functionality, but physically it still lives in `hexaos.cpp` as static helpers.
 
-`mod_storage`, `mod_web`, `mod_lvgl`, and `mod_berry` are still largely placeholder lifecycle shells.
+That is acceptable for now, but the document should treat it as **current reality plus future migration target**, not as if `core/boot.*` already exists.
 
-This means the module layer is still under construction and can be redesigned cleanly without breaking a mature final model.
+### Module layer is still early
+
+`mod_storage`, `mod_web`, `mod_lvgl`, and `mod_berry` are still placeholder lifecycle shells.
+
+That means the module layer is still structurally open and can be redesigned further without breaking a mature subsystem model.
 
 ---
 
 ## Agreed Direction: User Interface
 
-### Why console should not remain a standalone module identity
+HexaOS should continue using the current split that now exists in the codebase.
 
-The system should not think in terms of:
+### Current good direction
 
-- console module,
-- web console module,
-- telnet module,
-- LVGL control module.
+#### Core bridge
 
-Those are all just **different control-plane / user-interface endpoints**.
+`core/user_interface.*`
 
-The architectural concept should be broader than `console`.
+Should remain:
 
-### Agreed target model
+- small,
+- mandatory,
+- transport/polling oriented,
+- free of shell policy.
 
-HexaOS should move toward a **mandatory control-plane nucleus** with a clear separation of concerns.
+#### Domain owner
 
-#### Core
+`handlers/user_interface_handler.*`
 
-Add:
+Should remain the owner of:
 
-- `core/user_interface.*`
-
-This should be the mandatory runtime bridge for the local and attached user-control plane.
-
-It should:
-
-- participate directly in the core-controlled execution path,
-- attach local boot-time control transports if enabled,
-- poll mandatory local control endpoints,
-- route interaction to the UI domain owner,
-- remain small.
-
-It should **not** become the place where full shell semantics live.
-
-#### Handler
-
-Add:
-
-- `handlers/user_interface_handler.*`
-
-This should own:
-
+- prompt state,
 - line editing,
 - session state,
-- prompt state,
-- input/output routing policy,
+- redraw policy,
 - command dispatch bridge,
-- redraw behavior,
-- future multi-endpoint session logic.
+- future multi-endpoint shell/session policy.
 
-This is the real owner of the user interaction domain.
+#### Transport/backend boundary
 
-#### Resource sharing
+`adapters/console_adapter.*`
 
-For shared resources such as UART, the model should be:
+Currently owns the selected local console backend.
 
-- `uart_adapter.*` -> low-level UART backend bridge
-- `uart_handler.*` -> UART domain owner / channel manager
-- `user_interface` uses `uart_handler` when a UART-backed local console is configured
+Future evolution may split this further if HexaOS introduces a broader shared UART/USB transport layer, but that is not required yet.
 
-This avoids duplicating the UART backend behind multiple different adapter names.
+#### Remote control endpoints
 
-#### External control endpoints
-
-Future remote or hosted control channels should become **services**, not extra core logic and not duplicated handlers.
+Future remote or hosted control channels should become **services** that feed the same `user_interface_handler` domain rather than owning separate shell logic.
 
 Examples:
 
 - `web_console_service.*`
 - `telnet_console_service.*`
 
-These services should feed the same `user_interface_handler` domain rather than owning their own shell implementation.
-
 ---
 
 ## Agreed Direction: Networking
 
-Networking should be split into three separate concepts.
+Networking should eventually be split into three concepts.
 
 ### 1. Uplink backends
 
-Adapters:
+Adapters such as:
 
 - `wifi_adapter.*`
 - `ethernet_adapter.*`
-- optionally `lwip_adapter.*` or another TCP/IP boundary adapter
-
-These are backend/resource boundaries only.
+- optionally `lwip_adapter.*`
 
 ### 2. Network domain owner
 
-Handler:
+Handler such as:
 
 - `network_handler.*`
 
 This should own:
 
-- active uplink state,
-- network readiness,
-- addressing state,
-- reconnect / fallback policy,
+- uplink state,
+- readiness,
+- addressing,
+- reconnect/fallback policy,
 - uniform API for the rest of HexaOS.
 
 ### 3. Services above network
 
-Module + services pattern:
+Modules + services pattern, for example:
 
-- `mod_network.*` -> runtime heartbeat for network domain
-- `mod_services.*` -> runtime heartbeat for hosted/client services
+- `mod_network.*`
+- `mod_services.*`
 - `web_service.*`
 - `async_http_client_service.*`
 - `mqtt_service.*`
-- other future services
 
-Important design decision:
+Important design point:
 
 **Web is not the network domain itself.**
-It is a service that runs above networking.
+It is a service running above networking.
 
 ---
 
@@ -464,11 +435,8 @@ src/
     hx_files.h
     hx_network.h
     hx_user_interface.h
-    include/
-      pre_build.h
-      pos_build.h
-      pre_config.h
-      pos_config.h
+
+  hexaos.cpp
 
   system/
     core/
@@ -481,18 +449,18 @@ src/
       user_interface.*
 
     adapters/
+      console_adapter.*
       nvs_adapter.*
       rtos_adapter.*
-      usb_cdc_jtag_adapter.*
       uart_adapter.*
       wifi_adapter.*
       ethernet_adapter.*
       lwip_adapter.*
 
     handlers/
+      littlefs_handler.*
       nvs_config_handler.*
       nvs_state_handler.*
-      littlefs_handler.*
       user_interface_handler.*
       uart_handler.*
       network_handler.*
@@ -517,15 +485,15 @@ src/
       command_builtin.*
 
     modules/
-      mod_system.*
-      mod_network.*
-      mod_services.*
-      mod_storage.*
-      mod_lvgl.*
-      mod_berry.*
+      mod_system.cpp
+      mod_network.cpp
+      mod_services.cpp
+      mod_storage.cpp
+      mod_lvgl.cpp
+      mod_berry.cpp
 ```
 
-This is the **target direction**, not a claim that the current archive already implements all of it.
+This is the **target direction**, not a claim that the current tree already implements all of it.
 
 ---
 
@@ -533,7 +501,7 @@ This is the **target direction**, not a claim that the current archive already i
 
 ### Allowed
 
-- Core may depend on shared system headers and core-internal helpers.
+- Core may depend on shared headers and core-internal helpers.
 - Adapters may depend on external APIs and internal shared headers.
 - Handlers may depend on adapters, core, and shared headers.
 - Drivers may depend on adapters and shared headers.
@@ -546,7 +514,7 @@ This is the **target direction**, not a claim that the current archive already i
 - Core depending on optional feature modules.
 - Adapters containing domain policy.
 - Handlers becoming raw SDK wrappers.
-- Consumer-specific adapters duplicating a generic backend adapter.
+- Consumer-specific adapters duplicating a generic backend adapter after a shared backend owner already exists.
 - Modules owning multiple unrelated layers at once.
 - Commands owning domain state.
 
@@ -557,7 +525,7 @@ This is the **target direction**, not a claim that the current archive already i
 ### Use `*_adapter` when the file:
 
 - bridges HexaOS to an external API, SDK, framework, or hardware backend,
-- represents one external/resource boundary once.
+- represents one external/backend boundary once.
 
 ### Use `*_handler` when the file:
 
@@ -599,9 +567,9 @@ One file should not simultaneously be:
 - scheduler,
 - command surface.
 
-### 2. Duplicate adapters for the same backend
+### 2. Duplicate backend ownership
 
-Do not create separate adapters for different consumers of the same UART/TCP/USB backend.
+Do not create separate adapters for different consumers of the same backend after a generic backend boundary already exists.
 
 ### 3. Mandatory == Core
 
@@ -619,23 +587,24 @@ Commands should trigger domain APIs, not become the domain.
 
 ## Current Working Interpretation
 
-As of the latest archive:
+As of the reviewed archive:
 
-- Core skeleton is already meaningful and usable.
-- Config and state are already strong domain handlers.
-- LittleFS is functionally handler-like today.
-- Module architecture is still transitional.
-- `mod_console` is still a hybrid and should not define the final model.
-- `drivers/` already exists and should be activated architecturally.
-- networking/services/UI structure is still open and can be corrected cleanly now.
+- the Core skeleton is meaningful and usable,
+- config and state are strong handlers,
+- LittleFS is functionally handler-like and appropriately placed,
+- user interaction is already split across core bridge + handler + adapter,
+- the module layer is still transitional,
+- `drivers/` exists but is not populated yet,
+- `services/` is still a planned layer,
+- boot orchestration still lives in `hexaos.cpp` and is a likely future extraction target.
 
 ---
 
 ## Final Summary
 
-HexaOS should be understood with this mental model:
+HexaOS should currently be understood with this model:
 
-- **Core** = permanent system skeleton
+- **Core** = permanent system skeleton and mandatory execution bridge
 - **Adapter** = external/backend boundary
 - **Handler** = owner of a HexaOS domain
 - **Driver** = reusable device/protocol implementation above adapters
@@ -645,7 +614,7 @@ HexaOS should be understood with this mental model:
 
 Additional agreed direction:
 
-- user interaction should evolve from a `console`-named module into a broader **user interface / control-plane architecture**,
-- shared resources such as UART must not be wrapped twice through use-case-specific adapters,
-- networking should be treated as a domain distinct from hosted services running above it,
-- the architecture document must follow the real code and remain adjustable as HexaOS evolves.
+- the user/control plane should continue evolving around `user_interface` rather than a legacy `console module` identity,
+- shared backends such as UART should be owned once if and when they become broader shared platform resources,
+- networking should be treated as a domain distinct from the services running above it,
+- the architecture document must follow the real codebase and explicitly distinguish **current reality** from **future intent**.

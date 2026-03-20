@@ -9,7 +9,7 @@
   Owns the concrete FreeRTOS primitives allocated for HexaOS RTOS objects and translates the core RTOS API into ESP32-specific synchronization and timing calls.
 */
 
-#include "system/adapters/rtos_adapter.h"
+#include "rtos_adapter.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
