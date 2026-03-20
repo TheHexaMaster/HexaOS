@@ -66,7 +66,6 @@ HexaOS uses a partition strategy shared across **4 MiB** and **16 MiB** flash va
 The planned flash model includes:
 
 - `otadata` – OTA boot metadata
-- `nvs_factory` – optional per-device factory/manufacturing data
 - `nvs` – runtime configuration overrides
 - `nvs_state` – persistent runtime state
 - `safeboot` – dedicated recovery image

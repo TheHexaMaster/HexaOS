@@ -23,6 +23,7 @@
 - [x] RTOS - REfactor - move from handler to core without using build selector - native RTOS core implementation. This way core RTOS can manage different RTOS adapters in future. 
 - [x] RTOS - Integration PART 2 - update to existing modules using RTOS external unmanaged calls - NVS config and STATE. 
 - [x] RTOS - Integration PART 3 - littlefs_handler 
+- [ ] RUNTIME - Refactor, strict module declaration and integration, command console to show actual runtime states
 - [ ] TIME - We need to create central time engine / interface prepared to operate from RTC and timming for events, synchronysing from internal RTC modules (i2c driver) and NTP sync (prepare, web interface later)
 - [ ] LOG - Add 5th log level - "LLD", displayng Low Level Debug Messages
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling
@@ -42,3 +43,4 @@
 - Webserver (start of development)
 - OTA handling
 - DEBUG - We need console based LOW-LEVEL debugger, capable to call introspect <read/write> <iram/psram/flash/pointer> at selected <hex address> and return/write selected bytes <1,2,4,8,16,32,64...>. Return bytes in HEX. It shall be RAW debugger without any protection (in debug mode, crashes are acceptable.)
+- TASK Manager (RTOS-powered)
