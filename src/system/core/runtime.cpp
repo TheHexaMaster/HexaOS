@@ -12,6 +12,7 @@
 #include "hexaos.h"
 
 HxRuntime Hx = {
+  .rtos_ready = false,
   .safeboot = false,
   .config_loaded = false,
   .state_loaded = false,

@@ -18,18 +18,22 @@
 - [x] STATES - Stable and tested release.
 - [x] CONFIG - Refactor to pre-final logic and test.
 - [x] LITTLEFS - Extend adapter with complex funcs to manage FS - initial commit. Need deep refactor, test and optim.
-- [ ] FreeRTOS - Create adapter for convience async handling with priority and task management covered under HexaOS.
+- [x] RTOS - Create adapter and handler for convience async handling with priority and task management covered under HexaOS.
+- [ ] RTOS - Integration PART 1 - update to existing modules using RTOS external unmanaged calls - log an console
+- [ ] RTOS - REfactor - move from handler to core without using build selector - native RTOS core implementation. This way core RTOS can manage different RTOS adapters in future. 
+- [ ] RTOS - Integration PART 2 - update to existing modules using RTOS external unmanaged calls - NVS config and STATE. 
+- [ ] TIME - We need to create central time engine / interface prepared to operate from RTC and timming for events, synchronysing from internal RTC modules (i2c driver) and NTP sync (prepare, web interface later)
 - [ ] LOG - Add 5th log level - "LLD", displayng Low Level Debug Messages
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling
 - [ ] LOG - Feature - color / font difference for various log levels / command inputs / outputs
+- [ ] LOG - Replace timming from TICK to real time (00:00:00 from boot, time after sync from external RTC)
 - [ ] COMMANDS - Refactor and prototype of central command register and execution buffer (callbacks, scheduling, priorites, etc) (maybe RTOS adapter / handler first?)
 - [ ] CONSOLE - Now we have defined only SERIAL console trought HWCDC / JTAG build selector. Need to add typical SERIAL UART as a build selector option (possible serial fallback as optional setting from config with default false.)
 - [ ] REFACTOR - Final pre-release code refactor.
 
 ## Future versions todo by priority
 
-- TIME - We need to create central time engine / interface prepared to operate from RTC and timming for events, synchronysing from internal RTC modules (i2c driver) and NTP sync (prepare, web interface later)
-- LOG - Replace timming from TICK to real time (00:00:00 from boot, time after sync from external RTC)
+- 
 - JSON parsing implementation
 - Solve pinout definition mechanism
 - filesystem console data handler

@@ -13,8 +13,22 @@
 
 void setup() {
 
+#if HX_ENABLE_HANDLER_RTOS
+  Hx.rtos_ready = RtosInit();
+#else
+  Hx.rtos_ready = false;
+#endif
+
   // We need log system first for debug
   LogInit();
+
+#if HX_ENABLE_HANDLER_RTOS
+  if (!Hx.rtos_ready) {
+    LogError("RTS: init failed");
+  } else {
+    HX_LOGI("RTS", "init OK");
+  }
+#endif
 
   // Standard boot procedure
   BootInit();

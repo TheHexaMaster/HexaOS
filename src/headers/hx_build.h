@@ -34,6 +34,7 @@
 
 // HANDLERS
 
+#define HX_ENABLE_HANDLER_RTOS            true
 #define HX_ENABLE_HANDLER_LITTLEFS        true   
 
 // FEATURES
