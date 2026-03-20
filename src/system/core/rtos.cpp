@@ -1,12 +1,12 @@
 /*
-  HexaOS - rtos_handler.cpp
+  HexaOS - rtos.cpp
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  Central RTOS service implementation for HexaOS.
-  Provides the stable synchronization and timing API exposed to the rest of the system while delegating the low-level backend details to the RTOS adapter layer.
+  Native core RTOS service implementation for HexaOS.
+  Provides the central synchronization and timing API exposed to the rest of the system while delegating the low-level backend details to the RTOS adapter layer.
 */
 
 #include "hexaos.h"

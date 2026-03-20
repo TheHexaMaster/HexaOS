@@ -1,12 +1,12 @@
 /*
-  HexaOS - rtos_handler.h
+  HexaOS - rtos.h
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  Central RTOS service layer for HexaOS.
-  Declares the stable synchronization and timing primitives that higher-level modules, handlers and core services should use across the firmware.
+  Native core RTOS service for HexaOS.
+  Declares the central synchronization and timing primitives that core, handlers, adapters and modules should use across the firmware.
 */
 
 #pragma once

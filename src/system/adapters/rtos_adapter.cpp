@@ -6,7 +6,7 @@
 
   Description
   FreeRTOS backend adapter for HexaOS.
-  Owns the concrete FreeRTOS primitives allocated for HexaOS RTOS objects and translates the public handler API into ESP32-specific synchronization and timing calls.
+  Owns the concrete FreeRTOS primitives allocated for HexaOS RTOS objects and translates the core RTOS API into ESP32-specific synchronization and timing calls.
 */
 
 #include "system/adapters/rtos_adapter.h"

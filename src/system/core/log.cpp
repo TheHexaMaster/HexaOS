@@ -12,7 +12,6 @@
 */
 
 #include "hexaos.h"
-#include "headers/hx_rtos.h"
 #include "system/adapters/console_adapter.h"
 
 #include <stdio.h>

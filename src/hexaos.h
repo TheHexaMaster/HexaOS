@@ -26,5 +26,6 @@
 #include "system/core/panic.h"
 #include "system/core/boot.h"
 #include "system/core/log.h"
+#include "system/core/rtos.h"
 #include "system/core/runtime.h"
 #include "system/core/module_registry.h"

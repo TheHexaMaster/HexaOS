@@ -27,9 +27,12 @@ static void SystemEvery100ms() {
 }
 
 static void SystemEverySecond() {
-//  LogInfo("SYS: uptime=%lu ms boot_count=%lu",
-//          (unsigned long)Hx.uptime_ms,
-//          (unsigned long)Hx.boot_count);
+
+  HX_LOGI("SYS", " uptime=%lu ms boot_count=%lu",
+          (unsigned long)Hx.uptime_ms,
+          (unsigned long)Hx.boot_count);
+
+
 }
 
 const HxModule ModuleSystem = {

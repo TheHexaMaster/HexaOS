@@ -34,9 +34,6 @@
 #endif
 
 // HANDLERS
-#if HX_ENABLE_HANDLER_RTOS
-  #include "headers/hx_rtos.h"
-#endif
 #if HX_ENABLE_HANDLER_LITTLEFS
   #include "system/handlers/littlefs_handler.h"
 #endif

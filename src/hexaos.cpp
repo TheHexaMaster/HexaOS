@@ -13,7 +13,7 @@
 
 void setup() {
 
-#if HX_ENABLE_HANDLER_RTOS
+#if HX_ENABLE_CORE_RTOS
   Hx.rtos_ready = RtosInit();
 #else
   Hx.rtos_ready = false;
@@ -22,7 +22,7 @@ void setup() {
   // We need log system first for debug
   LogInit();
 
-#if HX_ENABLE_HANDLER_RTOS
+#if HX_ENABLE_CORE_RTOS
   if (!Hx.rtos_ready) {
     LogError("RTS: init failed");
   } else {

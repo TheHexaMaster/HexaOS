@@ -22,8 +22,17 @@
 #include <strings.h>
 
 static bool g_config_ready = false;
-static portMUX_TYPE g_config_mux = portMUX_INITIALIZER_UNLOCKED;
+static HxRtosCritical g_config_critical = HX_RTOS_CRITICAL_INIT;
 static constexpr size_t HX_CONFIG_NVS_ENTRY_SIZE_BYTES = 32;
+
+
+static void ConfigStateEnter() {
+  RtosCriticalEnter(&g_config_critical);
+}
+
+static void ConfigStateExit() {
+  RtosCriticalExit(&g_config_critical);
+}
 
 enum ConfigLoadItemResult : uint8_t {
   HX_CONFIG_LOAD_ITEM_OK = 0,
@@ -158,9 +167,9 @@ static void ConfigCopyCurrent(HxConfig* out_config) {
     return;
   }
 
-  taskENTER_CRITICAL(&g_config_mux);
+  ConfigStateEnter();
   *out_config = HxConfigData;
-  taskEXIT_CRITICAL(&g_config_mux);
+  ConfigStateExit();
 }
 
 static void ConfigCommitCurrent(const HxConfig* config, bool loaded) {
@@ -168,17 +177,17 @@ static void ConfigCommitCurrent(const HxConfig* config, bool loaded) {
     return;
   }
 
-  taskENTER_CRITICAL(&g_config_mux);
+  ConfigStateEnter();
   HxConfigData = *config;
   Hx.config_loaded = loaded;
-  taskEXIT_CRITICAL(&g_config_mux);
+  ConfigStateExit();
 }
 
 static bool ConfigLoadedFlag() {
   bool loaded = false;
-  taskENTER_CRITICAL(&g_config_mux);
+  ConfigStateEnter();
   loaded = Hx.config_loaded;
-  taskEXIT_CRITICAL(&g_config_mux);
+  ConfigStateExit();
   return loaded;
 }
 
@@ -545,9 +554,9 @@ void ConfigResetToDefaults(HxConfig* config) {
   }
 
   if (config == &HxConfigData) {
-    taskENTER_CRITICAL(&g_config_mux);
+    ConfigStateEnter();
     HxConfigData = HxConfigDefaults;
-    taskEXIT_CRITICAL(&g_config_mux);
+    ConfigStateExit();
     return;
   }
 
@@ -689,10 +698,15 @@ bool ConfigToggleBool(const HxConfigKeyDef* item, bool* new_value_out) {
 }
 
 bool ConfigInit() {
+  if (!RtosCriticalReady(&g_config_critical) && !RtosCriticalInit(&g_config_critical)) {
+    HX_LOGE("CFG", "critical init failed");
+    return false;
+  }
+
   ConfigResetToDefaults(&HxConfigData);
-  taskENTER_CRITICAL(&g_config_mux);
+  ConfigStateEnter();
   Hx.config_loaded = false;
-  taskEXIT_CRITICAL(&g_config_mux);
+  ConfigStateExit();
 
   g_config_ready = EspNvsOpenConfig();
   if (g_config_ready) {
@@ -801,9 +815,9 @@ bool ConfigSave() {
     return false;
   }
 
-  taskENTER_CRITICAL(&g_config_mux);
+  ConfigStateEnter();
   Hx.config_loaded = true;
-  taskEXIT_CRITICAL(&g_config_mux);
+  ConfigStateExit();
 
   HX_LOGI("CFG", "save complete overrides=%lu defaults=%lu",
           (unsigned long)overridden_count,

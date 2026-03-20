@@ -6,12 +6,12 @@
 
   Description
   Low-level RTOS backend adapter for HexaOS.
-  Maps the handler-level RTOS primitives to the concrete FreeRTOS/ESP platform implementation.
+  Maps the core-level RTOS primitives to the concrete FreeRTOS/ESP platform implementation.
 */
 
 #pragma once
 
-#include "headers/hx_rtos.h"
+#include "system/core/rtos.h"
 
 bool RtosAdapterCriticalInit(HxRtosCritical* critical);
 void RtosAdapterCriticalDestroy(HxRtosCritical* critical);
