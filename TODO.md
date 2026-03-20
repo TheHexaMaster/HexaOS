@@ -17,10 +17,12 @@
 - [x] STATES and CONFIGS - added FLOAT variable definition + new TYPE SCHEME MACRO for different variables at build (XS,XI,XB,XF)
 - [x] STATES - Stable and tested release.
 - [x] CONFIG - Refactor to pre-final logic and test.
+- [x] LITTLEFS - Extend adapter with complex funcs to manage FS - initial commit. Need deep refactor, test and optim.
+- [ ] FreeRTOS - Create adapter for convience async handling with priority and task management covered under HexaOS.
 - [ ] LOG - Add 5th log level - "LLD", displayng Low Level Debug Messages
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling
 - [ ] LOG - Feature - color / font difference for various log levels / command inputs / outputs
-- [ ] COMMANDS - Refactor and prototype of central command register and execution buffer (callbacks, scheduling, priorites, etc)
+- [ ] COMMANDS - Refactor and prototype of central command register and execution buffer (callbacks, scheduling, priorites, etc) (maybe RTOS adapter / handler first?)
 - [ ] CONSOLE - Now we have defined only SERIAL console trought HWCDC / JTAG build selector. Need to add typical SERIAL UART as a build selector option (possible serial fallback as optional setting from config with default false.)
 - [ ] REFACTOR - Final pre-release code refactor.
 
@@ -35,4 +37,3 @@
 - Webserver (start of development)
 - OTA handling
 - DEBUG - We need console based LOW-LEVEL debugger, capable to call introspect <read/write> <iram/psram/flash/pointer> at selected <hex address> and return/write selected bytes <1,2,4,8,16,32,64...>. Return bytes in HEX. It shall be RAW debugger without any protection (in debug mode, crashes are acceptable.)
-- FreeRTOS adapter for convience async handling with priority and task management covered under HexaOS.
