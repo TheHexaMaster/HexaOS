@@ -39,10 +39,10 @@ enum HxSchemaValueType : uint8_t {
 // Because the C preprocessor cannot derive valid identifiers from a string like "log.level",
 // the schema keeps both a token id and an external text key.
 #define HX_CONFIG_SCHEMA(XS, XI, XB, XF) \
-  XS(device_name,        "device.name",        32,                          HX_BUILD_DEFAULT_DEVICE_NAME,                       true, true) \
-  XI(log_level,          "log.level",          0,        3,                 HX_BUILD_DEFAULT_LOG_LEVEL,                         true, true) \
-  XB(safeboot_enable,    "safeboot.enable",                                 HX_BUILD_DEFAULT_SAFEBOOT_ENABLE,                   true, true) \
-  XI(states_delay,       "states.delay",       0,        600000,            HX_CONFIG_DEFAULT_STATE_DELAY,                      true, true)
+  XS(device_name,        "device.name",        32,                          HX_CONFIG_DEFAULT_DEVICE_NAME,                       true, true) \
+  XI(log_level,          "log.level",          0,        3,                 HX_CONFIG_DEFAULT_LOG_LEVEL,                         true, true) \
+  XB(safeboot_enable,    "safeboot.enable",                                 HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE,                   true, true) \
+  XI(states_delay,       "states.delay",       0,        600000,            HX_CONFIG_DEFAULT_STATE_DELAY,                       true, true)
 
 
 // Typed state schema entries:

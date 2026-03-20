@@ -299,7 +299,7 @@ void LogInit() {
 
   LogHistoryClear();
 
-  HxLogLevel level = (HxLogLevel)HX_BUILD_DEFAULT_LOG_LEVEL;
+  HxLogLevel level = (HxLogLevel)HX_CONFIG_DEFAULT_LOG_LEVEL;
   if ((level < HX_LOG_ERROR) || (level > HX_LOG_DEBUG)) {
     level = HX_LOG_INFO;
   }
