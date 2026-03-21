@@ -23,11 +23,11 @@
 - [x] RTOS - REfactor - move from handler to core without using build selector - native RTOS core implementation. This way core RTOS can manage different RTOS adapters in future. 
 - [x] RTOS - Integration PART 2 - update to existing modules using RTOS external unmanaged calls - NVS config and STATE. 
 - [x] RTOS - Integration PART 3 - littlefs_handler 
+- [x] TIME - We need to create central time engine / interface prepared to operate from RTC and timming for events, synchronysing from internal RTC modules (i2c driver) and NTP sync (prepare, web interface later)
 - [ ] RUNTIME - Refactor, strict module declaration and integration, command console to show actual runtime states
-- [ ] TIME - We need to create central time engine / interface prepared to operate from RTC and timming for events, synchronysing from internal RTC modules (i2c driver) and NTP sync (prepare, web interface later)
 - [ ] LOG - Add 5th log level - "LLD", displayng Low Level Debug Messages
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling
-- [ ] LOG - Feature - color / font difference for various log levels / command inputs / outputs
+- [ ] LOG - Feature - color / font difference for various log levels / command inputs / outputs 
 - [ ] LOG - Replace timming from TICK to real time (00:00:00 from boot, time after sync from external RTC)
 - [ ] ARCH - Deeper lookup on architecture, define extented options, potential refactor of arch structure if necessary.
 - [ ] REFACTOR - Final pre-release code refactor.

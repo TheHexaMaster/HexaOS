@@ -134,7 +134,7 @@ bool HxNvsOpen(HxNvsStore store) {
   return OpenPartitionHandle(partition_label, handle);
 }
 
-bool EspNvsOpenConfig() {
+bool HxNvsOpenConfig() {
   if (!HxNvsOpen(HX_NVS_STORE_CONFIG)) {
     Panic("Config NVS init failed");
     return false;
@@ -144,7 +144,7 @@ bool EspNvsOpenConfig() {
   return true;
 }
 
-bool EspNvsOpenState() {
+bool HxNvsOpenState() {
   if (!HxNvsOpen(HX_NVS_STORE_STATE)) {
     Panic("State NVS init failed");
     return false;
