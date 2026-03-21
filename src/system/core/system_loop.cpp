@@ -1,37 +1,39 @@
 /*
-  HexaOS - mod_system.cpp
+  HexaOS - system_loop.cpp
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  Core system status module.
-  Provides basic system-level runtime reporting and periodic telemetry such as uptime and boot counters to validate that the scheduler and runtime are alive.
+  Core runtime service loop implementation for HexaOS.
+  Owns the mandatory per-iteration system work that must always run even when
+  optional modules are disabled, including user interface polling, state
+  handler maintenance, uptime tracking and the built-in heartbeat log tick.
 */
 
+#include "system_loop.h"
+
+#include <Arduino.h>
+
 #include "system/core/log.h"
-#include "system/core/module_registry.h"
 #include "system/core/runtime.h"
 #include "system/core/time.h"
+#include "system/core/user_interface.h"
+#include "system/handlers/nvs_state_handler.h"
 
-static bool SystemInit() {
-  LogInfo("SYS: init");
-  return true;
+void SystemLoop() {
+  Hx.uptime_ms = millis();
+
+  UserInterfaceLoop();
+  StateLoop();
 }
 
-static void SystemStart() {
-  LogInfo("SYS: start");
+void SystemEvery100ms() {
 }
 
-static void SystemLoop() {
-}
-
-static void SystemEvery100ms() {
-}
-
-static void SystemEverySecond() {
+void HeartBeatTick() {
   char uptime_text[32];
-  TimeFormatMonotonic(uptime_text, sizeof(uptime_text), TimeMonotonicMs());
+  TimeFormatMonotonic(uptime_text, sizeof(uptime_text), (uint64_t)Hx.uptime_ms);
 
   if (!TimeIsSynchronized()) {
     HX_LOGI("SYS", "uptime=%s boot_count=%lu time=unsynced",
@@ -55,11 +57,6 @@ static void SystemEverySecond() {
           TimeSourceText(TimeGetSource()));
 }
 
-const HxModule ModuleSystem = {
-  .name = "system",
-  .init = SystemInit,
-  .start = SystemStart,
-  .loop = SystemLoop,
-  .every_100ms = SystemEvery100ms,
-  .every_1s = SystemEverySecond
-};
+void SystemEverySecond() {
+  HeartBeatTick();
+}

@@ -6,19 +6,18 @@
 
   Description
   Static module registry and lifecycle dispatcher.
-  Owns the ordered list of compiled HexaOS modules and fans out init, start, loop and periodic callbacks to each registered module.
+  Owns the ordered list of compiled HexaOS modules and fans out init, start,
+  loop and periodic callbacks to each registered optional module.
 */
 
 #include "module_registry.h"
 
 #include <stddef.h>
+
 #include "headers/hx_build.h"
 #include "system/core/log.h"
 
 static const HxModule* kModules[] = {
-#if HX_ENABLE_MODULE_SYSTEM
-  &ModuleSystem,
-#endif
 #if HX_ENABLE_MODULE_STORAGE
   &ModuleStorage,
 #endif

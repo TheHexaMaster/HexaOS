@@ -22,9 +22,6 @@ typedef struct {
   void (*every_1s)();
 } HxModule;
 
-extern const HxModule ModuleSystem;
-
-
 extern const HxModule ModuleStorage;
 extern const HxModule ModuleBerry;
 extern const HxModule ModuleWeb;
