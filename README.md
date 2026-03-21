@@ -175,7 +175,7 @@ The flash strategy is centered around concepts such as:
 - primary application image
 - user filesystem for scripts, assets, and runtime files
 
-The project is designed around practical persistence and recovery workflows rather than assuming a single monolithic firmware image forever. The original repository README already established the 4 MiB / 16 MiB direction and a recovery-oriented persistence model, and that direction remains aligned with the current architecture. fileciteturn14file13
+The project is designed around practical persistence and recovery workflows rather than assuming a single monolithic firmware image forever. The original repository README already established the 4 MiB / 16 MiB direction and a recovery-oriented persistence model, and that direction remains aligned with the current architecture.
 
 ---
 
@@ -222,7 +222,7 @@ HexaOS has moved beyond a placeholder repository stage and is now driven by a de
 - service and module classification
 - build-time feature gating
 
-That architectural direction is now a first-class part of the project, not an afterthought. The current README replaces the original initial-commit era project description with one aligned to the repository’s real long-term design. The initial README was written before the architecture and source tree model were defined. fileciteturn14file11turn14file1
+That architectural direction is now a first-class part of the project, not an afterthought. The current README replaces the original initial-commit era project description with one aligned to the repository’s real long-term design. The initial README was written before the architecture and source tree model were defined.
 
 ---
 
