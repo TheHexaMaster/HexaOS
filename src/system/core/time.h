@@ -59,4 +59,5 @@ bool TimeGetUnixSeconds(uint64_t* out_unix_seconds);
 
 bool TimeFormatUtc(char* out, size_t out_size, uint64_t unix_ms);
 bool TimeFormatNowUtc(char* out, size_t out_size);
+bool TimeFormatUint64(char* out, size_t out_size, uint64_t value);
 void TimeFormatMonotonic(char* out, size_t out_size, uint64_t monotonic_ms);

@@ -49,6 +49,14 @@ static void CmdFormatFloatDisplay(char* out, size_t out_size, float value) {
   }
 }
 
+static void CmdFormatUint64(char* out, size_t out_size, uint64_t value) {
+  if (!TimeFormatUint64(out, out_size, value)) {
+    if (out && (out_size > 0)) {
+      out[0] = '\0';
+    }
+  }
+}
+
 static const char* CmdStateTypeText(HxSchemaValueType type) {
   switch (type) {
     case HX_SCHEMA_VALUE_BOOL:   return "bool";
@@ -1002,7 +1010,9 @@ static HxCmdStatus CmdTimeStatus(const char* args, HxCmdOutput* out) {
   CmdOutPrintfLine(out, "ready = %s", info.ready ? "true" : "false");
   CmdOutPrintfLine(out, "synchronized = %s", info.synchronized ? "true" : "false");
   CmdOutPrintfLine(out, "source = %s", TimeSourceText(info.source));
-  CmdOutPrintfLine(out, "monotonic_ms = %llu", (unsigned long long)info.monotonic_ms);
+  char monotonic_ms_text[24];
+  CmdFormatUint64(monotonic_ms_text, sizeof(monotonic_ms_text), info.monotonic_ms);
+  CmdOutPrintfLine(out, "monotonic_ms = %s", monotonic_ms_text);
   CmdOutPrintfLine(out, "uptime = %s", monotonic_text);
 
   if (!info.synchronized) {
@@ -1016,9 +1026,15 @@ static HxCmdStatus CmdTimeStatus(const char* args, HxCmdOutput* out) {
     return HX_CMD_OK;
   }
 
-  CmdOutPrintfLine(out, "unix_ms = %llu", (unsigned long long)info.unix_ms);
-  CmdOutPrintfLine(out, "unix_s = %llu", (unsigned long long)(info.unix_ms / 1000ULL));
-  CmdOutPrintfLine(out, "sync_age_ms = %llu", (unsigned long long)info.sync_age_ms);
+  char unix_ms_text[24];
+  char unix_s_text[24];
+  char sync_age_text[24];
+  CmdFormatUint64(unix_ms_text, sizeof(unix_ms_text), info.unix_ms);
+  CmdFormatUint64(unix_s_text, sizeof(unix_s_text), info.unix_ms / 1000ULL);
+  CmdFormatUint64(sync_age_text, sizeof(sync_age_text), info.sync_age_ms);
+  CmdOutPrintfLine(out, "unix_ms = %s", unix_ms_text);
+  CmdOutPrintfLine(out, "unix_s = %s", unix_s_text);
+  CmdOutPrintfLine(out, "sync_age_ms = %s", sync_age_text);
   CmdOutPrintfLine(out, "utc = %s", utc_text);
   return HX_CMD_OK;
 }

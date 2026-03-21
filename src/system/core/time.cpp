@@ -34,6 +34,32 @@ static HxTimeState g_time_state = {
   .sync_unix_ms = 0
 };
 
+static bool TimeWriteUint64(char* out, size_t out_size, uint64_t value) {
+  if (!out || (out_size == 0)) {
+    return false;
+  }
+
+  char reverse[21];
+  size_t count = 0;
+
+  do {
+    reverse[count++] = (char)('0' + (value % 10ULL));
+    value /= 10ULL;
+  } while ((value > 0ULL) && (count < sizeof(reverse)));
+
+  if ((count + 1U) > out_size) {
+    out[0] = '\0';
+    return false;
+  }
+
+  for (size_t i = 0; i < count; ++i) {
+    out[i] = reverse[count - 1U - i];
+  }
+
+  out[count] = '\0';
+  return true;
+}
+
 static uint64_t TimeReadMonotonicNowMs() {
   int64_t us = esp_timer_get_time();
   if (us <= 0) {
@@ -259,34 +285,46 @@ bool TimeFormatNowUtc(char* out, size_t out_size) {
   return TimeFormatUtc(out, out_size, unix_ms);
 }
 
+bool TimeFormatUint64(char* out, size_t out_size, uint64_t value) {
+  return TimeWriteUint64(out, out_size, value);
+}
+
 void TimeFormatMonotonic(char* out, size_t out_size, uint64_t monotonic_ms) {
   if (!out || (out_size == 0)) {
     return;
   }
 
   uint64_t total_seconds = monotonic_ms / 1000ULL;
-  uint64_t millis_part = monotonic_ms % 1000ULL;
+  unsigned long millis_part = (unsigned long)(monotonic_ms % 1000ULL);
   uint64_t days = total_seconds / 86400ULL;
-  uint64_t hours = (total_seconds % 86400ULL) / 3600ULL;
-  uint64_t minutes = (total_seconds % 3600ULL) / 60ULL;
-  uint64_t seconds = total_seconds % 60ULL;
+  unsigned long hours = (unsigned long)((total_seconds % 86400ULL) / 3600ULL);
+  unsigned long minutes = (unsigned long)((total_seconds % 3600ULL) / 60ULL);
+  unsigned long seconds = (unsigned long)(total_seconds % 60ULL);
 
-  if (days > 0) {
+  if (days > 0ULL) {
+    char days_text[24];
+    if (!TimeWriteUint64(days_text, sizeof(days_text), days)) {
+      out[0] = '\0';
+      return;
+    }
+
     snprintf(out,
              out_size,
-             "%llud %02llu:%02llu:%02llu.%03llu",
-             (unsigned long long)days,
-             (unsigned long long)hours,
-             (unsigned long long)minutes,
-             (unsigned long long)seconds,
-             (unsigned long long)millis_part);
-  } else {
-    snprintf(out,
-             out_size,
-             "%02llu:%02llu:%02llu.%03llu",
-             (unsigned long long)hours,
-             (unsigned long long)minutes,
-             (unsigned long long)seconds,
-             (unsigned long long)millis_part);
+             "%sd %02lu:%02lu:%02lu.%03lu",
+             days_text,
+             hours,
+             minutes,
+             seconds,
+             millis_part);
+    return;
   }
+
+  snprintf(out,
+           out_size,
+           "%02lu:%02lu:%02lu.%03lu",
+           hours,
+           minutes,
+           seconds,
+           millis_part);
 }
+
