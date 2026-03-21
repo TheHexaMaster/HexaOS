@@ -5,8 +5,9 @@
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  Platform abstraction for NVS storage access.
-  Declares the low-level read, write and commit helpers used by higher-level services to persist configuration and runtime state.
+  Unified NVS adapter for HexaOS configuration and runtime state persistence.
+  Provides partition-aware open, read, write, erase, commit, statistics and
+  format helpers for the dedicated config and state NVS stores.
 */
 
 #pragma once
@@ -26,9 +27,6 @@ enum HxNvsReadResult : uint8_t {
   HX_NVS_READ_ERROR = 2
 };
 
-bool EspNvsOpenConfig();
-bool EspNvsOpenState();
-
 struct HxNvsStats {
   const char* partition_label;
   const char* namespace_name;
@@ -38,6 +36,10 @@ struct HxNvsStats {
   size_t total_entries;
   size_t namespace_entries;
 };
+
+bool HxNvsOpen(HxNvsStore store);
+bool HxNvsOpenConfig();
+bool HxNvsOpenState();
 
 HxNvsReadResult HxNvsReadBool(HxNvsStore store, const char* key, bool* value);
 HxNvsReadResult HxNvsReadInt(HxNvsStore store, const char* key, int32_t* value);

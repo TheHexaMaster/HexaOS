@@ -5,8 +5,10 @@
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  ESP NVS platform adapter.
-  Implements the concrete non-volatile storage backend used by HexaOS services to open dedicated NVS partitions and read, write or commit primitive persisted values.
+  Unified ESP NVS adapter.
+  Implements the concrete HexaOS configuration and state persistence backend,
+  including dedicated store routing, partition initialization, handle opening
+  and typed read, write, erase, commit, statistics and format operations.
 */
 
 #include "nvs_adapter.h"
@@ -117,26 +119,39 @@ static bool OpenPartitionHandle(const char* partition_label, nvs_handle_t* handl
   return true;
 }
 
+bool HxNvsOpen(HxNvsStore store) {
+  const char* partition_label = GetStorePartitionLabel(store);
+  nvs_handle_t* handle = GetStoreHandlePtr(store);
+
+  if (!partition_label || !partition_label[0] || !handle) {
+    return false;
+  }
+
+  if (!InitPartition(partition_label)) {
+    return false;
+  }
+
+  return OpenPartitionHandle(partition_label, handle);
+}
+
 bool EspNvsOpenConfig() {
-  if (!InitPartition(HX_NVS_PARTITION_CONFIG)) {
+  if (!HxNvsOpen(HX_NVS_STORE_CONFIG)) {
     Panic("Config NVS init failed");
     return false;
   }
 
   LogInfo("Config NVS init OK (%s)", HX_NVS_PARTITION_CONFIG);
-
-  return OpenPartitionHandle(HX_NVS_PARTITION_CONFIG, &g_nvs_config);
+  return true;
 }
 
 bool EspNvsOpenState() {
-  if (!InitPartition(HX_NVS_PARTITION_STATE)) {
+  if (!HxNvsOpen(HX_NVS_STORE_STATE)) {
     Panic("State NVS init failed");
     return false;
   }
 
   LogInfo("State NVS init OK (%s)", HX_NVS_PARTITION_STATE);
-
-  return OpenPartitionHandle(HX_NVS_PARTITION_STATE, &g_nvs_state);
+  return true;
 }
 
 HxNvsReadResult HxNvsReadBool(HxNvsStore store, const char* key, bool* value) {
