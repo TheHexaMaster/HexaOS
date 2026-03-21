@@ -417,6 +417,127 @@ system/services/polling/
 
 ---
 
+
+## Build-Time Feature Gating
+
+HexaOS supports build-time enabling and disabling of optional feature families.
+
+A build flag that disables a feature means the feature is **architecturally absent**, not merely inactive at runtime.
+
+This rule applies to the entire feature stack.
+
+If an optional feature family is disabled, every layer that exists only to support that feature must also be removed from the build as appropriate:
+
+- adapters,
+- handlers,
+- drivers,
+- services,
+- module shells,
+- command surfaces,
+- UI/API surfaces,
+- feature-specific integration glue.
+
+### Canonical Rule
+
+> Build-time feature gating applies to the complete feature family, not only to its top-level entry point.
+
+A disabled feature must not remain partially linked into the binary through stray includes, helper functions, route tables, commands, or backend wrappers.
+
+### Optional Consumers
+
+When another subsystem uses an optional capability only opportunistically, it must depend on the higher-level domain API rather than a concrete backend implementation.
+
+That consumer must be able to handle outcomes such as:
+
+- unavailable,
+- unsupported,
+- not built,
+- backend missing.
+
+Example:
+
+- a web subsystem may continue to exist without a flash filesystem,
+- while file-manager or static-asset features are compiled out.
+
+### Hard Requirements
+
+When a subsystem fundamentally requires another feature family, this dependency must be enforced at build time.
+
+Canonical pattern:
+
+```text
+feature enabled + required dependency disabled -> build error
+```
+
+This prevents silent architectural amputation where the build succeeds but the subsystem is no longer conceptually whole.
+
+Flash filesystem support is a canonical example of this rule, but the rule is general and applies equally to networking, telemetry backends, storage backends, display stacks, and future optional domains.
+
+---
+
+## Initialization Order and Dependency Safety
+
+HexaOS must never rely on accidental module ordering as a hidden dependency mechanism.
+
+### Canonical Rule
+
+> Module initialization order must not be used as dependency resolution.
+
+`Init()` and `Start()` phases are self-initialization phases for a module's own runtime domain. They are not permission to assume that another module has already initialized its services.
+
+### Consequences
+
+A module may:
+
+- initialize its own state,
+- register its own routes, commands, handlers, callbacks, or observers,
+- prepare its own runtime structures.
+
+A module must not:
+
+- assume another module has already started,
+- assume another module has already initialized a service,
+- require relative ordering in the module list to function correctly.
+
+### Early Mandatory Dependencies
+
+If a dependency must exist before modules begin their lifecycle, it belongs to one of the following forms:
+
+- core boot initialization,
+- or an explicit early-boot service hook called from `BootInit()`.
+
+This is the approved model for truly early requirements.
+
+### Runtime Optional Dependencies
+
+If a dependency is not early-boot critical, it must be handled through explicit readiness and capability checks.
+
+Canonical outcomes include:
+
+- ready,
+- not ready,
+- unavailable,
+- disabled by build,
+- backend absent.
+
+This allows services and modules to degrade gracefully without turning the module list into a hidden dependency graph.
+
+### Stability Rule
+
+> A service must not be initialized by accident.
+
+A service must be one of the following:
+
+- boot-ready through explicit boot orchestration,
+- explicitly initialized by its owning runtime domain,
+- lazily usable through readiness checks,
+- or absent because the feature family is not part of the build.
+
+This rule keeps HexaOS auditable and prevents fragile cross-module coupling.
+
+---
+
+
 ## Lifecycle Model
 
 ## Top-Level Runtime Shape
