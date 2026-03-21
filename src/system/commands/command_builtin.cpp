@@ -13,6 +13,7 @@
 #include "command_builtin.h"
 
 #include <esp32-hal.h>
+#include <esp_system.h>
 
 #include <errno.h>
 #include <math.h>
@@ -24,6 +25,7 @@
 #include "system/commands/command_engine.h"
 #include "system/core/log.h"
 #include "system/core/runtime.h"
+#include "system/core/time.h"
 #include "system/handlers/nvs_config_handler.h"
 #include "system/handlers/nvs_state_handler.h"
 
@@ -981,6 +983,95 @@ static HxCmdStatus CmdStateFormat(const char* args, HxCmdOutput* out) {
   return HX_CMD_OK;
 }
 
+
+static HxCmdStatus CmdTimeStatus(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: time status");
+    return HX_CMD_USAGE;
+  }
+
+  HxTimeInfo info{};
+  if (!TimeGetInfo(&info)) {
+    CmdOutWriteLine(out, "time status failed");
+    return HX_CMD_ERROR;
+  }
+
+  char monotonic_text[32];
+  TimeFormatMonotonic(monotonic_text, sizeof(monotonic_text), info.monotonic_ms);
+
+  CmdOutPrintfLine(out, "ready = %s", info.ready ? "true" : "false");
+  CmdOutPrintfLine(out, "synchronized = %s", info.synchronized ? "true" : "false");
+  CmdOutPrintfLine(out, "source = %s", TimeSourceText(info.source));
+  CmdOutPrintfLine(out, "monotonic_ms = %llu", (unsigned long long)info.monotonic_ms);
+  CmdOutPrintfLine(out, "uptime = %s", monotonic_text);
+
+  if (!info.synchronized) {
+    CmdOutWriteLine(out, "utc = -");
+    return HX_CMD_OK;
+  }
+
+  char utc_text[40];
+  if (!TimeFormatUtc(utc_text, sizeof(utc_text), info.unix_ms)) {
+    CmdOutWriteLine(out, "utc = <format-error>");
+    return HX_CMD_OK;
+  }
+
+  CmdOutPrintfLine(out, "unix_ms = %llu", (unsigned long long)info.unix_ms);
+  CmdOutPrintfLine(out, "unix_s = %llu", (unsigned long long)(info.unix_ms / 1000ULL));
+  CmdOutPrintfLine(out, "sync_age_ms = %llu", (unsigned long long)info.sync_age_ms);
+  CmdOutPrintfLine(out, "utc = %s", utc_text);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdTimeSetEpoch(const char* args, HxCmdOutput* out) {
+  uint64_t unix_seconds = 0;
+
+  const char* text = CmdSkipWs(args);
+  if (text[0] == '\0') {
+    CmdOutWriteLine(out, "usage: time setepoch <unix_seconds>");
+    return HX_CMD_USAGE;
+  }
+
+  char token[32];
+  if (!CmdExtractToken(&text, token, sizeof(token)) || (CmdSkipWs(text)[0] != '\0')) {
+    CmdOutWriteLine(out, "usage: time setepoch <unix_seconds>");
+    return HX_CMD_USAGE;
+  }
+
+  char* endptr = nullptr;
+  unsigned long long parsed = strtoull(token, &endptr, 10);
+  if ((endptr == token) || (*endptr != '\0')) {
+    CmdOutWriteLine(out, "invalid unix_seconds");
+    return HX_CMD_ERROR;
+  }
+
+  unix_seconds = (uint64_t)parsed;
+  if (!TimeSetUnixSeconds(unix_seconds, HX_TIME_SOURCE_USER)) {
+    CmdOutWriteLine(out, "time set failed");
+    return HX_CMD_ERROR;
+  }
+
+  char utc_text[40];
+  if (!TimeFormatNowUtc(utc_text, sizeof(utc_text))) {
+    CmdOutWriteLine(out, "time set but formatting failed");
+    return HX_CMD_OK;
+  }
+
+  CmdOutPrintfLine(out, "time set to %s", utc_text);
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdTimeClear(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: time clear");
+    return HX_CMD_USAGE;
+  }
+
+  TimeClearSynchronization();
+  CmdOutWriteLine(out, "time synchronization cleared");
+  return HX_CMD_OK;
+}
+
 static const HxCmdDef kBuiltinCommands[] = {
   { "help",                 CmdHelp,                "Show command list" },
   { "?",                    CmdHelp,                nullptr },
@@ -988,6 +1079,10 @@ static const HxCmdDef kBuiltinCommands[] = {
   { "log",                  CmdLogHistory,          "Show log history" },
   { "logclr",               CmdLogClear,            "Clear log history" },
   { "logstat",              CmdLogStats,            "Show log statistics" },
+  { "time",                 CmdTimeStatus,          "Show current time status" },
+  { "time status",          CmdTimeStatus,          nullptr },
+  { "time setepoch",        CmdTimeSetEpoch,        "Set synchronized time from unix seconds" },
+  { "time clear",           CmdTimeClear,           "Clear synchronized wall clock" },
   { "config list",          CmdListConfig,          "List visible config keys" },
   { "config read",          CmdReadConfig,          "Read config key" },
   { "config set",           CmdSetConfig,           "Set config key" },

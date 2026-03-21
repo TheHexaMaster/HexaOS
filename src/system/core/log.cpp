@@ -14,6 +14,7 @@
 #include "log.h"
 #include "headers/hx_build.h"
 #include "system/core/rtos.h"
+#include "system/core/time.h"
 
 #include <esp32-hal.h>
 #include <stdarg.h>
@@ -259,7 +260,7 @@ static void LogWriteV(HxLogLevel level, const char* tag, const char* fmt, va_lis
   }
 
   char line[HX_LOG_LINE_MAX];
-  uint32_t now = millis();
+  uint32_t now = TimeMonotonicMs32();
 
   int prefix_len = 0;
   if (tag && tag[0]) {

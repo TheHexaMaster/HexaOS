@@ -17,6 +17,7 @@ HxRuntime Hx = {
   .config_loaded = false,
   .state_loaded = false,
   .littlefs_mounted = false,
+  .time_ready = false,
   .uptime_ms = 0,
   .boot_count = 0
 };

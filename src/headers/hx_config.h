@@ -44,10 +44,10 @@ enum HxSchemaValueType : uint8_t {
   XS(user_string_c,      "user.string_c",       32,                         "",                       true, true) \
   XS(user_string_d,      "user.string_d",       32,                         "",                       true, true) \
   XS(user_string_e,      "user.string_e",       32,                         "",                       true, true) \
-  XS(device_name,        "device.name",        32,                          HX_CONFIG_DEFAULT_DEVICE_NAME,                       true, true) \
-  XI(log_level,          "log.level",          0,        3,                 HX_CONFIG_DEFAULT_LOG_LEVEL,                         true, true) \
+  XS(device_name,        "device.name",         32,                          HX_CONFIG_DEFAULT_DEVICE_NAME,                       true, true) \
+  XI(log_level,          "log.level",           0,        3,                 HX_CONFIG_DEFAULT_LOG_LEVEL,                         true, true) \
   XB(safeboot_enable,    "safeboot.enable",                                 HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE,                   true, true) \
-  XI(states_delay,       "states.delay",       0,        600000,            HX_CONFIG_DEFAULT_STATE_DELAY,                       true, true)
+  XI(states_delay,       "states.delay",        0,        600000,            HX_CONFIG_DEFAULT_STATE_DELAY,                       true, true)
 
 
 // Typed state schema entries:

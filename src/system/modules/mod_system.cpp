@@ -12,6 +12,7 @@
 #include "system/core/log.h"
 #include "system/core/module_registry.h"
 #include "system/core/runtime.h"
+#include "system/core/time.h"
 
 static bool SystemInit() {
   LogInfo("SYS: init");
@@ -29,12 +30,29 @@ static void SystemEvery100ms() {
 }
 
 static void SystemEverySecond() {
+  char uptime_text[32];
+  TimeFormatMonotonic(uptime_text, sizeof(uptime_text), TimeMonotonicMs());
 
-  HX_LOGI("SYS", " uptime=%lu ms boot_count=%lu",
-          (unsigned long)Hx.uptime_ms,
-          (unsigned long)Hx.boot_count);
+  if (!TimeIsSynchronized()) {
+    HX_LOGI("SYS", "uptime=%s boot_count=%lu time=unsynced",
+            uptime_text,
+            (unsigned long)Hx.boot_count);
+    return;
+  }
 
+  char utc_text[40];
+  if (!TimeFormatNowUtc(utc_text, sizeof(utc_text))) {
+    HX_LOGI("SYS", "uptime=%s boot_count=%lu time=sync-error",
+            uptime_text,
+            (unsigned long)Hx.boot_count);
+    return;
+  }
 
+  HX_LOGI("SYS", "uptime=%s boot_count=%lu time=%s src=%s",
+          uptime_text,
+          (unsigned long)Hx.boot_count,
+          utc_text,
+          TimeSourceText(TimeGetSource()));
 }
 
 const HxModule ModuleSystem = {

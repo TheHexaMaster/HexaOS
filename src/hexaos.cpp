@@ -18,6 +18,7 @@
 #include "system/core/module_registry.h"
 #include "system/core/rtos.h"
 #include "system/core/runtime.h"
+#include "system/core/time.h"
 #include "system/core/user_interface.h"
 #include "system/handlers/littlefs_handler.h"
 #include "system/handlers/nvs_config_handler.h"
@@ -111,6 +112,12 @@ void setup() {
 
   Hx.rtos_ready = RtosInit();
 
+  if (!TimeInit()) {
+    Hx.time_ready = false;
+  } else {
+    Hx.time_ready = true;
+  }
+
   // We need log system first for debug
   LogInit();
 
@@ -136,7 +143,7 @@ void loop() {
   static uint32_t last_100ms = 0;
   static uint32_t last_1s = 0;
 
-  uint32_t now = millis();
+  uint32_t now = TimeMonotonicMs32();
   Hx.uptime_ms = now;
 
   UserInterfaceLoop();
