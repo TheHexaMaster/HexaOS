@@ -58,7 +58,7 @@ A component belongs to a layer only when that layer is the correct owner of its 
                                v
 +--------------------------------------------------------------+
 |                            Core                               |
-| boot | system loop | runtime | time | log | panic |          |
+| boot | system loop | runtime | time | log | panic |           |
 | module registry | config | state | user-interface bridge      |
 +------------------+-------------------+------------------------+
                    |                   |
@@ -80,13 +80,13 @@ A component belongs to a layer only when that layer is the correct owner of its 
                                v
 +--------------------------------------------------------------+
 |                           Adapters                            |
-| bridges to ESP-IDF / Arduino / libraries / buses / backends  |
+| bridges to ESP-IDF / Arduino / libraries / buses / backends   |
 +------------------------------+-------------------------------+
                                |
                                v
 +--------------------------------------------------------------+
 |               Hardware / SDK / External Backends              |
-| I2C | SPI | UART | FS | NVS | Wi-Fi | Ethernet | HTTP | etc. |
+| I2C | SPI | UART | FS | NVS | Wi-Fi | Ethernet | HTTP | etc.  |
 +--------------------------------------------------------------+
 ```
 
@@ -273,6 +273,20 @@ Active services may be hosted:
 - by a dedicated domain module,
 - or by a shared domain orchestrator module.
 
+### Transactional Services
+
+Some services are neither simple passive APIs nor classic periodic pollers. They own long-running transactional workflows such as uploads, exports, migrations, or update jobs.
+
+These services may combine:
+
+- event-driven request entry points,
+- internal state machines,
+- chunk queues,
+- incremental processing,
+- and optional RTOS-backed workers.
+
+They still remain services. They do not become core merely because they handle large or time-consuming work.
+
 ---
 
 ## 6. Module
@@ -284,6 +298,7 @@ A module participates in one or more of:
 - init,
 - start,
 - loop,
+- every-10-ms,
 - every-100-ms,
 - every-second.
 
@@ -317,6 +332,10 @@ Drivers may exist without modules.
 Services may exist without modules.
 
 A module is justified only when a runtime domain requires cooperative lifecycle participation.
+
+A module does not automatically imply a scheduler.
+
+Many modules will remain simple lifecycle participants with no internal scheduling policy beyond cooperative hooks. Scheduling policy is introduced only for domains that must plan multiple jobs, budgets, retries, or phase-distributed work.
 
 ---
 
@@ -553,6 +572,7 @@ setup()
 loop()
   -> SystemLoop()
   -> ModuleLoopAll()
+  -> Every10ms dispatch
   -> Every100ms dispatch
   -> EverySecond dispatch
 ```
@@ -563,6 +583,194 @@ Interpretation:
 - Boot orchestration belongs to core.
 - Mandatory runtime housekeeping belongs to core.
 - Optional or domain-scoped runtime participants belong to modules.
+- The global cadence set must remain intentionally small.
+
+---
+
+## Soft Cadence Model and Domain Scheduling Rules
+
+HexaOS uses a small set of global lifecycle cadence classes.
+
+The canonical cooperative cadence model is:
+
+- `Loop()`
+- `Every10ms()`
+- `Every100ms()`
+- `EverySecond()`
+
+### Meaning of the Cadence Classes
+
+- `Loop()` is opportunistic and does not imply a periodic guarantee.
+- `Every10ms()` is the fast cooperative soft-periodic hook.
+- `Every100ms()` is the normal periodic hook.
+- `EverySecond()` is the slow maintenance hook.
+
+### Canonical Rule
+
+> The global cadence model must remain small. Fine-grained timing must not be expressed by multiplying global dispatch classes.
+
+HexaOS must not grow separate global hooks for arbitrary intervals such as 3 s, 5 s, 10 s, or per-device timing needs.
+
+Those timing needs belong to domain-level scheduling policy.
+
+### Domain Scheduling Rule
+
+When a runtime domain must manage many jobs with different intervals, retry windows, phase offsets, or budgets, it must use a **domain scheduler** hosted by the owning service or module.
+
+Examples:
+
+- sensor polling domains,
+- protocol polling domains,
+- history/flush domains,
+- telemetry publication domains.
+
+A domain scheduler may maintain concepts such as:
+
+- interval,
+- next due timestamp,
+- phase offset,
+- enabled state,
+- priority,
+- retry/backoff,
+- bus or backend affinity,
+- per-tick budget.
+
+### Scheduler Scope Rule
+
+> Many modules do not imply many unique schedulers.
+
+HexaOS may contain many modules while only a small number of runtime domains actually require scheduling policy.
+
+The approved model is:
+
+- one shared scheduling mechanism may exist as a reusable primitive,
+- multiple domains may instantiate or reuse that mechanism,
+- only domains with real planning needs should host scheduler state.
+
+This avoids two opposite failures:
+
+- one global mega-scheduler that becomes a new monolith,
+- many ad-hoc per-module or per-driver `millis()` schedulers with inconsistent behavior.
+
+### Driver Timing Rule
+
+Drivers must not become owners of global runtime scheduling.
+
+A driver may perform device-local timing only when required for a device transaction, but periodic orchestration belongs to the owning service or runtime domain.
+
+### Load-Spreading Rule
+
+A dispatch tick is a chance to advance work, not permission to process everything at once.
+
+Therefore:
+
+- equal-period jobs should be phase-distributed rather than aligned to a single edge,
+- bus-heavy work must be budgeted,
+- per-bus and per-domain pacing is encouraged,
+- periodic dispatch must not create artificial once-per-second bursts on shared buses.
+
+### Fast Cadence Rule
+
+`Every10ms()` is the approved global fast cooperative cadence.
+
+A general-purpose global `Every5ms()` hook is not part of the canonical architecture by default. If a future domain truly requires a tighter cadence, that requirement should first be evaluated against:
+
+- domain scheduling,
+- driver-local timing,
+- interrupt/timer mechanisms,
+- or RTOS-backed workers.
+
+Only a clearly justified and audited future extension may introduce a tighter global cadence class.
+
+---
+
+## Long-Running Transactional Processing
+
+HexaOS distinguishes between periodic scheduling and long-running transactional work.
+
+Examples of long-running transactional work include:
+
+- OTA upload,
+- large file upload,
+- large file copy or export,
+- import/migration jobs,
+- large network download or transfer,
+- storage-to-storage streaming operations.
+
+These operations must not be modeled as ordinary periodic polling tasks.
+
+### Canonical Rule
+
+> Periodic scheduling and long-running transactional processing are different architectural categories.
+
+Periodic scheduling exists to decide **when** to run recurring work.
+
+Transactional processing exists to move a bounded long-running operation forward through states such as:
+
+- begin,
+- receiving,
+- queued,
+- writing,
+- verifying,
+- finalizing,
+- done,
+- aborted,
+- error.
+
+### Approved Transaction Model
+
+The approved architecture for long-running work is:
+
+- the owning **service** defines the transaction policy and state machine,
+- the user-facing surface submits work to that service,
+- the service advances the transaction incrementally,
+- raw backend access belongs to adapters,
+- persistent domain policy belongs to handlers when justified.
+
+This model may use:
+
+- state machines,
+- queues,
+- ring buffers,
+- chunked processing,
+- bounded per-iteration budgets.
+
+### Responsiveness Rule
+
+> Long operations must be chunked and budgeted.
+
+A long transaction must not monopolize the cooperative runtime by processing an unbounded amount of work in a single callback or single loop turn.
+
+This rule exists to preserve:
+
+- UI responsiveness,
+- command responsiveness,
+- network responsiveness,
+- watchdog safety,
+- and predictable system behavior under load.
+
+### RTOS Worker Rule
+
+RTOS is the approved execution mechanism when a long-running transaction or backend interaction would otherwise compromise responsiveness or create unacceptable blocking behavior.
+
+However:
+
+- RTOS is an execution tool, not a new ownership layer,
+- the owning service still owns the workflow,
+- the worker task only executes queued or chunked work,
+- adapters remain the raw boundary to storage, flash, buses, or network backends.
+
+### Canonical Rule
+
+> In HexaOS, services own long-running workflows; RTOS workers execute them.
+
+This means:
+
+- an OTA or upload task must not become the owner of update policy,
+- a filesystem copy worker must not become the owner of file-domain policy,
+- a background worker may perform the work, but the service remains the architectural owner.
+
+This distinction keeps cooperative lifecycle logic, long-running work, and ownership boundaries stable even as the system grows.
 
 ---
 
@@ -704,12 +912,21 @@ A GUI framework such as LVGL is not itself a driver.
 Classification:
 
 - service: yes
-- module: yes, if periodic or stateful runtime behavior exists
+- module: yes, only when a dedicated runtime domain lifecycle is justified
 - adapter: yes
 - handler: optional if an update domain owner is justified
 - core: no
 
 Core must remain OTA-compatible, but OTA workflow does not become core.
+
+OTA is a canonical example of long-running transactional processing:
+
+- the owning OTA service defines update policy,
+- request/upload surfaces submit work to that service,
+- chunked write/verify/finalize work may be executed incrementally or by an RTOS worker,
+- background execution must not transfer workflow ownership away from the service.
+
+A dedicated OTA module is justified only when the update domain truly needs persistent cooperative lifecycle behavior. One-shot or externally triggered update workflows do not require a module merely because they exist.
 
 ---
 
