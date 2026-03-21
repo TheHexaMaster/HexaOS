@@ -124,7 +124,7 @@ This structure is meant to scale without losing clarity. The goal is not to crea
 
 ## ⚙️ Tooling and build model
 
-HexaOS is built with **pioarduino** in an **Arduino environment**, while intentionally operating in a **hybrid mode** that also takes advantage of modern **ESP-IDF** capabilities. fileciteturn14file11
+HexaOS is built with **pioarduino** in an **Arduino environment**, while intentionally operating in a **hybrid mode** that also takes advantage of modern **ESP-IDF** capabilities.
 
 This gives the project two important properties:
 
@@ -135,7 +135,7 @@ HexaOS is not meant to be trapped in either extreme:
 - not a “just Arduino sketch” project
 - not an overcomplicated IDF-only framework
 
-It is a practical embedded platform built to use both where each makes sense. fileciteturn14file11
+It is a practical embedded platform built to use both where each makes sense.
 
 ---
 
@@ -158,7 +158,7 @@ loop()
   -> EverySecond dispatch
 ```
 
-This keeps the top-level runtime readable while allowing larger runtime domains to participate through modules and services. The long-term model also explicitly allows **early-boot service hooks** when something must happen before normal runtime orchestration begins. fileciteturn14file6
+This keeps the top-level runtime readable while allowing larger runtime domains to participate through modules and services. The long-term model also explicitly allows **early-boot service hooks** when something must happen before normal runtime orchestration begins.
 
 ---
 
@@ -249,4 +249,4 @@ As the project grows, additional design and implementation documents will live u
 
 ## 📄 License
 
-This project is released under the [GPL-3.0-only license](./LICENSE). fileciteturn14file11
+This project is released under the [GPL-3.0-only license](./LICENSE).
