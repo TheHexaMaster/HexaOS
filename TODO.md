@@ -29,7 +29,7 @@
 - [ ] LOG - Different log levels for different outputs (serial console, web console, terminal etc) - configs + handling
 - [ ] LOG - Feature - color / font difference for various log levels / command inputs / outputs
 - [ ] LOG - Replace timming from TICK to real time (00:00:00 from boot, time after sync from external RTC)
-- [x] ARCH - Deeper lookup on architecture, define extented options, potential refactor of arch structure if necessary.
+- [ ] ARCH - Deeper lookup on architecture, define extented options, potential refactor of arch structure if necessary.
 - [ ] REFACTOR - Final pre-release code refactor.
 
 ## Future versions todo by priority

@@ -1,3 +1,16 @@
+/*
+  HexaOS - state.h
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Core runtime state service interface.
+  Declares the persistent and runtime state model, public state API and
+  storage information contract used by HexaOS independently from the current
+  NVS-backed persistence backend.
+*/
+
 #pragma once
 
 #include <stddef.h>

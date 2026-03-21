@@ -26,8 +26,8 @@
 #include "system/core/log.h"
 #include "system/core/runtime.h"
 #include "system/core/time.h"
-#include "system/handlers/nvs_config_handler.h"
-#include "system/handlers/nvs_state_handler.h"
+#include "system/core/config.h"
+#include "system/core/state.h"
 
 static void CmdFormatFloatDisplay(char* out, size_t out_size, float value) {
   if (!out || (out_size == 0)) {
@@ -1102,14 +1102,14 @@ static const HxCmdDef kBuiltinCommands[] = {
   { "config list",          CmdListConfig,          "List visible config keys" },
   { "config read",          CmdReadConfig,          "Read config key" },
   { "config set",           CmdSetConfig,           "Set config key" },
-  { "config save",          CmdSaveConfig,          "Save config to NVS" },
-  { "config load",          CmdLoadConfig,          "Load config from NVS" },
+  { "config save",          CmdSaveConfig,          "Save config to storage" },
+  { "config load",          CmdLoadConfig,          "Load config from storage" },
   { "config default",       CmdDefaultConfig,       "Reset config to build defaults" },
   { "config toggle",        CmdToggleConfig,        "Toggle boolean config key" },
   { "config info",          CmdConfigInfo,          "Show config storage information" },
-  { "config factoryformat", CmdConfigFactoryFormat, "Format config NVS storage and activate defaults" },
+  { "config factoryformat", CmdConfigFactoryFormat, "Format config storage and activate defaults" },
   { "state info",           CmdStateInfo,           "Show state storage information" },
-  { "state format",         CmdStateFormat,         "Format state NVS storage" },
+  { "state format",         CmdStateFormat,         "Format state storage" },
   { "state list",           CmdStateList,           "List visible states" },
   { "state read",           CmdStateRead,           "Read state key" },
   { "state exist",          CmdStateExist,          "Check whether state exists" },

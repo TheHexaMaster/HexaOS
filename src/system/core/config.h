@@ -1,3 +1,16 @@
+/*
+  HexaOS - config.h
+
+  Copyright (C) 2026 Martin Macak
+  SPDX-License-Identifier: GPL-3.0-only
+
+  Description
+  Core runtime configuration service interface.
+  Declares the schema-driven configuration model, public config API and
+  storage information contract used by the rest of HexaOS independently from
+  the concrete persistence backend.
+*/
+
 #pragma once
 
 #include "headers/hx_config.h"

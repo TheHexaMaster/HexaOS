@@ -1,18 +1,18 @@
 /*
-  HexaOS - nvs_state_handler.cpp
+  HexaOS - state.cpp
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  Runtime state persistence service.
-  Maintains mutable non-configuration system state in NVS, including boot
-  counters and other values that must survive reboots but are not treated as
-  config. The state layer supports both build-time static keys and runtime
-  registered keys used by future modules, drivers and scripting layers.
+  Core runtime state service.
+  Owns the HexaOS state registry, runtime state policy, delayed commit logic
+  and storage routing while delegating concrete persistence operations to the
+  shared NVS store backend.
 */
-#include "nvs_state_handler.h"
-#include "nvs_config_handler.h"
+#include "state.h"
+#include "system/core/config.h"
+#include "system/handlers/nvs_store.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -22,8 +22,6 @@
 #include <string.h>
 #include <strings.h>
 #include <esp32-hal.h>
-
-#include "system/adapters/nvs_adapter.h"
 #include "system/core/log.h"
 #include "system/core/rtos.h"
 #include "system/core/runtime.h"
@@ -1446,7 +1444,7 @@ static bool StateLoadRuntimeCatalog() {
   }
 
   String manifest;
-  if (!HxNvsGetString(HX_NVS_STORE_STATE, HX_STATE_CATALOG_KEY, manifest)) {
+  if (!NvsStoreGetString(HX_NVS_STORE_STATE, HX_STATE_CATALOG_KEY, manifest)) {
     return true;
   }
 
@@ -1950,7 +1948,7 @@ bool StateInit() {
   StateResetRuntimeRegistry();
   StateResetPendingBuffer();
 
-  g_state_ready = EspNvsOpenState();
+  g_state_ready = NvsStoreOpen(HX_NVS_STORE_STATE);
   if (!g_state_ready) {
     return false;
   }
@@ -2005,23 +2003,23 @@ bool StateCommit() {
 
     switch (items[i].kind) {
       case HX_STATE_PENDING_ERASE:
-        ok = HxNvsEraseKey(HX_NVS_STORE_STATE, items[i].storage_key);
+        ok = NvsStoreEraseKey(HX_NVS_STORE_STATE, items[i].storage_key);
         break;
 
       case HX_STATE_PENDING_BOOL:
-        ok = HxNvsSetBool(HX_NVS_STORE_STATE, items[i].storage_key, items[i].bool_value);
+        ok = NvsStoreWriteBool(HX_NVS_STORE_STATE, items[i].storage_key, items[i].bool_value);
         break;
 
       case HX_STATE_PENDING_INT32:
-        ok = HxNvsSetInt(HX_NVS_STORE_STATE, items[i].storage_key, items[i].int_value);
+        ok = NvsStoreWriteInt(HX_NVS_STORE_STATE, items[i].storage_key, items[i].int_value);
         break;
 
       case HX_STATE_PENDING_FLOAT:
-        ok = HxNvsSetFloat(HX_NVS_STORE_STATE, items[i].storage_key, items[i].float_value);
+        ok = NvsStoreWriteFloat(HX_NVS_STORE_STATE, items[i].storage_key, items[i].float_value);
         break;
 
       case HX_STATE_PENDING_STRING:
-        ok = items[i].string_value && HxNvsSetString(HX_NVS_STORE_STATE, items[i].storage_key, items[i].string_value);
+        ok = items[i].string_value && NvsStoreWriteString(HX_NVS_STORE_STATE, items[i].storage_key, items[i].string_value);
         break;
 
       default:
@@ -2036,7 +2034,7 @@ bool StateCommit() {
     }
   }
 
-  if (!HxNvsCommit(HX_NVS_STORE_STATE)) {
+  if (!NvsStoreCommit(HX_NVS_STORE_STATE)) {
     HX_LOGW("STA", "commit flush failed");
     StateFreePendingCommitItems(items, count);
     return false;
@@ -2086,7 +2084,7 @@ bool StateFormat() {
   StateResetCommitWindow();
 
   g_state_ready = false;
-  g_state_ready = HxNvsFormat(HX_NVS_STORE_STATE);
+  g_state_ready = NvsStoreFormat(HX_NVS_STORE_STATE);
   if (!g_state_ready) {
     return false;
   }
@@ -2102,8 +2100,8 @@ bool StateGetStorageInfo(HxStateStorageInfo* out_info) {
 
   memset(out_info, 0, sizeof(*out_info));
 
-  HxNvsStats stats{};
-  if (!HxNvsGetStats(HX_NVS_STORE_STATE, &stats)) {
+  HxNvsStoreStats stats{};
+  if (!NvsStoreGetStats(HX_NVS_STORE_STATE, &stats)) {
     return false;
   }
 
@@ -2162,7 +2160,7 @@ bool StateReadBool(const char* key, bool* value) {
     return false;
   }
 
-  return HxNvsGetBool(HX_NVS_STORE_STATE, storage_key, value);
+  return NvsStoreGetBool(HX_NVS_STORE_STATE, storage_key, value);
 }
 
 bool StateReadInt(const char* key, int32_t* value) {
@@ -2193,7 +2191,7 @@ bool StateReadInt(const char* key, int32_t* value) {
     return false;
   }
 
-  if (!HxNvsGetInt(HX_NVS_STORE_STATE, storage_key, value)) {
+  if (!NvsStoreGetInt(HX_NVS_STORE_STATE, storage_key, value)) {
     return false;
   }
 
@@ -2233,7 +2231,7 @@ bool StateReadFloat(const char* key, float* value) {
     return false;
   }
 
-  if (!HxNvsGetFloat(HX_NVS_STORE_STATE, storage_key, value)) {
+  if (!NvsStoreGetFloat(HX_NVS_STORE_STATE, storage_key, value)) {
     return false;
   }
 
@@ -2272,7 +2270,7 @@ bool StateReadString(const char* key, char* out, size_t out_size) {
   }
 
   String value;
-  if (!HxNvsGetString(HX_NVS_STORE_STATE, storage_key, value)) {
+  if (!NvsStoreGetString(HX_NVS_STORE_STATE, storage_key, value)) {
     return false;
   }
 

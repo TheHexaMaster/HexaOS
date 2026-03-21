@@ -1,16 +1,18 @@
 /*
-  HexaOS - nvs_config_handler.cpp
+  HexaOS - config.cpp
 
   Copyright (C) 2026 Martin Macak
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  Runtime configuration service.
-  Provides the persistent key-value configuration layer stored in NVS and used to load, query and save mutable HexaOS config values across reboots.
+  Core runtime configuration service.
+  Owns HexaOS configuration policy, schema validation, defaults and storage
+  routing while delegating concrete persistence operations to the shared NVS
+  store backend.
 */
 
 
-#include "nvs_config_handler.h"
+#include "config.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -20,7 +22,7 @@
 #include <string.h>
 #include <strings.h>
 
-#include "system/adapters/nvs_adapter.h"
+#include "system/handlers/nvs_store.h"
 #include "system/core/log.h"
 #include "system/core/rtos.h"
 #include "system/core/runtime.h"
@@ -442,7 +444,7 @@ static bool ConfigStoreItemOverrideFromConfig(const HxConfig* config, const HxCo
   }
 
   if (ConfigItemEqualsDefaultInConfig(config, item)) {
-    return HxNvsEraseKey(HX_NVS_STORE_CONFIG, item->key);
+    return NvsStoreEraseKey(HX_NVS_STORE_CONFIG, item->key);
   }
 
   const void* current_ptr = ConfigFieldPtrConst(config, item);
@@ -452,16 +454,16 @@ static bool ConfigStoreItemOverrideFromConfig(const HxConfig* config, const HxCo
 
   switch (item->type) {
     case HX_SCHEMA_VALUE_STRING:
-      return HxNvsSetString(HX_NVS_STORE_CONFIG, item->key, static_cast<const char*>(current_ptr));
+      return NvsStoreWriteString(HX_NVS_STORE_CONFIG, item->key, static_cast<const char*>(current_ptr));
 
     case HX_SCHEMA_VALUE_BOOL:
-      return HxNvsSetBool(HX_NVS_STORE_CONFIG, item->key, *static_cast<const bool*>(current_ptr));
+      return NvsStoreWriteBool(HX_NVS_STORE_CONFIG, item->key, *static_cast<const bool*>(current_ptr));
 
     case HX_SCHEMA_VALUE_INT32:
-      return HxNvsSetInt(HX_NVS_STORE_CONFIG, item->key, *static_cast<const int32_t*>(current_ptr));
+      return NvsStoreWriteInt(HX_NVS_STORE_CONFIG, item->key, *static_cast<const int32_t*>(current_ptr));
 
     case HX_SCHEMA_VALUE_FLOAT:
-      return HxNvsSetFloat(HX_NVS_STORE_CONFIG, item->key, *static_cast<const float*>(current_ptr));
+      return NvsStoreWriteFloat(HX_NVS_STORE_CONFIG, item->key, *static_cast<const float*>(current_ptr));
 
     default:
       return false;
@@ -476,7 +478,7 @@ static ConfigLoadItemResult ConfigReadItemFromNvs(HxConfig* config, const HxConf
   switch (item->type) {
     case HX_SCHEMA_VALUE_STRING: {
       String text_value;
-      HxNvsReadResult result = HxNvsReadString(HX_NVS_STORE_CONFIG, item->key, text_value);
+      HxNvsStoreReadResult result = NvsStoreReadString(HX_NVS_STORE_CONFIG, item->key, text_value);
       if (result == HX_NVS_READ_NOT_FOUND) {
         return HX_CONFIG_LOAD_ITEM_MISSING;
       }
@@ -488,7 +490,7 @@ static ConfigLoadItemResult ConfigReadItemFromNvs(HxConfig* config, const HxConf
 
     case HX_SCHEMA_VALUE_BOOL: {
       bool bool_value = false;
-      HxNvsReadResult result = HxNvsReadBool(HX_NVS_STORE_CONFIG, item->key, &bool_value);
+      HxNvsStoreReadResult result = NvsStoreReadBool(HX_NVS_STORE_CONFIG, item->key, &bool_value);
       if (result == HX_NVS_READ_NOT_FOUND) {
         return HX_CONFIG_LOAD_ITEM_MISSING;
       }
@@ -500,7 +502,7 @@ static ConfigLoadItemResult ConfigReadItemFromNvs(HxConfig* config, const HxConf
 
     case HX_SCHEMA_VALUE_INT32: {
       int32_t int_value = 0;
-      HxNvsReadResult result = HxNvsReadInt(HX_NVS_STORE_CONFIG, item->key, &int_value);
+      HxNvsStoreReadResult result = NvsStoreReadInt(HX_NVS_STORE_CONFIG, item->key, &int_value);
       if (result == HX_NVS_READ_NOT_FOUND) {
         return HX_CONFIG_LOAD_ITEM_MISSING;
       }
@@ -512,7 +514,7 @@ static ConfigLoadItemResult ConfigReadItemFromNvs(HxConfig* config, const HxConf
 
     case HX_SCHEMA_VALUE_FLOAT: {
       float float_value = 0.0f;
-      HxNvsReadResult result = HxNvsReadFloat(HX_NVS_STORE_CONFIG, item->key, &float_value);
+      HxNvsStoreReadResult result = NvsStoreReadFloat(HX_NVS_STORE_CONFIG, item->key, &float_value);
       if (result == HX_NVS_READ_NOT_FOUND) {
         return HX_CONFIG_LOAD_ITEM_MISSING;
       }
@@ -713,7 +715,7 @@ bool ConfigInit() {
   Hx.config_loaded = false;
   ConfigStateExit();
 
-  g_config_ready = EspNvsOpenConfig();
+  g_config_ready = NvsStoreOpen(HX_NVS_STORE_CONFIG);
   if (g_config_ready) {
     HX_LOGI("CFG", "config store ready (%s)", "nvs");
   } else {
@@ -756,7 +758,7 @@ bool ConfigLoad() {
       case HX_CONFIG_LOAD_ITEM_INVALID:
         invalid_count++;
         HX_LOGW("CFG", "invalid override ignored, default used: key=%s", item->key);
-        if (HxNvsEraseKey(HX_NVS_STORE_CONFIG, item->key)) {
+        if (NvsStoreEraseKey(HX_NVS_STORE_CONFIG, item->key)) {
           repair_dirty = true;
         } else {
           HX_LOGW("CFG", "failed to stage invalid override cleanup: key=%s", item->key);
@@ -772,7 +774,7 @@ bool ConfigLoad() {
   }
 
   if (repair_dirty) {
-    if (HxNvsCommit(HX_NVS_STORE_CONFIG)) {
+    if (NvsStoreCommit(HX_NVS_STORE_CONFIG)) {
       HX_LOGW("CFG", "invalid overrides removed during load");
     } else {
       HX_LOGW("CFG", "invalid override cleanup commit failed");
@@ -815,7 +817,7 @@ bool ConfigSave() {
     }
   }
 
-  if (!HxNvsCommit(HX_NVS_STORE_CONFIG)) {
+  if (!NvsStoreCommit(HX_NVS_STORE_CONFIG)) {
     HX_LOGE("CFG", "save commit failed");
     return false;
   }
@@ -837,8 +839,8 @@ bool ConfigGetStorageInfo(HxConfigStorageInfo* out_info) {
 
   memset(out_info, 0, sizeof(*out_info));
 
-  HxNvsStats stats{};
-  if (!HxNvsGetStats(HX_NVS_STORE_CONFIG, &stats)) {
+  HxNvsStoreStats stats{};
+  if (!NvsStoreGetStats(HX_NVS_STORE_CONFIG, &stats)) {
     return false;
   }
 
@@ -886,7 +888,7 @@ bool ConfigFactoryFormat() {
   }
 
   HX_LOGW("CFG", "factory format requested");
-  if (!HxNvsFormat(HX_NVS_STORE_CONFIG)) {
+  if (!NvsStoreFormat(HX_NVS_STORE_CONFIG)) {
     HX_LOGE("CFG", "factory format erase failed");
     return false;
   }

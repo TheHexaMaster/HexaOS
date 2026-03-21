@@ -8,7 +8,7 @@
   Core runtime service loop implementation for HexaOS.
   Owns the mandatory per-iteration system work that must always run even when
   optional modules are disabled, including user interface polling, state
-  handler maintenance, uptime tracking and the built-in heartbeat log tick.
+  service maintenance, uptime tracking and the built-in heartbeat log tick.
 */
 
 #include "system_loop.h"
@@ -19,7 +19,7 @@
 #include "system/core/runtime.h"
 #include "system/core/time.h"
 #include "system/core/user_interface.h"
-#include "system/handlers/nvs_state_handler.h"
+#include "system/core/state.h"
 
 void SystemLoop() {
   Hx.uptime_ms = millis();

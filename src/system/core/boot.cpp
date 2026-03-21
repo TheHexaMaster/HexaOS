@@ -25,8 +25,8 @@
 #include "system/core/time.h"
 #include "system/core/user_interface.h"
 #include "system/handlers/littlefs_handler.h"
-#include "system/handlers/nvs_config_handler.h"
-#include "system/handlers/nvs_state_handler.h"
+#include "system/core/config.h"
+#include "system/core/state.h"
 
 static const char* EspResetReasonText(uint32_t reason) {
   switch ((esp_reset_reason_t)reason) {
