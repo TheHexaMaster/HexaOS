@@ -260,17 +260,20 @@ static void LogWriteV(HxLogLevel level, const char* tag, const char* fmt, va_lis
   }
 
   char line[HX_LOG_LINE_MAX];
-  uint32_t now = TimeMonotonicMs32();
+  char stamp[32];
+  if (!TimeFormatLogStamp(stamp, sizeof(stamp))) {
+    strcpy(stamp, "-");
+  }
 
   int prefix_len = 0;
   if (tag && tag[0]) {
-    prefix_len = snprintf(line, sizeof(line), "[%8lu][%s][%s] ",
-                          (unsigned long)now,
+    prefix_len = snprintf(line, sizeof(line), "[%s][%s][%s] ",
+                          stamp,
                           LogLevelText(level),
                           tag);
   } else {
-    prefix_len = snprintf(line, sizeof(line), "[%8lu][%s] ",
-                          (unsigned long)now,
+    prefix_len = snprintf(line, sizeof(line), "[%s][%s] ",
+                          stamp,
                           LogLevelText(level));
   }
 

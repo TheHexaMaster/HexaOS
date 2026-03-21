@@ -241,6 +241,35 @@ bool TimeGetUnixSeconds(uint64_t* out_unix_seconds) {
   return true;
 }
 
+static bool TimeFormatClock(char* out, size_t out_size, uint64_t unix_ms) {
+  if (!out || (out_size == 0)) {
+    return false;
+  }
+
+  time_t unix_seconds = (time_t)(unix_ms / 1000ULL);
+  struct tm tm_utc{};
+  if (!gmtime_r(&unix_seconds, &tm_utc)) {
+    out[0] = '\0';
+    return false;
+  }
+
+  unsigned long millis_part = (unsigned long)(unix_ms % 1000ULL);
+  int written = snprintf(out,
+                         out_size,
+                         "%02d:%02d:%02d.%03lu",
+                         tm_utc.tm_hour,
+                         tm_utc.tm_min,
+                         tm_utc.tm_sec,
+                         millis_part);
+
+  if ((written < 0) || ((size_t)written >= out_size)) {
+    out[out_size - 1] = '\0';
+    return false;
+  }
+
+  return true;
+}
+
 bool TimeFormatUtc(char* out, size_t out_size, uint64_t unix_ms) {
   if (!out || (out_size == 0)) {
     return false;
@@ -283,6 +312,25 @@ bool TimeFormatNowUtc(char* out, size_t out_size) {
   }
 
   return TimeFormatUtc(out, out_size, unix_ms);
+}
+
+bool TimeFormatLogStamp(char* out, size_t out_size) {
+  if (!out || (out_size == 0)) {
+    return false;
+  }
+
+  HxTimeInfo info{};
+  if (!TimeGetInfo(&info)) {
+    out[0] = '\0';
+    return false;
+  }
+
+  if (info.synchronized) {
+    return TimeFormatClock(out, out_size, info.unix_ms);
+  }
+
+  TimeFormatMonotonic(out, out_size, info.monotonic_ms);
+  return true;
 }
 
 bool TimeFormatUint64(char* out, size_t out_size, uint64_t value) {
