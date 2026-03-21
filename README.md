@@ -1,112 +1,252 @@
 # HexaOS
 
-**HexaOS** is an open-source operating system and development platform for ESP32-class microcontrollers, designed to serve as a practical foundation for embedded applications, automation devices, local user interfaces, scripting, recovery workflows, and long-term product-oriented firmware.
+**HexaOS** is an open-source embedded operating platform for **ESP32-class microcontrollers**, built for developers who want a **clean, long-term maintainable firmware architecture** without turning the project into a bloated framework.
 
-The project is built around a simple idea: embedded software should be powerful, modular, and maintainable **without turning into an over-engineered C++ framework**.
-
-## Vision
-
-HexaOS aims to become a universal and extensible ESP32 software platform that can be used for:
+It is designed as a practical system foundation for:
 
 - automation and smart-home devices
-- industrial and energy monitoring gateways
+- industrial and energy-monitoring gateways
 - local display-driven control panels
-- scriptable embedded systems
-- educational and experimental MCU projects
-- long-term maintainable custom firmware products
+- scriptable embedded products
+- protocol bridges and data concentrators
+- long-lived custom firmware platforms
 
-The long-term ambition is to provide a clean system foundation that can scale from small headless devices up to richer display-equipped products, while remaining understandable to normal programmers and makers.
+HexaOS is not trying to imitate desktop operating systems. It is an **embedded runtime architecture** focused on clear ownership, explicit control flow, recoverability, and product-grade extensibility.
 
-## Core design philosophy
+---
 
-HexaOS is intentionally designed around the following principles:
+## ✨ Why HexaOS exists
 
-- **Simplicity first** – if something can be implemented clearly, it should not be made more abstract than necessary.
-- **Readable architecture** – source code should stay easy to navigate, reason about, and extend.
-- **Modularity without framework bloat** – the system is split into modules and services, but avoids unnecessary C++ hyper-abstractions.
-- **Practical embedded engineering** – the goal is not academic purity, but a firmware platform that works well on real hardware.
-- **Hybrid use of ESP-IDF and Arduino** – HexaOS is developed in an Arduino-style environment, while still taking advantage of modern ESP-IDF capabilities underneath.
+HexaOS exists because real embedded products eventually outgrow ad-hoc firmware.
 
-## Project structure
+At some point, a serious device needs more than just:
 
-At the project level, HexaOS is organized into a small number of clearly defined areas:
+- a main loop with scattered globals,
+- a pile of device-specific code,
+- random SDK calls leaking into every subsystem,
+- or a legacy codebase patched beyond readability.
 
-- `docs` – project documentation
-- `environment/boards` – board definitions used during build
-- `environment/boards/variants` – `pins_arduino.h` files for specific hardware variants
-- `environment/envs` – separated build environment snippets
-- `environment/partitions` – partition layouts for different flash sizes
-- `environment/scripts` – pre-build and post-build helper scripts
-- `include` – shared build/system headers and main HexaOS headers
-- `lib` – external libraries only
-- `src` – internal HexaOS source code
+HexaOS is the answer to that problem.
 
-## Tooling and build model
+The project is built around a simple idea:
 
-HexaOS is built with **pioarduino** in an **Arduino environment**, but the project is intentionally used in a **hybrid mode** with custom SDK configuration so it can benefit from both modern **ESP-IDF** functionality and Arduino libraries.
+> embedded software should be **powerful, modular, and auditable** without becoming an over-engineered C++ framework.
 
-This makes HexaOS suitable for developers who want the convenience of Arduino-style development without giving up the lower-level capabilities of the ESP32 software stack.
+---
 
-## Architecture direction
+## 🧭 Design principles
 
-HexaOS is being shaped as a lightweight system with clearly separated layers such as:
+HexaOS is intentionally shaped by a few permanent principles:
 
-- core boot/runtime services
-- platform-specific ESP32 functionality
-- persistent configuration and state services
-- filesystem and recovery support
-- optional modules such as console, web UI, scripting, and LVGL-based display support
+- **Simplicity first** — no abstraction without real benefit.
+- **Clear ownership** — every responsibility must belong to the correct architectural layer.
+- **Readable source tree** — code should stay navigable even as the project grows.
+- **Explicit control flow** — no hidden magic, no opaque framework behavior.
+- **Modularity without fragmentation** — features can grow without turning the tree into chaos.
+- **Practical embedded engineering** — recovery, persistence, hardware access, and runtime control matter more than theoretical purity.
+- **Long-term maintainability** — the architecture should still make sense years later, even after large growth in features and code size.
 
-The system takes inspiration from proven ideas used in Tasmota, but it is **not intended to be a simple rebrand or direct fork**. The goal is to build a cleaner and more extensible architecture from the ground up, while still borrowing good practical concepts where it makes sense.
+---
 
-## Flash and persistence model
+## 🏗️ Architectural model
 
-HexaOS uses a partition strategy shared across **4 MiB** and **16 MiB** flash variants, while **1 MiB devices are no longer a target**.
+HexaOS is organized around **clear layer ownership**, not around deep inheritance trees or framework-style inversion.
 
-The planned flash model includes:
+### Permanent architectural layers
 
-- `otadata` – OTA boot metadata
-- `nvs` – runtime configuration overrides
-- `nvs_state` – persistent runtime state
-- `safeboot` – dedicated recovery image
-- `app0` – main HexaOS application image
-- `littlefs` – user filesystem for scripts, assets, and runtime files
+- **Core** — permanent system skeleton and foundational runtime services
+- **Adapters** — bridges to ESP-IDF, Arduino, buses, storage backends, and external APIs
+- **Drivers** — reusable device and protocol implementations
+- **Handlers** — internal HexaOS domain owners with stable internal APIs and policy
+- **Services** — composed runtime behavior built above handlers, drivers, and adapters
+- **Modules** — top-level lifecycle orchestrators for runtime domains
+- **Commands** — frontend-agnostic command execution layer shared by multiple user surfaces
 
-This layout is designed to support reliable OTA updates, recovery workflows, runtime persistence, and user-extensible filesystems in a way that remains practical for real devices.
+### Key architectural rules
 
-## Why HexaOS exists
+- **Core is not a feature layer.**
+- **Modules are domain lifecycle orchestrators, not one-per-driver wrappers.**
+- **Services may exist with or without modules.**
+- **Early-boot work may call service boot hooks directly, without turning that service into Core.**
+- **Build-disabled features are architecturally absent** — not just runtime-inactive.
+- **Module order is not a dependency-resolution mechanism.**
 
-HexaOS started from the need for a cleaner, more capable, and more future-oriented embedded platform than a heavily modified legacy firmware base.
+For the full long-term architectural model, see [ARCHITECTURE.md](./ARCHITECTURE.md). 
 
-Instead of endlessly patching an existing project, HexaOS is intended to become a purpose-built system with:
+---
 
-- a clearer architecture
-- better long-term maintainability
-- stronger recovery and update strategy
-- cleaner module boundaries
-- room for modern UI, scripting, and storage concepts
+## 🧩 What HexaOS is designed to host
 
-## Current status
+HexaOS is being built as a foundation for systems such as:
 
-HexaOS is currently in its early architectural stage. The foundation is being built first:
+- local interactive console control
+- web configuration and diagnostics
+- Berry scripting and future developer tooling
+- display and touch subsystems
+- storage and recovery workflows
+- telemetry publishing and external integrations
+- sensor acquisition and protocol polling
+- internal datapoint / telemetry services
+- OTA update pipelines
+- future multi-endpoint user surfaces
 
-- core boot and runtime structure
-- module system
-- persistent storage model
-- partition strategy
-- internal services layout
+The intent is not to hard-code one product type, but to provide a stable architecture for many embedded product profiles.
 
-This early phase is focused on creating a solid and understandable base before larger features are layered on top.
+---
 
-## Long-term goals
+## 🧱 Repository structure
+
+At repository level, HexaOS is intentionally kept simple:
+
+- `docs/` — project documentation
+- `environment/boards/` — board definitions used during build
+- `environment/boards/variants/` — `pins_arduino.h` files for hardware variants
+- `environment/envs/` — separated build environment snippets
+- `environment/partitions/` — partition layouts for different flash sizes
+- `environment/scripts/` — build helper scripts
+- `include/` — shared build/system headers and public HexaOS-facing headers
+- `lib/` — external libraries only
+- `src/` — internal HexaOS source code
+
+Inside `src/system/`, the long-term layer model is:
+
+- `core/`
+- `adapters/`
+- `drivers/`
+- `handlers/`
+- `services/`
+- `commands/`
+- `modules/`
+
+This structure is meant to scale without losing clarity. The goal is not to create more folders, but to preserve ownership boundaries.
+
+---
+
+## ⚙️ Tooling and build model
+
+HexaOS is built with **pioarduino** in an **Arduino environment**, while intentionally operating in a **hybrid mode** that also takes advantage of modern **ESP-IDF** capabilities. fileciteturn14file11
+
+This gives the project two important properties:
+
+- the convenience and ecosystem reach of Arduino-style development
+- access to lower-level platform capabilities needed for serious ESP32 products
+
+HexaOS is not meant to be trapped in either extreme:
+- not a “just Arduino sketch” project
+- not an overcomplicated IDF-only framework
+
+It is a practical embedded platform built to use both where each makes sense. fileciteturn14file11
+
+---
+
+## 🧠 Runtime philosophy
+
+HexaOS uses a **thin top-level execution bridge** with explicit boot and cooperative runtime dispatch.
+
+At a high level, the permanent shape is:
+
+```text
+setup()
+  -> BootInit()
+  -> ModuleInitAll()
+  -> ModuleStartAll()
+
+loop()
+  -> SystemLoop()
+  -> ModuleLoopAll()
+  -> Every100ms dispatch
+  -> EverySecond dispatch
+```
+
+This keeps the top-level runtime readable while allowing larger runtime domains to participate through modules and services. The long-term model also explicitly allows **early-boot service hooks** when something must happen before normal runtime orchestration begins. fileciteturn14file6
+
+---
+
+## 💾 Persistence, recovery, and flash model
+
+HexaOS targets a partition model designed for reliable embedded products rather than toy firmware images.
+
+The flash strategy is centered around concepts such as:
+
+- OTA boot metadata
+- persistent configuration overrides
+- persistent runtime state
+- dedicated recovery / safeboot support
+- primary application image
+- user filesystem for scripts, assets, and runtime files
+
+The project is designed around practical persistence and recovery workflows rather than assuming a single monolithic firmware image forever. The original repository README already established the 4 MiB / 16 MiB direction and a recovery-oriented persistence model, and that direction remains aligned with the current architecture. fileciteturn14file13
+
+---
+
+## 🔌 Build-time feature model
+
+HexaOS distinguishes between:
+
+- **architecturally core functionality**
+- **mandatory functionality for a specific product build**
+- **optional runtime features**
+
+These are **not the same thing**.
+
+A feature that is disabled at build time is expected to disappear as a **feature family**, not merely remain dormant at runtime. That means the same build selector philosophy applies across the relevant stack: module shells, services, handlers, adapters, commands, and any dependent integration points.
+
+This keeps the resulting binary smaller, clearer, and more honest about what actually exists in a given product build.
+
+---
+
+## 🖥️ User surfaces
+
+HexaOS is built around the idea that multiple control surfaces should be able to reuse the same internal execution layers.
+
+This includes:
+
+- local console
+- web UI
+- web terminal
+- future Berry terminal / developer tools
+- future hosted or remote control surfaces
+
+The command layer exists specifically so that user-facing endpoints do not need to reinvent domain execution logic each time.
+
+---
+
+## 🚀 Current direction
+
+HexaOS has moved beyond a placeholder repository stage and is now driven by a defined architecture with explicit long-term rules for:
+
+- layer ownership
+- lifecycle participation
+- dependency direction
+- early-boot integration
+- service and module classification
+- build-time feature gating
+
+That architectural direction is now a first-class part of the project, not an afterthought. The current README replaces the original initial-commit era project description with one aligned to the repository’s real long-term design. The initial README was written before the architecture and source tree model were defined. fileciteturn14file11turn14file1
+
+---
+
+## 🛣️ Long-term goals
 
 In the long run, HexaOS aims to become:
 
-- a serious open-source ESP32 operating platform
-- a reusable base for custom devices and products
-- a practical development platform for advanced embedded projects
-- a clean bridge between low-level embedded power and approachable application development
+- a serious open-source operating platform for ESP32-class devices
+- a reusable foundation for custom products and gateways
+- a stable base for local UI, scripting, telemetry, and automation
+- a practical bridge between low-level embedded control and higher-level product features
+- a firmware architecture that remains understandable even after large long-term growth
 
-## 📄 Licenses
+---
 
-This project is released under [GPL-3.0 license](./LICENSE)
+## 📚 Documentation
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — long-term architectural whitepaper
+- [LICENSE](./LICENSE) — project license
+
+As the project grows, additional design and implementation documents will live under `docs/`.
+
+---
+
+## 📄 License
+
+This project is released under the [GPL-3.0-only license](./LICENSE). fileciteturn14file11
