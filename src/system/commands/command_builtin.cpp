@@ -27,6 +27,8 @@
 #include "system/core/runtime.h"
 #include "system/core/time.h"
 #include "system/core/config.h"
+#include "system/core/pinmap.h"
+#include "headers/hx_pinfunc.h"
 #include "system/core/state.h"
 
 static void CmdFormatFloatDisplay(char* out, size_t out_size, float value) {
@@ -1088,6 +1090,98 @@ static HxCmdStatus CmdTimeClear(const char* args, HxCmdOutput* out) {
   return HX_CMD_OK;
 }
 
+
+static HxCmdStatus CmdPinmapInfo(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: pinmap info");
+    return HX_CMD_USAGE;
+  }
+
+  CmdOutPrintfLine(out, "ready = %s", PinmapIsReady() ? "true" : "false");
+  CmdOutPrintfLine(out, "target = %s", HX_TARGET_NAME);
+  CmdOutPrintfLine(out, "gpio_count = %u", (unsigned int)PinmapGpioCount());
+  CmdOutPrintfLine(out, "mapped = %lu", (unsigned long)PinmapMappedCount());
+  CmdOutPrintfLine(out, "bindings.i2c = %lu", (unsigned long)PinmapI2cBindingCount());
+  CmdOutPrintfLine(out, "bindings.uart = %lu", (unsigned long)PinmapUartBindingCount());
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdPinmapList(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: pinmap list");
+    return HX_CMD_USAGE;
+  }
+
+  uint8_t gpio_count = PinmapGpioCount();
+  size_t shown = 0;
+  for (uint8_t gpio = 0; gpio < gpio_count; gpio++) {
+    uint16_t function_id = HX_PIN_NONE;
+    if (!PinmapGetFunctionForGpio(gpio, &function_id)) {
+      continue;
+    }
+    if (function_id == HX_PIN_NONE) {
+      continue;
+    }
+    CmdOutPrintfLine(out, "gpio %u = %s (%u)", (unsigned int)gpio, HxPinFunctionText(function_id), (unsigned int)function_id);
+    shown++;
+  }
+
+  if (shown == 0) {
+    CmdOutWriteLine(out, "pinmap is empty");
+  }
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdPinmapBindings(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: pinmap bindings");
+    return HX_CMD_USAGE;
+  }
+
+  for (size_t i = 0; i < PinmapI2cBindingCount(); i++) {
+    HxI2cDriverBinding binding{};
+    if (!PinmapGetI2cBindingAt(i, &binding)) {
+      continue;
+    }
+    CmdOutPrintfLine(out,
+                     "i2c.%s.%u = port:%u address:%u",
+                     binding.type,
+                     (unsigned int)binding.instance,
+                     (unsigned int)binding.port,
+                     (unsigned int)binding.address);
+  }
+
+  for (size_t i = 0; i < PinmapUartBindingCount(); i++) {
+    HxUartDriverBinding binding{};
+    if (!PinmapGetUartBindingAt(i, &binding)) {
+      continue;
+    }
+    CmdOutPrintfLine(out,
+                     "uart.%s.%u = port:%d txen:%d re:%d de:%d",
+                     binding.type,
+                     (unsigned int)binding.instance,
+                     (int)binding.uart_port,
+                     (int)binding.txen_gpio,
+                     (int)binding.re_gpio,
+                     (int)binding.de_gpio);
+  }
+
+  if ((PinmapI2cBindingCount() == 0) && (PinmapUartBindingCount() == 0)) {
+    CmdOutWriteLine(out, "bindings are empty");
+  }
+  return HX_CMD_OK;
+}
+
+static HxCmdStatus CmdPinmapRaw(const char* args, HxCmdOutput* out) {
+  if (CmdSkipWs(args)[0] != '\0') {
+    CmdOutWriteLine(out, "usage: pinmap raw");
+    return HX_CMD_USAGE;
+  }
+
+  CmdOutWriteLine(out, PinmapBindingsJson());
+  return HX_CMD_OK;
+}
+
 static const HxCmdDef kBuiltinCommands[] = {
   { "help",                 CmdHelp,                "Show command list" },
   { "?",                    CmdHelp,                nullptr },
@@ -1095,6 +1189,10 @@ static const HxCmdDef kBuiltinCommands[] = {
   { "log",                  CmdLogHistory,          "Show log history" },
   { "logclr",               CmdLogClear,            "Clear log history" },
   { "logstat",              CmdLogStats,            "Show log statistics" },
+  { "pinmap info",          CmdPinmapInfo,          "Show pinmap and bindings summary" },
+  { "pinmap list",          CmdPinmapList,          "List mapped GPIO logical functions" },
+  { "pinmap bindings",      CmdPinmapBindings,      "List typed driver bindings" },
+  { "pinmap raw",           CmdPinmapRaw,           "Show raw drivers.bindings JSON" },
   { "time",                 CmdTimeStatus,          "Show current time status" },
   { "time status",          CmdTimeStatus,          nullptr },
   { "time setepoch",        CmdTimeSetEpoch,        "Set synchronized time from unix seconds" },

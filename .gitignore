@@ -7,3 +7,4 @@ sdkconfig.*
 sdkconfig.defaults
 CMakeLists.txt
 dependencies.lock
+notes.md

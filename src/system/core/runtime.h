@@ -20,6 +20,7 @@ struct HxRuntime {
   bool state_loaded;
   bool littlefs_mounted;
   bool time_ready;
+  bool pinmap_ready;
   uint32_t uptime_ms;
   uint32_t boot_count;
 };

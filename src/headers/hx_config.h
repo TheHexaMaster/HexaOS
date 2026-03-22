@@ -39,15 +39,17 @@ enum HxSchemaValueType : uint8_t {
 // Because the C preprocessor cannot derive valid identifiers from a string like "log.level",
 // the schema keeps both a token id and an external text key.
 #define HX_CONFIG_SCHEMA(XS, XI, XB, XF) \
-  XS(user_string_a,      "user.string_a",       32,                         "",                       true, true) \
-  XS(user_string_b,      "user.string_b",       32,                         "",                       true, true) \
-  XS(user_string_c,      "user.string_c",       32,                         "",                       true, true) \
-  XS(user_string_d,      "user.string_d",       32,                         "",                       true, true) \
-  XS(user_string_e,      "user.string_e",       32,                         "",                       true, true) \
-  XS(device_name,        "device.name",         32,                          HX_CONFIG_DEFAULT_DEVICE_NAME,                       true, true) \
-  XI(log_level,          "log.level",           0,        3,                 HX_CONFIG_DEFAULT_LOG_LEVEL,                         true, true) \
-  XB(safeboot_enable,    "safeboot.enable",                                 HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE,                   true, true) \
-  XI(states_delay,       "states.delay",        0,        600000,            HX_CONFIG_DEFAULT_STATE_DELAY,                       true, true)
+  XS(user_string_a,      "user.string_a",       32,                                 "",                                       true, true) \
+  XS(user_string_b,      "user.string_b",       32,                                 "",                                       true, true) \
+  XS(user_string_c,      "user.string_c",       32,                                 "",                                       true, true) \
+  XS(user_string_d,      "user.string_d",       32,                                 "",                                       true, true) \
+  XS(user_string_e,      "user.string_e",       32,                                 "",                                       true, true) \
+  XS(device_name,        "device.name",         32,                                 HX_CONFIG_DEFAULT_DEVICE_NAME,            true, true) \
+  XI(log_level,          "log.level",           0,        3,                        HX_CONFIG_DEFAULT_LOG_LEVEL,              true, true) \
+  XB(safeboot_enable,    "safeboot.enable",                                         HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE,        true, true) \
+  XI(states_delay,       "states.delay",        0,        600000,                   HX_CONFIG_DEFAULT_STATE_DELAY,            true, true) \
+  XS(board_pinmap,       "board.pinmap",        HX_BUILD_BOARD_PINMAP_MAX_LEN,      HX_BUILD_DEFAULT_BOARD_PINMAP_JSON,       true, false) \
+  XS(drivers_bindings,   "drivers.bindings",    HX_BUILD_DRIVERS_BINDINGS_MAX_LEN,  HX_BUILD_DEFAULT_DRIVERS_BINDINGS_JSON,   true, false)
 
 
 // Typed state schema entries:

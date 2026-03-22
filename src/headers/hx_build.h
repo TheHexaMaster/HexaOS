@@ -42,14 +42,48 @@
 #define HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE  false
 #define HX_CONFIG_DEFAULT_STATE_DELAY     2000
 
+// Build-generated JSON config lengths.
+#define HX_BUILD_BOARD_PINMAP_MAX_LEN       1024
+#define HX_BUILD_DRIVERS_BINDINGS_MAX_LEN   3072
+
+// Optional pin override list.
+// Each entry must be X(HX_PIN_..., gpio_number).
+#ifndef HX_BUILD_PIN_OVERRIDE_LIST
+  #define HX_BUILD_PIN_OVERRIDE_LIST(X)
+#endif
+
+// Driver family registries.
+// Add only driver families that may appear in this build.
+#ifndef HX_BUILD_I2C_DRIVER_TYPE_LIST
+  #define HX_BUILD_I2C_DRIVER_TYPE_LIST(X)
+#endif
+
+#ifndef HX_BUILD_UART_DRIVER_TYPE_LIST
+  #define HX_BUILD_UART_DRIVER_TYPE_LIST(X)
+#endif
+
 // ENV Definition
 #if defined(CONFIG_IDF_TARGET_ESP32P4)
   #define HX_TARGET_NAME "esp32p4"
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
   #define HX_TARGET_NAME "esp32s3"
-#else
+#elif defined(CONFIG_IDF_TARGET_ESP32S2)
+  #define HX_TARGET_NAME "esp32s2"
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+  #define HX_TARGET_NAME "esp32c6"
+#elif defined(CONFIG_IDF_TARGET_ESP32C5)
+  #define HX_TARGET_NAME "esp32c5"
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+  #define HX_TARGET_NAME "esp32c3"
+#elif defined(CONFIG_IDF_TARGET_ESP32C2)
+  #define HX_TARGET_NAME "esp32c2"
+#elif defined(CONFIG_IDF_TARGET_ESP32)
   #define HX_TARGET_NAME "esp32"
+#else
+  #define HX_TARGET_NAME "unknown"
 #endif
+
+#include "hx_build_layout_autogen.h"
 
 // USER INTERFACE CONSOLE ADAPTER SELECTOR
 

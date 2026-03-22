@@ -26,6 +26,7 @@
 #include "system/core/user_interface.h"
 #include "system/handlers/littlefs_handler.h"
 #include "system/core/config.h"
+#include "system/core/pinmap.h"
 #include "system/core/state.h"
 
 static const char* EspResetReasonText(uint32_t reason) {
@@ -101,6 +102,10 @@ void BootInit() {
   }
 
   ConfigApply();
+
+  if (!PinmapInit()) {
+    LogWarn("PIN: init failed");
+  }
 
   if (!StateInit()) {
     LogWarn("STA: init failed");
