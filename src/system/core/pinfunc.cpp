@@ -10,6 +10,8 @@
 
 #include "headers/hx_pinfunc.h"
 
+#include <string.h>
+
 const char* HxPinFunctionText(uint16_t pin_function) {
   switch (pin_function) {
     case HX_PIN_NONE: return "NONE";
@@ -116,4 +118,27 @@ const char* HxPinFunctionText(uint16_t pin_function) {
     case HX_PIN_HOSTED0_RESET: return "HOSTED0_RESET";
     default: return "UNKNOWN";
   }
+}
+
+
+bool HxPinFunctionFromText(const char* text, uint16_t* out_pin_function) {
+  if (!text || !text[0] || !out_pin_function) {
+    return false;
+  }
+
+  const char* candidate = text;
+  static const char kPrefix[] = "HX_PIN_";
+  if (strncmp(candidate, kPrefix, sizeof(kPrefix) - 1) == 0) {
+    candidate += sizeof(kPrefix) - 1;
+  }
+
+  for (uint16_t id = 0; id <= HX_PINFUNC_MAX_ID; id++) {
+    const char* name = HxPinFunctionText(id);
+    if (strcmp(name, candidate) == 0) {
+      *out_pin_function = id;
+      return true;
+    }
+  }
+
+  return false;
 }

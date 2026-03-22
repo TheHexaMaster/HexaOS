@@ -34,6 +34,7 @@ struct HxUartDriverBinding {
 };
 
 bool PinmapInit();
+bool PinmapValidateCurrentConfig();
 bool PinmapIsReady();
 uint8_t PinmapGpioCount();
 uint16_t PinmapGetGpioCaps(uint8_t gpio);

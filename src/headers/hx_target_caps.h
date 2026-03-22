@@ -12,8 +12,9 @@
   restrictions.
 
   It does not try to encode the full ESP-IDF GPIO matrix or every peripheral mux
-  possibility. The role of this database is validation of board.pinmap and
-  board.bindings, not replacement of vendor datasheets.
+  possibility. In HexaOS terminology this file is the target caps database.
+  Its role is validation of board.pinmap and drivers.bindings, not replacement
+  of vendor datasheets.
 */
 
 #pragma once

@@ -13,17 +13,6 @@ import re
 import sys
 from typing import Dict, List, Tuple
 
-TARGET_GPIO_COUNT = {
-    "esp32": 40,
-    "esp32c2": 21,
-    "esp32c3": 22,
-    "esp32c5": 30,
-    "esp32c6": 31,
-    "esp32s2": 47,
-    "esp32s3": 49,
-    "esp32p4": 55,
-}
-
 PIN_ALIAS_TO_FUNCTION = {
     "TX": "HX_PIN_UART0_TX",
     "RX": "HX_PIN_UART0_RX",
@@ -65,6 +54,12 @@ PIN_ALIAS_TO_FUNCTION = {
     "BOARD_SDIO_ESP_HOSTED_D2": "HX_PIN_HOSTED0_SDIO_D2",
     "BOARD_SDIO_ESP_HOSTED_D3": "HX_PIN_HOSTED0_SDIO_D3",
     "BOARD_SDIO_ESP_HOSTED_RESET": "HX_PIN_HOSTED0_RESET",
+    "SDMMC_CLK": "HX_PIN_SDMMC0_CLK",
+    "SDMMC_CMD": "HX_PIN_SDMMC0_CMD",
+    "SDMMC_D0": "HX_PIN_SDMMC0_D0",
+    "SDMMC_D1": "HX_PIN_SDMMC0_D1",
+    "SDMMC_D2": "HX_PIN_SDMMC0_D2",
+    "SDMMC_D3": "HX_PIN_SDMMC0_D3",
 }
 
 
@@ -149,6 +144,17 @@ def parse_pinfunc_ids(path: pathlib.Path) -> Dict[str, int]:
     return {name: int(value) for name, value in pattern.findall(text)}
 
 
+def parse_target_gpio_counts(path: pathlib.Path) -> Dict[str, int]:
+    text = strip_cpp_comments(read_text(path))
+    pattern = re.compile(
+        r'HX_TARGET_CAPS_[A-Z0-9]+_DEF\s*=\s*\{\s*HX_TARGET_KIND_[A-Z0-9]+\s*,\s*"([a-z0-9]+)"\s*,\s*(\d+)\s*\}'
+    )
+    counts = {name: int(count) for name, count in pattern.findall(text)}
+    if not counts:
+        raise SystemExit(f"Unable to parse target GPIO counts from {path}")
+    return counts
+
+
 def parse_pins_arduino(path: pathlib.Path) -> Dict[str, int]:
     text = strip_cpp_comments(read_text(path))
     result: Dict[str, int] = {}
@@ -204,8 +210,7 @@ def parse_pin_overrides(text: str) -> List[Tuple[str, int]]:
     return [(func_name, int(gpio, 10)) for func_name, gpio in re.findall(r"X\((HX_PIN_[A-Z0-9_]+)\s*,\s*(-?\d+)\)", body)]
 
 
-def build_dense_pinmap(target: str, pin_ids: Dict[str, int], pins: Dict[str, int], overrides: List[Tuple[str, int]]) -> List[int]:
-    gpio_count = TARGET_GPIO_COUNT[target]
+def build_dense_pinmap(target: str, gpio_count: int, pin_ids: Dict[str, int], pins: Dict[str, int], overrides: List[Tuple[str, int]]) -> List[int]:
     dense = [0] * gpio_count
 
     for alias_name, gpio in pins.items():
@@ -315,16 +320,21 @@ def main() -> int:
     parser.add_argument("--pins", required=True, type=pathlib.Path)
     parser.add_argument("--build", required=True, type=pathlib.Path)
     parser.add_argument("--pinfunc", required=True, type=pathlib.Path)
-    parser.add_argument("--target", required=True, choices=sorted(TARGET_GPIO_COUNT.keys()))
+    parser.add_argument("--targetcaps", required=True, type=pathlib.Path)
+    parser.add_argument("--target", required=True)
     parser.add_argument("--out", required=True, type=pathlib.Path)
     args = parser.parse_args()
+
+    target_gpio_counts = parse_target_gpio_counts(args.targetcaps)
+    if args.target not in target_gpio_counts:
+        raise SystemExit(f"Unknown target for HexaOS layout generator: {args.target}")
 
     pin_ids = parse_pinfunc_ids(args.pinfunc)
     pins = parse_pins_arduino(args.pins)
     build_text = strip_cpp_comments(read_text(args.build))
     overrides = parse_pin_overrides(build_text)
 
-    dense = build_dense_pinmap(args.target, pin_ids, pins, overrides)
+    dense = build_dense_pinmap(args.target, target_gpio_counts[args.target], pin_ids, pins, overrides)
     i2c_types = parse_registry_names(build_text, "HX_BUILD_I2C_DRIVER_TYPE_LIST")
     uart_types = parse_registry_names(build_text, "HX_BUILD_UART_DRIVER_TYPE_LIST")
 

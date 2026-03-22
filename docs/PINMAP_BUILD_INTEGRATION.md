@@ -11,6 +11,18 @@ The goal is to keep **physical board routing** separate from **driver instance b
 
 ---
 
+## Terminology
+
+HexaOS should keep these terms distinct:
+
+- **target caps** = static SoC GPIO capability database from `hx_target_caps.h`
+- **variant defaults** = board-level default aliases from the active `pins_arduino.h`
+- **board.pinmap** = final physical GPIO to logical `HX_PIN_*` map
+- **drivers.bindings** = final driver-family instance bindings to native peripherals
+- **runtime pinmap** = validated in-RAM lookup model created by `PinmapInit()`
+
+---
+
 ## 1. `board.pinmap`
 
 `board.pinmap` describes only physical GPIO routing.
@@ -29,8 +41,8 @@ Meaning:
 
 - GPIO 7 = `HX_PIN_I2C0_SDA`
 - GPIO 8 = `HX_PIN_I2C0_SCL`
-- GPIO 14 = `HX_PIN_HOSTED0_D0`
-- GPIO 15 = `HX_PIN_HOSTED0_D1`
+- GPIO 14 = `HX_PIN_HOSTED0_SDIO_D0`
+- GPIO 15 = `HX_PIN_HOSTED0_SDIO_D1`
 
 `board.pinmap` never describes driver instances or protocols.
 
@@ -109,7 +121,7 @@ That file provides default aliases such as:
 - `SCK`
 - board-specific Ethernet or Hosted SDIO pins
 
-HexaOS imports those defaults and normalizes them into `board.pinmap`.
+HexaOS imports those defaults and normalizes them into `board.pinmap`. `HX_BUILD_PIN_OVERRIDE_LIST` can then override any imported logical function before the generated default is written.
 
 ### 3.2 Build overrides
 
@@ -300,3 +312,21 @@ Validated semantically:
 6. Instance numbering always starts at `0`.
 7. Imported `pins_arduino.h` defaults are normal inputs, not a competing HexaOS board system.
 
+
+---
+
+## 8. Console diagnostics
+
+The built-in console is a frontend over the runtime pinmap service. It does not own a separate parser for pin declarations. Useful diagnostics commands are:
+
+- `pinmap info`
+- `pinmap list`
+- `pinmap gpio <gpio>`
+- `pinmap func <function_id|HX_PIN_NAME|NAME>`
+- `pinmap caps <gpio>`
+- `pinmap bindings`
+- `pinmap validate`
+- `pinmap rawpinmap`
+- `pinmap rawbindings`
+
+`pinmap raw` remains an alias for `pinmap rawbindings` for backward compatibility.

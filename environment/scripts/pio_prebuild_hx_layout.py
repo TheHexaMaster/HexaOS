@@ -13,6 +13,7 @@ import sys
 PROJECT_DIR = pathlib.Path(env.subst("$PROJECT_DIR")).resolve()
 BUILD_FILE = PROJECT_DIR / "src" / "headers" / "hx_build.h"
 PINFUNC_FILE = PROJECT_DIR / "src" / "headers" / "hx_pinfunc.h"
+TARGET_CAPS_FILE = PROJECT_DIR / "src" / "headers" / "hx_target_caps.h"
 OUT_FILE = PROJECT_DIR / "src" / "headers" / "hx_build_layout_autogen.h"
 GENERATOR = PROJECT_DIR / "environment" / "scripts" / "generate_hx_build_layout.py"
 
@@ -84,6 +85,7 @@ def run() -> None:
         "--pins", str(pins_file),
         "--build", str(BUILD_FILE),
         "--pinfunc", str(PINFUNC_FILE),
+        "--targetcaps", str(TARGET_CAPS_FILE),
         "--target", target,
         "--out", str(OUT_FILE),
     ]

@@ -52,6 +52,18 @@ static HxUartDriverBinding g_uart_bindings[HX_PINMAP_MAX_UART_BINDINGS] = {};
 static size_t g_i2c_binding_count = 0;
 static size_t g_uart_binding_count = 0;
 
+struct HxPinmapSnapshot {
+  bool ready;
+  uint16_t gpio_to_function[HX_PINMAP_MAX_GPIO];
+  int16_t function_to_gpio[HX_PINFUNC_MAX_ID + 1];
+  char bindings_json[HX_BUILD_DRIVERS_BINDINGS_MAX_LEN + 1];
+  uint8_t mapped_count;
+  HxI2cDriverBinding i2c_bindings[HX_PINMAP_MAX_I2C_BINDINGS];
+  HxUartDriverBinding uart_bindings[HX_PINMAP_MAX_UART_BINDINGS];
+  size_t i2c_binding_count;
+  size_t uart_binding_count;
+};
+
 
 #define HX_PINMAP_TYPE_NAME_INIT(type_name) #type_name,
 static const char* const kHxBuildI2cDriverTypes[] = {
@@ -74,6 +86,39 @@ static bool PinmapTypeInRegistry(const char* type_name, const char* const* regis
     }
   }
   return false;
+}
+
+static void PinmapSnapshotCapture(HxPinmapSnapshot* snapshot) {
+  if (!snapshot) {
+    return;
+  }
+
+  snapshot->ready = g_pinmap_ready;
+  memcpy(snapshot->gpio_to_function, g_gpio_to_function, sizeof(g_gpio_to_function));
+  memcpy(snapshot->function_to_gpio, g_function_to_gpio, sizeof(g_function_to_gpio));
+  memcpy(snapshot->bindings_json, g_bindings_json, sizeof(g_bindings_json));
+  snapshot->mapped_count = g_mapped_count;
+  memcpy(snapshot->i2c_bindings, g_i2c_bindings, sizeof(g_i2c_bindings));
+  memcpy(snapshot->uart_bindings, g_uart_bindings, sizeof(g_uart_bindings));
+  snapshot->i2c_binding_count = g_i2c_binding_count;
+  snapshot->uart_binding_count = g_uart_binding_count;
+}
+
+static void PinmapSnapshotRestore(const HxPinmapSnapshot* snapshot) {
+  if (!snapshot) {
+    return;
+  }
+
+  g_pinmap_ready = snapshot->ready;
+  memcpy(g_gpio_to_function, snapshot->gpio_to_function, sizeof(g_gpio_to_function));
+  memcpy(g_function_to_gpio, snapshot->function_to_gpio, sizeof(g_function_to_gpio));
+  memcpy(g_bindings_json, snapshot->bindings_json, sizeof(g_bindings_json));
+  g_mapped_count = snapshot->mapped_count;
+  memcpy(g_i2c_bindings, snapshot->i2c_bindings, sizeof(g_i2c_bindings));
+  memcpy(g_uart_bindings, snapshot->uart_bindings, sizeof(g_uart_bindings));
+  g_i2c_binding_count = snapshot->i2c_binding_count;
+  g_uart_binding_count = snapshot->uart_binding_count;
+  Hx.pinmap_ready = snapshot->ready;
 }
 
 static void PinmapResetState() {
@@ -1142,6 +1187,19 @@ bool PinmapInit() {
           (unsigned int)g_i2c_binding_count,
           (unsigned int)g_uart_binding_count,
           (unsigned int)strlen(g_bindings_json));
+  return true;
+}
+
+bool PinmapValidateCurrentConfig() {
+  HxPinmapSnapshot snapshot{};
+  PinmapSnapshotCapture(&snapshot);
+
+  bool ok = PinmapInit();
+  if (!ok) {
+    PinmapSnapshotRestore(&snapshot);
+    return false;
+  }
+
   return true;
 }
 

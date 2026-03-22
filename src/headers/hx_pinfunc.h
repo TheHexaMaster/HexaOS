@@ -201,3 +201,4 @@ static inline bool HxPinFunctionIsHosted(uint16_t pin_function) {
 }
 
 const char* HxPinFunctionText(uint16_t pin_function);
+bool HxPinFunctionFromText(const char* text, uint16_t* out_pin_function);
