@@ -58,5 +58,5 @@ void HeartBeatTick() {
 }
 
 void SystemEverySecond() {
-  HeartBeatTick();
+//  HeartBeatTick();
 }

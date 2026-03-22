@@ -112,16 +112,16 @@ The active board/variant selects the real `pins_arduino.h` outside `src`.
 
 That file provides default aliases such as:
 
-- `TX`
-- `RX`
-- `SDA`
-- `SCL`
-- `MOSI`
-- `MISO`
-- `SCK`
-- board-specific Ethernet or Hosted SDIO pins
+- `TX`, `RX`
+- `SDA`, `SCL`, `SDA1`, `SCL1`, `I2C_SDA`, `I2C_SCL`
+- `MOSI`, `MISO`, `SCK`, `SS`
+- `I2S_MCLK`, `I2S_SCLK`, `I2S_LRCK`, `I2S_ASDOUT`, `I2S_DSDIN`, `AMP_CTRL`
+- `LCD_BL_IO`, `LCD_RST_IO`, `CTP_RST`, `CTP_INT`
+- `DAC1`, `DAC2`, `USB_DM`, `USB_DP`
+- `LP_SDA`, `LP_SCL`, `LP_TX`, `LP_RX`
+- board-specific Ethernet, SDMMC, Hosted SDIO and Hosted boot pins
 
-HexaOS imports those defaults and normalizes them into `board.pinmap`. `HX_BUILD_PIN_OVERRIDE_LIST` can then override any imported logical function before the generated default is written.
+HexaOS imports those defaults and normalizes them into `board.pinmap`. `HX_BUILD_PIN_OVERRIDE_LIST` can then override any imported logical function before the generated default is written. Informational feature macros are ignored, and generic Arduino analog/touch aliases such as `A*` and `T*` are intentionally not imported.
 
 ### 3.2 Build overrides
 

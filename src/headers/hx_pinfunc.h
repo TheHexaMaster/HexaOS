@@ -59,6 +59,18 @@ enum HxPinFunction : uint16_t {
   HX_PIN_SYSTEM_IRQ3       = 16,
   HX_PIN_HEARTBEAT_OUT     = 17,
   HX_PIN_SAFEBOOT_REQUEST  = 18,
+  HX_PIN_DAC1              = 19,
+  HX_PIN_DAC2              = 20,
+  HX_PIN_USB_DM            = 21,
+  HX_PIN_USB_DP            = 22,
+  HX_PIN_DISPLAY_BL        = 23,
+  HX_PIN_DISPLAY_RST       = 24,
+  HX_PIN_TOUCH_RST         = 25,
+  HX_PIN_TOUCH_INT         = 26,
+  HX_PIN_LP_I2C_SDA        = 27,
+  HX_PIN_LP_I2C_SCL        = 28,
+  HX_PIN_LP_UART_RX        = 29,
+  HX_PIN_LP_UART_TX        = 30,
 
   // UART family.
   HX_PIN_UART0_RX  = 100,
@@ -103,18 +115,24 @@ enum HxPinFunction : uint16_t {
   HX_PIN_SPI3_MOSI = 309,
   HX_PIN_SPI3_MISO = 310,
   HX_PIN_SPI3_SCLK = 311,
+  HX_PIN_SPI0_SS   = 312,
+  HX_PIN_SPI1_SS   = 313,
+  HX_PIN_SPI2_SS   = 314,
+  HX_PIN_SPI3_SS   = 315,
 
   // I2S family.
-  HX_PIN_I2S0_MCLK = 400,
-  HX_PIN_I2S0_BCLK = 401,
-  HX_PIN_I2S0_WS   = 402,
-  HX_PIN_I2S0_DOUT = 403,
-  HX_PIN_I2S0_DIN  = 404,
-  HX_PIN_I2S1_MCLK = 405,
-  HX_PIN_I2S1_BCLK = 406,
-  HX_PIN_I2S1_WS   = 407,
-  HX_PIN_I2S1_DOUT = 408,
-  HX_PIN_I2S1_DIN  = 409,
+  HX_PIN_I2S0_MCLK     = 400,
+  HX_PIN_I2S0_BCLK     = 401,
+  HX_PIN_I2S0_WS       = 402,
+  HX_PIN_I2S0_DOUT     = 403,
+  HX_PIN_I2S0_DIN      = 404,
+  HX_PIN_I2S1_MCLK     = 405,
+  HX_PIN_I2S1_BCLK     = 406,
+  HX_PIN_I2S1_WS       = 407,
+  HX_PIN_I2S1_DOUT     = 408,
+  HX_PIN_I2S1_DIN      = 409,
+  HX_PIN_I2S0_AMP_CTRL = 410,
+  HX_PIN_I2S1_AMP_CTRL = 411,
 
   // TWAI / CAN family.
   HX_PIN_TWAI0_TX  = 500,
@@ -158,6 +176,7 @@ enum HxPinFunction : uint16_t {
   HX_PIN_HOSTED0_SDIO_D2    = 804,
   HX_PIN_HOSTED0_SDIO_D3    = 805,
   HX_PIN_HOSTED0_RESET      = 806,
+  HX_PIN_HOSTED0_BOOT       = 807,
 };
 
 static inline bool HxPinFunctionIsNone(uint16_t pin_function) {

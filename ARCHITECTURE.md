@@ -390,6 +390,7 @@ src/
 
   system/
     core/               # permanent execution skeleton and foundational system services
+    interlibs/          # shared internal helper libraries without domain ownership
     adapters/           # bridges to external APIs, SDKs, buses, storage, backends
     handlers/           # internal domain owners
     drivers/            # reusable device and protocol implementations
@@ -403,6 +404,7 @@ Subdirectories may be introduced inside these layers when growth justifies them.
 Examples:
 
 ```text
+system/interlibs/jsonparser/
 system/drivers/rtc/
 system/drivers/sensors/
 system/drivers/display/
@@ -411,18 +413,29 @@ system/services/telemetry/
 system/services/polling/
 ```
 
+### Interlibs
+
+`system/interlibs/` is reserved for small shared internal libraries that are reused across multiple HexaOS layers but do not own a domain, a device, a workflow, or an external backend.
+
+Rules:
+
+- Interlibs may provide parsing, formatting, conversion, or other reusable helper logic.
+- Interlibs must remain policy-light and domain-agnostic.
+- Interlibs must not become a hidden replacement for handlers, services, or adapters.
+- When a helper starts owning domain rules, device behavior, transport behavior, or runtime workflow policy, it no longer belongs in interlibs.
+
 ---
 
 ## Dependency Direction Rules
 
 ### Allowed
 
-- Core may depend on shared headers and other core components.
-- Handlers may depend on core and adapters.
-- Drivers may depend on adapters and shared headers.
-- Services may depend on core, handlers, drivers, and adapters.
-- Modules may depend on core, handlers, services, and drivers.
-- Commands may depend on core, handlers, and services.
+- Core may depend on shared headers, interlibs, and other core components.
+- Handlers may depend on core, interlibs, and adapters.
+- Drivers may depend on interlibs, adapters, and shared headers.
+- Services may depend on core, interlibs, handlers, drivers, and adapters.
+- Modules may depend on core, interlibs, handlers, services, and drivers.
+- Commands may depend on core, interlibs, handlers, and services.
 
 ### Forbidden or Strongly Discouraged
 

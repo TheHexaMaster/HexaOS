@@ -24,18 +24,43 @@ PIN_ALIAS_TO_FUNCTION = {
     "RX3": "HX_PIN_UART3_RX",
     "TX4": "HX_PIN_UART4_TX",
     "RX4": "HX_PIN_UART4_RX",
+    "LP_TX": "HX_PIN_LP_UART_TX",
+    "LP_RX": "HX_PIN_LP_UART_RX",
     "SDA": "HX_PIN_I2C0_SDA",
     "SCL": "HX_PIN_I2C0_SCL",
     "SDA1": "HX_PIN_I2C1_SDA",
     "SCL1": "HX_PIN_I2C1_SCL",
     "SDA2": "HX_PIN_I2C2_SDA",
     "SCL2": "HX_PIN_I2C2_SCL",
+    "I2C_SDA": "HX_PIN_I2C1_SDA",
+    "I2C_SCL": "HX_PIN_I2C1_SCL",
+    "LP_SDA": "HX_PIN_LP_I2C_SDA",
+    "LP_SCL": "HX_PIN_LP_I2C_SCL",
     "MOSI": "HX_PIN_SPI0_MOSI",
     "MISO": "HX_PIN_SPI0_MISO",
     "SCK": "HX_PIN_SPI0_SCLK",
+    "SS": "HX_PIN_SPI0_SS",
     "MOSI1": "HX_PIN_SPI1_MOSI",
     "MISO1": "HX_PIN_SPI1_MISO",
     "SCK1": "HX_PIN_SPI1_SCLK",
+    "I2S_MCLK": "HX_PIN_I2S0_MCLK",
+    "I2S_SCLK": "HX_PIN_I2S0_BCLK",
+    "I2S_LRCK": "HX_PIN_I2S0_WS",
+    "I2S_ASDOUT": "HX_PIN_I2S0_DOUT",
+    "I2S_DSDIN": "HX_PIN_I2S0_DIN",
+    "AMP_CTRL": "HX_PIN_I2S0_AMP_CTRL",
+    "DAC1": "HX_PIN_DAC1",
+    "DAC2": "HX_PIN_DAC2",
+    "USB_DM": "HX_PIN_USB_DM",
+    "USB_DP": "HX_PIN_USB_DP",
+    "LCD_BL_IO": "HX_PIN_DISPLAY_BL",
+    "LCD_RST_IO": "HX_PIN_DISPLAY_RST",
+    "CTP_RST": "HX_PIN_TOUCH_RST",
+    "CTP_INT": "HX_PIN_TOUCH_INT",
+    "PIN_RGB_LED": "HX_PIN_STATUS_LED",
+    "LED_BUILTIN": "HX_PIN_STATUS_LED",
+    "BUILTIN_LED": "HX_PIN_STATUS_LED",
+    "RGB_BUILTIN": "HX_PIN_STATUS_LED",
     "ETH_PHY_MDC": "HX_PIN_ETH0_MDC",
     "ETH_PHY_MDIO": "HX_PIN_ETH0_MDIO",
     "ETH_PHY_POWER": "HX_PIN_ETH0_POWER",
@@ -54,6 +79,7 @@ PIN_ALIAS_TO_FUNCTION = {
     "BOARD_SDIO_ESP_HOSTED_D2": "HX_PIN_HOSTED0_SDIO_D2",
     "BOARD_SDIO_ESP_HOSTED_D3": "HX_PIN_HOSTED0_SDIO_D3",
     "BOARD_SDIO_ESP_HOSTED_RESET": "HX_PIN_HOSTED0_RESET",
+    "BOARD_SDIO_ESP_HOSTED_BOOT": "HX_PIN_HOSTED0_BOOT",
     "SDMMC_CLK": "HX_PIN_SDMMC0_CLK",
     "SDMMC_CMD": "HX_PIN_SDMMC0_CMD",
     "SDMMC_D0": "HX_PIN_SDMMC0_D0",
@@ -155,15 +181,77 @@ def parse_target_gpio_counts(path: pathlib.Path) -> Dict[str, int]:
     return counts
 
 
+def eval_pin_expression(expr: str, symbols: Dict[str, int]) -> int | None:
+    expr = expr.strip()
+    if not expr:
+        return None
+
+    builtins = {
+        "SOC_GPIO_PIN_COUNT": 0,
+        "LOW": 0,
+        "HIGH": 1,
+        "true": 1,
+        "false": 0,
+        "TRUE": 1,
+        "FALSE": 0,
+    }
+
+    token_pattern = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+
+    def replace_token(match: re.Match[str]) -> str:
+        name = match.group(0)
+        if name in symbols:
+            return str(symbols[name])
+        if name in builtins:
+            return str(builtins[name])
+        raise KeyError(name)
+
+    normalized = expr.replace("&&", " and ").replace("||", " or ")
+    try:
+        normalized = token_pattern.sub(replace_token, normalized)
+    except KeyError:
+        return None
+
+    normalized = re.sub(r"!([^=])", r" not \1", normalized)
+
+    try:
+        value = eval(normalized, {"__builtins__": {}}, {})
+    except Exception:
+        return None
+
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, int):
+        return value
+    return None
+
+
 def parse_pins_arduino(path: pathlib.Path) -> Dict[str, int]:
     text = strip_cpp_comments(read_text(path))
     result: Dict[str, int] = {}
-    const_pattern = re.compile(r"static\s+const\s+uint8_t\s+([A-Za-z0-9_]+)\s*=\s*(-?\d+)\s*;")
-    define_pattern = re.compile(r"^\s*#define\s+([A-Za-z0-9_]+)\s+(-?\d+)\s*$", re.MULTILINE)
-    for name, value in const_pattern.findall(text):
-        result[name] = int(value, 10)
-    for name, value in define_pattern.findall(text):
-        result[name] = int(value, 10)
+    const_pattern = re.compile(r"^\s*static\s+const\s+uint8_t\s+([A-Za-z0-9_]+)\s*=\s*(.+?)\s*;\s*$")
+    define_pattern = re.compile(r"^\s*#define\s+([A-Za-z0-9_]+)\s+(.+?)\s*$")
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        const_match = const_pattern.match(raw_line)
+        if const_match:
+            name = const_match.group(1)
+            value = eval_pin_expression(const_match.group(2), result)
+            if value is not None:
+                result[name] = value
+            continue
+
+        define_match = define_pattern.match(raw_line)
+        if define_match:
+            name = define_match.group(1)
+            value = eval_pin_expression(define_match.group(2), result)
+            if value is not None:
+                result[name] = value
+
     return result
 
 

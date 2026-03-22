@@ -33,6 +33,18 @@ const char* HxPinFunctionText(uint16_t pin_function) {
     case HX_PIN_SYSTEM_IRQ3: return "SYSTEM_IRQ3";
     case HX_PIN_HEARTBEAT_OUT: return "HEARTBEAT_OUT";
     case HX_PIN_SAFEBOOT_REQUEST: return "SAFEBOOT_REQUEST";
+    case HX_PIN_DAC1: return "DAC1";
+    case HX_PIN_DAC2: return "DAC2";
+    case HX_PIN_USB_DM: return "USB_DM";
+    case HX_PIN_USB_DP: return "USB_DP";
+    case HX_PIN_DISPLAY_BL: return "DISPLAY_BL";
+    case HX_PIN_DISPLAY_RST: return "DISPLAY_RST";
+    case HX_PIN_TOUCH_RST: return "TOUCH_RST";
+    case HX_PIN_TOUCH_INT: return "TOUCH_INT";
+    case HX_PIN_LP_I2C_SDA: return "LP_I2C_SDA";
+    case HX_PIN_LP_I2C_SCL: return "LP_I2C_SCL";
+    case HX_PIN_LP_UART_RX: return "LP_UART_RX";
+    case HX_PIN_LP_UART_TX: return "LP_UART_TX";
     case HX_PIN_UART0_RX: return "UART0_RX";
     case HX_PIN_UART0_TX: return "UART0_TX";
     case HX_PIN_UART0_RTS: return "UART0_RTS";
@@ -62,25 +74,31 @@ const char* HxPinFunctionText(uint16_t pin_function) {
     case HX_PIN_SPI0_MOSI: return "SPI0_MOSI";
     case HX_PIN_SPI0_MISO: return "SPI0_MISO";
     case HX_PIN_SPI0_SCLK: return "SPI0_SCLK";
+    case HX_PIN_SPI0_SS: return "SPI0_SS";
     case HX_PIN_SPI1_MOSI: return "SPI1_MOSI";
     case HX_PIN_SPI1_MISO: return "SPI1_MISO";
     case HX_PIN_SPI1_SCLK: return "SPI1_SCLK";
+    case HX_PIN_SPI1_SS: return "SPI1_SS";
     case HX_PIN_SPI2_MOSI: return "SPI2_MOSI";
     case HX_PIN_SPI2_MISO: return "SPI2_MISO";
     case HX_PIN_SPI2_SCLK: return "SPI2_SCLK";
+    case HX_PIN_SPI2_SS: return "SPI2_SS";
     case HX_PIN_SPI3_MOSI: return "SPI3_MOSI";
     case HX_PIN_SPI3_MISO: return "SPI3_MISO";
     case HX_PIN_SPI3_SCLK: return "SPI3_SCLK";
+    case HX_PIN_SPI3_SS: return "SPI3_SS";
     case HX_PIN_I2S0_MCLK: return "I2S0_MCLK";
     case HX_PIN_I2S0_BCLK: return "I2S0_BCLK";
     case HX_PIN_I2S0_WS: return "I2S0_WS";
     case HX_PIN_I2S0_DOUT: return "I2S0_DOUT";
     case HX_PIN_I2S0_DIN: return "I2S0_DIN";
+    case HX_PIN_I2S0_AMP_CTRL: return "I2S0_AMP_CTRL";
     case HX_PIN_I2S1_MCLK: return "I2S1_MCLK";
     case HX_PIN_I2S1_BCLK: return "I2S1_BCLK";
     case HX_PIN_I2S1_WS: return "I2S1_WS";
     case HX_PIN_I2S1_DOUT: return "I2S1_DOUT";
     case HX_PIN_I2S1_DIN: return "I2S1_DIN";
+    case HX_PIN_I2S1_AMP_CTRL: return "I2S1_AMP_CTRL";
     case HX_PIN_TWAI0_TX: return "TWAI0_TX";
     case HX_PIN_TWAI0_RX: return "TWAI0_RX";
     case HX_PIN_TWAI0_BO: return "TWAI0_BO";
@@ -116,6 +134,7 @@ const char* HxPinFunctionText(uint16_t pin_function) {
     case HX_PIN_HOSTED0_SDIO_D2: return "HOSTED0_SDIO_D2";
     case HX_PIN_HOSTED0_SDIO_D3: return "HOSTED0_SDIO_D3";
     case HX_PIN_HOSTED0_RESET: return "HOSTED0_RESET";
+    case HX_PIN_HOSTED0_BOOT: return "HOSTED0_BOOT";
     default: return "UNKNOWN";
   }
 }
