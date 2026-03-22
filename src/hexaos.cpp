@@ -16,6 +16,7 @@
 #include "system/core/boot.h"
 #include "system/core/module_registry.h"
 #include "system/core/system_loop.h"
+#include <ArduinoJson.h>
 
 static void Every100ms() {
   SystemEvery100ms();
