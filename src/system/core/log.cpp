@@ -21,8 +21,6 @@
 #include <stdio.h>
 #include <string.h>
 
-static constexpr size_t HX_LOG_LINE_MAX = 256;
-static constexpr size_t HX_LOG_HISTORY_BYTES = 8192;
 
 static HxRtosCritical g_log_state_critical = HX_RTOS_CRITICAL_INIT;
 static HxRtosMutex g_log_sink_mutex = HX_RTOS_MUTEX_INIT;

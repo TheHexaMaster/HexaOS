@@ -13,6 +13,7 @@
 #include "i2c_adapter.h"
 
 #include "driver/i2c_master.h"
+#include "headers/hx_build.h"
 #include "soc/soc_caps.h"
 
 #include "headers/hx_pinfunc.h"
@@ -89,7 +90,7 @@ bool I2cAdapterBusInit(uint8_t port) {
   cfg.i2c_port                         = kPortMap[port];
   cfg.scl_io_num                       = (gpio_num_t)scl;
   cfg.sda_io_num                       = (gpio_num_t)sda;
-  cfg.glitch_ignore_cnt                = 7;
+  cfg.glitch_ignore_cnt                = HX_I2C_GLITCH_IGNORE_CNT;
   cfg.flags.enable_internal_pullup     = true;
 
   esp_err_t err = i2c_new_master_bus(&cfg, &g_bus[port]);

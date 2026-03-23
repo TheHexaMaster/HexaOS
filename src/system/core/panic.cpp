@@ -70,7 +70,7 @@ static void PanicWriteBanner(HxPanicCode code, const char* reason, const char* f
 
 void PanicAt(HxPanicCode code, const char* reason, const char* file, int line) {
   ConsoleAdapterInit();
-  delay(10);
+  delay(HX_PANIC_INIT_DELAY_MS);
 
   // Route through the log system if it has been initialized.
   LogError("PANIC [%s]: %s (%s:%d)",
@@ -84,13 +84,13 @@ void PanicAt(HxPanicCode code, const char* reason, const char* file, int line) {
 
 #if (HX_PANIC_ACTION == HX_PANIC_ACTION_RESTART)
   // Production action: restart after a short delay so the banner is visible.
-  delay(3000);
+  delay(HX_PANIC_RESTART_DELAY_MS);
   esp_restart();
 #else
   // Debug action (default): halt and repeat the banner periodically so a
   // late-connecting serial monitor can still read the panic cause.
   while (true) {
-    delay(3000);
+    delay(HX_PANIC_HALT_REPEAT_MS);
     PanicWriteBanner(code, reason, file, line);
   }
 #endif

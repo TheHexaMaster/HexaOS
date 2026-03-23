@@ -42,6 +42,20 @@
   #define HX_PANIC_ACTION  HX_PANIC_ACTION_HALT
 #endif
 
+// PANIC TIMING
+// Delay after ConsoleAdapterInit() before writing the panic banner.
+#ifndef HX_PANIC_INIT_DELAY_MS
+  #define HX_PANIC_INIT_DELAY_MS 10
+#endif
+// Delay before esp_restart() in production panic mode.
+#ifndef HX_PANIC_RESTART_DELAY_MS
+  #define HX_PANIC_RESTART_DELAY_MS 3000
+#endif
+// Banner repeat interval in halt mode (debug panic).
+#ifndef HX_PANIC_HALT_REPEAT_MS
+  #define HX_PANIC_HALT_REPEAT_MS 3000
+#endif
+
 // FEATURES
 #define HX_BUILD_CONSOLE_ADAPTER          HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  // HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG or HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC (IDF JTAG shall be more stable because of Arduino CDC bug causing random crash issue - MTVAL: 0x500d2000)
 #define HX_ENABLE_FEATURE_WIFI            true
@@ -73,6 +87,13 @@
     #define HX_SDMMC_POWER_CHANNEL (-1)  // -1 = no on-chip LDO channel
   #endif
 #endif
+// I2C BUS CONFIG
+// SCL glitch filter pulse count. Filters spikes shorter than this many
+// APB clock cycles. IDF default is 7; lower values reduce noise immunity.
+#ifndef HX_I2C_GLITCH_IGNORE_CNT
+  #define HX_I2C_GLITCH_IGNORE_CNT 7
+#endif
+
 // I2C handler device registry capacity.
 // Covers boards with many sensors across multiple I2C buses.
 #ifndef HX_I2C_DEVICE_MAX
@@ -105,6 +126,43 @@
 #define HX_CONFIG_DEFAULT_LOG_LEVEL        3                 // 0-err, 1-warn, 2-info, 3-debug, 4-lld
 #define HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE  false
 #define HX_CONFIG_DEFAULT_STATE_DELAY     2000
+
+// LOG SUBSYSTEM
+// Maximum formatted log line length including tag, level prefix and message.
+#ifndef HX_LOG_LINE_MAX
+  #define HX_LOG_LINE_MAX 256
+#endif
+// In-memory log history ring buffer size in bytes.
+// Retains recent log lines for late-connecting serial monitors or web consoles.
+#ifndef HX_LOG_HISTORY_BYTES
+  #define HX_LOG_HISTORY_BYTES 8192
+#endif
+
+// COMMAND ENGINE
+// Maximum number of registered commands across all command families.
+#ifndef HX_COMMAND_MAX_COUNT
+  #define HX_COMMAND_MAX_COUNT 512
+#endif
+// Maximum command line length in bytes including null terminator.
+#ifndef HX_COMMAND_LINE_MAX
+  #define HX_COMMAND_LINE_MAX 192
+#endif
+
+// USER INTERFACE SHELL
+// Maximum line editing buffer length for the interactive shell.
+#ifndef HX_UI_LINE_MAX
+  #define HX_UI_LINE_MAX 128
+#endif
+
+// FILES SUBSYSTEM
+// Maximum filesystem path length in bytes including null terminator.
+#ifndef HX_FILES_PATH_MAX
+  #define HX_FILES_PATH_MAX 255
+#endif
+// Maximum bytes read and displayed by the "files cat" command.
+#ifndef HX_FILES_CAT_MAX
+  #define HX_FILES_CAT_MAX 8192
+#endif
 
 // Build-generated JSON config lengths.
 #define HX_BUILD_BOARD_PINMAP_MAX_LEN       1024

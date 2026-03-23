@@ -165,40 +165,25 @@ A real codebase that already contains the permanent architectural layer destinat
 
 ---
 
-## 3. Solve Board / Pin / Bus Foundation Before New Drivers
+## 3. ✅ Solve Board / Pin / Bus Foundation Before New Drivers
 
 **Goal:** create the hardware foundation needed before RTC, sensors, displays, UART devices, networking peripherals, and future boards multiply.
 
-### Why
+### Delivered
 
-Future HexaOS growth will depend on:
+- Pinmap system: build-generated JSON from `pins_arduino.h`, runtime lookup via `PinmapGetGpioForFunction()`, NVS-overridable.
+- IDF-based adapters for I2C, SPI, UART — pins resolved from pinmap, no hardcoded GPIO numbers.
+- Domain handlers for I2C, SPI, UART — device registry, availability policy, statistics. Adapters never own policy.
+- Lifecycle modules `mod_i2c`, `mod_spi`, `mod_uart` — bus init at startup, port discovery.
+- I2C handler performs address scan on every ready bus at startup and logs found devices.
+- Drivers do not self-initialize. I2C/SPI drivers will be scheduled by `mod_i2c` / `mod_spi` schedulers. UART ports are initialized by their owning driver on demand.
 
-- I2C devices,
-- SPI devices,
-- UART / RS485 devices,
-- RTC chips,
-- displays,
-- touch controllers,
-- storage peripherals,
-- board-specific variants.
+### Future versions — Central Sensor Data Store
 
-If board/pin/bus ownership is not solved early, hardware-specific logic will spread across services and drivers.
-
-### Required work
-
-- [ ] Define the permanent pinout / board mapping mechanism.
-- [ ] Decide what belongs in board variant files versus runtime configuration.
-- [ ] Introduce canonical adapter boundaries for at least:
-  - I2C,
-  - SPI,
-  - UART.
-- [ ] Define how buses are selected and addressed by future drivers.
-- [ ] Ensure bus adapters remain adapters, not future policy owners.
-- [ ] Define how future services and drivers will resolve bus instances safely.
-
-### Deliverable
-
-A stable hardware access model that future drivers can depend on without ad-hoc board logic.
+Drivers will collect data from sensors (I2C, SPI, UART channels) and need somewhere to push it.
+A **central runtime data store** will be needed: a domain-agnostic registry where drivers publish
+timestamped sensor readings and services or commands can subscribe or query them.
+This is a prerequisite for dashboards, alerting, Home Assistant integration, and data logging.
 
 ---
 

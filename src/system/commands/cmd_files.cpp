@@ -71,7 +71,7 @@ static bool ActiveMounted() {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-static constexpr size_t      FILES_CAT_MAX = 8192;
+static constexpr size_t      FILES_CAT_MAX = HX_FILES_CAT_MAX;
 static constexpr const char* FILES_SD_VFS  = "/sd";
 
 static void PrintStorageSize(HxCmdOutput* out, const char* label, size_t bytes) {

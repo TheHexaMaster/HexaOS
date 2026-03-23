@@ -13,14 +13,13 @@
 
 #include "user_interface_handler.h"
 
+#include "headers/hx_build.h"
 #include "system/core/log.h"
 #include "system/core/rtos.h"
 #include "system/commands/command_engine.h"
 
 #include <stdio.h>
 #include <string.h>
-
-static constexpr size_t HX_UI_LINE_MAX = 128;
 static constexpr const char* HX_UI_PROMPT = "hx> ";
 static constexpr size_t HX_UI_PROMPT_LEN = 4;
 

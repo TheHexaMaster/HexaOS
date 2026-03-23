@@ -18,8 +18,7 @@
 #include <stdarg.h>
 #include <string.h>
 
-static constexpr size_t HX_COMMAND_MAX_COUNT = 512;
-static constexpr size_t HX_COMMAND_LINE_MAX = 192;
+#include "headers/hx_build.h"
 
 static const HxCmdDef* g_commands[HX_COMMAND_MAX_COUNT];
 static size_t g_command_count = 0;

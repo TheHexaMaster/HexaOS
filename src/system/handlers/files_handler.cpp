@@ -37,7 +37,6 @@
 
 static constexpr const char* HX_FILES_TAG            = "FIL";
 static constexpr const char* HX_FILES_PARTITION_LABEL = "littlefs";
-static constexpr size_t      HX_FILES_PATH_MAX        = 255;
 
 // ---------------------------------------------------------------------------
 // Internal state
