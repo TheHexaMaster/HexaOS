@@ -26,6 +26,9 @@ static const HxModule* kModules[] = {
 #if HX_ENABLE_MODULE_STORAGE
   &ModuleStorage,
 #endif
+#if HX_ENABLE_MODULE_NETWORK
+  &ModuleNetwork,
+#endif
 #if HX_ENABLE_MODULE_I2C
   &ModuleI2c,
 #endif

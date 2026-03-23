@@ -35,6 +35,8 @@ static HxCmdStatus CmdRuntimeStatus(const char* args, HxCmdOutput* out) {
   CmdOutPrintfLine(out, "  state_loaded     = %s", Hx.state_loaded      ? "true" : "false");
   CmdOutPrintfLine(out, "  files_mounted    = %s", Hx.files_mounted     ? "true" : "false");
   CmdOutPrintfLine(out, "  sd_mounted       = %s", Hx.sd_mounted        ? "true" : "false");
+  CmdOutPrintfLine(out, "  net_connected    = %s", Hx.net_connected     ? "true" : "false");
+  CmdOutPrintfLine(out, "  net_has_ip       = %s", Hx.net_has_ip        ? "true" : "false");
   CmdOutPrintfLine(out, "  safeboot         = %s", Hx.safeboot          ? "true" : "false");
   CmdOutPrintfLine(out, "  uptime           = %s", uptime_text);
   CmdOutPrintfLine(out, "  boot_count       = %lu", (unsigned long)Hx.boot_count);

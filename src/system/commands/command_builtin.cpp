@@ -20,6 +20,7 @@ bool CommandRegisterState();
 bool CommandRegisterPinmap();
 bool CommandRegisterRuntime();
 bool CommandRegisterFiles();
+bool CommandRegisterNetwork();
 
 bool CommandRegisterBuiltins() {
   return CommandRegisterHelp()
@@ -29,5 +30,6 @@ bool CommandRegisterBuiltins() {
       && CommandRegisterState()
       && CommandRegisterPinmap()
       && CommandRegisterRuntime()
-      && CommandRegisterFiles();
+      && CommandRegisterFiles()
+      && CommandRegisterNetwork();
 }

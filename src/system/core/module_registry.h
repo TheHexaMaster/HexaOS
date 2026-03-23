@@ -50,6 +50,9 @@ typedef struct {
 #if HX_ENABLE_MODULE_STORAGE
 extern const HxModule ModuleStorage;
 #endif
+#if HX_ENABLE_MODULE_NETWORK
+extern const HxModule ModuleNetwork;
+#endif
 #if HX_ENABLE_MODULE_I2C
 extern const HxModule ModuleI2c;
 #endif
