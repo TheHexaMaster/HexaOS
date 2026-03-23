@@ -13,6 +13,7 @@
 
 #include "cmd_parse.h"
 #include "command_engine.h"
+#include "system/core/config.h"
 #include "system/core/log.h"
 
 static HxCmdStatus CmdLogHistory(const char* args, HxCmdOutput* out) {
@@ -50,8 +51,13 @@ static HxCmdStatus CmdLogClear(const char* args, HxCmdOutput* out) {
 static HxCmdStatus CmdLogStats(const char* args, HxCmdOutput* out) {
   (void)args;
 
+  const char* level_names[] = { "error", "warn", "info", "debug", "lld" };
+  HxLogLevel  current       = LogGetLevel();
+  const char* level_str     = (current <= HX_LOG_LLD) ? level_names[current] : "unknown";
+
+  CmdOutPrintfLine(out, "level    = %s", level_str);
   CmdOutPrintfLine(out,
-                   "log: used=%lu capacity=%lu dropped_lines=%lu dropped_isr=%lu",
+                   "used=%lu capacity=%lu dropped_lines=%lu dropped_isr=%lu",
                    (unsigned long)LogHistorySize(),
                    (unsigned long)LogHistoryCapacity(),
                    (unsigned long)LogDroppedLines(),
@@ -59,10 +65,48 @@ static HxCmdStatus CmdLogStats(const char* args, HxCmdOutput* out) {
   return HX_CMD_OK;
 }
 
+static HxCmdStatus CmdLogLevel(const char* args, HxCmdOutput* out) {
+  static const char* kNames[] = { "error", "warn", "info", "debug", "lld" };
+
+  char token[16];
+  if (!CmdExtractSingleKey(args, token, sizeof(token))) {
+    HxLogLevel current = LogGetLevel();
+    CmdOutPrintfLine(out, "level = %s",
+                     (current <= HX_LOG_LLD) ? kNames[current] : "unknown");
+    CmdOutWriteLine(out, "usage: log level <error|warn|info|debug|lld>");
+    return HX_CMD_OK;
+  }
+
+  int32_t level_int = -1;
+  for (int i = 0; i <= (int)HX_LOG_LLD; i++) {
+    if (strcmp(token, kNames[i]) == 0) { level_int = i; break; }
+  }
+  if (level_int < 0) {
+    CmdOutWriteLine(out, "unknown level — use: error warn info debug lld");
+    return HX_CMD_USAGE;
+  }
+
+  char level_str[4];
+  snprintf(level_str, sizeof(level_str), "%d", (int)level_int);
+  const HxConfigKeyDef* item = ConfigFindConfigKey(HX_CFG_log_level);
+  if (!item || !ConfigSetValueFromString(item, level_str)) {
+    CmdOutWriteLine(out, "config update failed");
+    return HX_CMD_ERROR;
+  }
+  ConfigApply();
+  if (!ConfigSave()) {
+    CmdOutPrintfLine(out, "log level = %s (config save failed)", token);
+    return HX_CMD_ERROR;
+  }
+  CmdOutPrintfLine(out, "log level = %s (saved)", token);
+  return HX_CMD_OK;
+}
+
 static const HxCmdDef kLogCommands[] = {
-  { "log",     CmdLogHistory, "Show log history" },
-  { "logclr",  CmdLogClear,   "Clear log history" },
-  { "logstat", CmdLogStats,   "Show log statistics" }
+  { "log",       CmdLogHistory, "Show log history" },
+  { "logclr",    CmdLogClear,   "Clear log history" },
+  { "logstat",   CmdLogStats,   "Show log level and statistics" },
+  { "log level", CmdLogLevel,   "Get or set log level: log level <error|warn|info|debug|lld>" }
 };
 
 bool CommandRegisterLog() {

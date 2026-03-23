@@ -107,6 +107,7 @@ static const char* LogLevelText(HxLogLevel level) {
     case HX_LOG_WARN:  return "WRN";
     case HX_LOG_INFO:  return "INF";
     case HX_LOG_DEBUG: return "DBG";
+    case HX_LOG_LLD:   return "LLD";
     default:           return "UNK";
   }
 }
@@ -304,7 +305,7 @@ void LogInit() {
   LogHistoryClear();
 
   HxLogLevel level = (HxLogLevel)HX_CONFIG_DEFAULT_LOG_LEVEL;
-  if ((level < HX_LOG_ERROR) || (level > HX_LOG_DEBUG)) {
+  if ((level < HX_LOG_ERROR) || (level > HX_LOG_LLD)) {
     level = HX_LOG_INFO;
   }
 

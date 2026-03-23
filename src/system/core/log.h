@@ -20,7 +20,8 @@ enum HxLogLevel : uint8_t {
   HX_LOG_ERROR = 0,
   HX_LOG_WARN  = 1,
   HX_LOG_INFO  = 2,
-  HX_LOG_DEBUG = 3
+  HX_LOG_DEBUG = 3,
+  HX_LOG_LLD   = 4   // Low Level Debug: hardware, bus, register, pin-level traces
 };
 
 typedef void (*HxLogSinkLineHook)();
@@ -56,7 +57,8 @@ void LogSinkWriteRaw(const char* text);
 void LogSinkWriteChar(char ch);
 void LogSinkWriteLineRaw(const char* text);
 
-#define HX_LOGD(tag, fmt, ...) LogTagged(HX_LOG_DEBUG, tag, fmt, ##__VA_ARGS__)
-#define HX_LOGI(tag, fmt, ...) LogTagged(HX_LOG_INFO,  tag, fmt, ##__VA_ARGS__)
-#define HX_LOGW(tag, fmt, ...) LogTagged(HX_LOG_WARN,  tag, fmt, ##__VA_ARGS__)
-#define HX_LOGE(tag, fmt, ...) LogTagged(HX_LOG_ERROR, tag, fmt, ##__VA_ARGS__)
+#define HX_LOGD(tag, fmt, ...)  LogTagged(HX_LOG_DEBUG, tag, fmt, ##__VA_ARGS__)
+#define HX_LOGI(tag, fmt, ...)  LogTagged(HX_LOG_INFO,  tag, fmt, ##__VA_ARGS__)
+#define HX_LOGW(tag, fmt, ...)  LogTagged(HX_LOG_WARN,  tag, fmt, ##__VA_ARGS__)
+#define HX_LOGE(tag, fmt, ...)  LogTagged(HX_LOG_ERROR, tag, fmt, ##__VA_ARGS__)
+#define HX_LOGLL(tag, fmt, ...) LogTagged(HX_LOG_LLD,   tag, fmt, ##__VA_ARGS__)

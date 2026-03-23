@@ -202,7 +202,7 @@ A stable hardware access model that future drivers can depend on without ad-hoc 
 
 ---
 
-## 4. Extend the Lifecycle Model with `Every10ms`
+## 4. ✅ Extend the Lifecycle Model with `Every10ms`
 
 **Goal:** bring the code-level lifecycle in line with the now-agreed runtime model.
 
@@ -282,7 +282,7 @@ A reusable domain scheduler utility that future services/modules can instantiate
 
 ---
 
-## 6. Finish Runtime Introspection and Strict Module Integration
+## 6. ✅ Finish Runtime Introspection and Strict Module Integration
 
 **Goal:** make the running system able to describe itself clearly.
 
@@ -310,7 +310,7 @@ A runtime introspection surface that lets HexaOS describe its own current archit
 
 ---
 
-## 7. Finalize the NVS Boundary as an Audited Hybrid
+## 7. ✅ Finalize the NVS Boundary as an Audited Hybrid
 
 **Goal:** keep the current audited hybrid model, but remove the remaining wrong ownership.
 
@@ -451,7 +451,7 @@ A first reusable control-plane surface for filesystem features that future web U
 
 ---
 
-## 12. Finish the Logging Foundation Needed Before More Endpoints Arrive
+## 12. ✅ Finish the Logging Foundation Needed Before More Endpoints Arrive
 
 **Goal:** complete only the parts of logging that are necessary before multi-endpoint growth.
 
