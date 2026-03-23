@@ -27,6 +27,9 @@ static void BerryStart() {
 static void BerryLoop() {
 }
 
+static void BerryEvery10ms() {
+}
+
 static void BerryEvery100ms() {
 }
 
@@ -38,6 +41,7 @@ const HxModule ModuleBerry = {
   .init = BerryInit,
   .start = BerryStart,
   .loop = BerryLoop,
+  .every_10ms = BerryEvery10ms,
   .every_100ms = BerryEvery100ms,
   .every_1s = BerryEverySecond
 };

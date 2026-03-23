@@ -28,6 +28,9 @@ void SystemLoop() {
   StateLoop();
 }
 
+void SystemEvery10ms() {
+}
+
 void SystemEvery100ms() {
 }
 

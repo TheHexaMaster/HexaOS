@@ -27,6 +27,9 @@ static void WebStart() {
 static void WebLoop() {
 }
 
+static void WebEvery10ms() {
+}
+
 static void WebEvery100ms() {
 }
 
@@ -38,6 +41,7 @@ const HxModule ModuleWeb = {
   .init = WebInit,
   .start = WebStart,
   .loop = WebLoop,
+  .every_10ms = WebEvery10ms,
   .every_100ms = WebEvery100ms,
   .every_1s = WebEverySecond
 };

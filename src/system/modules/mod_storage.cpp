@@ -25,6 +25,9 @@ static void StorageStart() {
 static void StorageLoop() {
 }
 
+static void StorageEvery10ms() {
+}
+
 static void StorageEvery100ms() {
 }
 
@@ -36,6 +39,7 @@ const HxModule ModuleStorage = {
   .init = StorageInit,
   .start = StorageStart,
   .loop = StorageLoop,
+  .every_10ms = StorageEvery10ms,
   .every_100ms = StorageEvery100ms,
   .every_1s = StorageEverySecond
 };

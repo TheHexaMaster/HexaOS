@@ -80,6 +80,17 @@ void ModuleLoopAll() {
   }
 }
 
+void ModuleEvery10ms() {
+  for (size_t i = 0; i < kModuleCount; i++) {
+    const HxModule* mod = kModules[i];
+    if (!mod || !g_module_ready[i] || !mod->every_10ms) {
+      continue;
+    }
+
+    mod->every_10ms();
+  }
+}
+
 void ModuleEvery100ms() {
   for (size_t i = 0; i < kModuleCount; i++) {
     const HxModule* mod = kModules[i];

@@ -17,6 +17,11 @@
 #include "system/core/module_registry.h"
 #include "system/core/system_loop.h"
 
+static void Every10ms() {
+  SystemEvery10ms();
+  ModuleEvery10ms();
+}
+
 static void Every100ms() {
   SystemEvery100ms();
   ModuleEvery100ms();
@@ -34,6 +39,7 @@ void setup() {
 }
 
 void loop() {
+  static uint32_t last_10ms = 0;
   static uint32_t last_100ms = 0;
   static uint32_t last_1s = 0;
 
@@ -41,6 +47,11 @@ void loop() {
 
   SystemLoop();
   ModuleLoopAll();
+
+  if ((uint32_t)(now - last_10ms) >= 10U) {
+    last_10ms = now;
+    Every10ms();
+  }
 
   if ((uint32_t)(now - last_100ms) >= 100U) {
     last_100ms = now;

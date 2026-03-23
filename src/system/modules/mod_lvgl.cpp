@@ -27,6 +27,9 @@ static void LvglStart() {
 static void LvglLoop() {
 }
 
+static void LvglEvery10ms() {
+}
+
 static void LvglEvery100ms() {
 }
 
@@ -38,6 +41,7 @@ const HxModule ModuleLvgl = {
   .init = LvglInit,
   .start = LvglStart,
   .loop = LvglLoop,
+  .every_10ms = LvglEvery10ms,
   .every_100ms = LvglEvery100ms,
   .every_1s = LvglEverySecond
 };

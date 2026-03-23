@@ -18,6 +18,7 @@ typedef struct {
   bool (*init)();
   void (*start)();
   void (*loop)();
+  void (*every_10ms)();
   void (*every_100ms)();
   void (*every_1s)();
 } HxModule;
@@ -30,5 +31,6 @@ extern const HxModule ModuleLvgl;
 void ModuleInitAll();
 void ModuleStartAll();
 void ModuleLoopAll();
+void ModuleEvery10ms();
 void ModuleEvery100ms();
 void ModuleEverySecond();

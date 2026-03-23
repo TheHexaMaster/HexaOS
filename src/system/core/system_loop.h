@@ -14,6 +14,7 @@
 #pragma once
 
 void SystemLoop();
+void SystemEvery10ms();
 void SystemEvery100ms();
 void SystemEverySecond();
 void HeartBeatTick();
