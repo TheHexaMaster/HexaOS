@@ -14,7 +14,8 @@
 
 #include "pinmap.h"
 
-#include <ctype.h>
+#include <ArduinoJson.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,7 +64,6 @@ struct HxPinmapSnapshot {
   size_t i2c_binding_count;
   size_t uart_binding_count;
 };
-
 
 #define HX_PINMAP_TYPE_NAME_INIT(type_name) #type_name,
 static const char* const kHxBuildI2cDriverTypes[] = {
@@ -144,336 +144,67 @@ static uint16_t PinmapTargetCapFlags(uint8_t gpio) {
   return kHxTargetActiveGpioCaps[gpio];
 }
 
-static void JsonSkipWhitespace(const char** cursor) {
-  if (!cursor || !(*cursor)) {
-    return;
-  }
-
-  while ((**cursor != '\0') && isspace((unsigned char)**cursor)) {
-    (*cursor)++;
-  }
-}
-
-static bool JsonParseString(const char** cursor) {
-  if (!cursor || !(*cursor) || (**cursor != '"')) {
+static bool PinmapParseInstanceKey(const char* key_text, uint8_t* out_instance) {
+  if (!key_text || !key_text[0] || !out_instance) {
     return false;
   }
 
-  (*cursor)++;
-  while (**cursor != '\0') {
-    char ch = **cursor;
-    if (ch == '"') {
-      (*cursor)++;
-      return true;
-    }
-    if (ch == '\\') {
-      (*cursor)++;
-      if (**cursor == '\0') {
-        return false;
-      }
-      if (**cursor == 'u') {
-        (*cursor)++;
-        for (int i = 0; i < 4; i++) {
-          char hex = **cursor;
-          if (!isxdigit((unsigned char)hex)) {
-            return false;
-          }
-          (*cursor)++;
-        }
-        continue;
-      }
-      (*cursor)++;
-      continue;
-    }
-    if ((unsigned char)ch < 0x20U) {
-      return false;
-    }
-    (*cursor)++;
-  }
-
-  return false;
-}
-
-static bool JsonParseStringCopy(const char** cursor, char* out_text, size_t out_size) {
-  if (!cursor || !(*cursor) || !out_text || (out_size == 0) || (**cursor != '"')) {
-    return false;
-  }
-
-  (*cursor)++;
-  size_t used = 0;
-  while (**cursor != '\0') {
-    char ch = **cursor;
-    if (ch == '"') {
-      (*cursor)++;
-      out_text[used] = '\0';
-      return true;
-    }
-    if (ch == '\\') {
-      (*cursor)++;
-      if (**cursor == '\0') {
-        return false;
-      }
-      char escaped = **cursor;
-      if (escaped == 'u') {
-        return false;
-      }
-      if (used + 1 >= out_size) {
-        return false;
-      }
-      out_text[used++] = escaped;
-      (*cursor)++;
-      continue;
-    }
-    if ((unsigned char)ch < 0x20U) {
-      return false;
-    }
-    if (used + 1 >= out_size) {
-      return false;
-    }
-    out_text[used++] = ch;
-    (*cursor)++;
-  }
-
-  return false;
-}
-
-static bool JsonParseNumber(const char** cursor) {
-  if (!cursor || !(*cursor)) {
-    return false;
-  }
-
-  const char* start = *cursor;
-  if (**cursor == '-') {
-    (*cursor)++;
-  }
-
-  if (**cursor == '0') {
-    (*cursor)++;
-  } else {
-    if (!isdigit((unsigned char)**cursor)) {
-      return false;
-    }
-    while (isdigit((unsigned char)**cursor)) {
-      (*cursor)++;
-    }
-  }
-
-  if (**cursor == '.') {
-    (*cursor)++;
-    if (!isdigit((unsigned char)**cursor)) {
-      return false;
-    }
-    while (isdigit((unsigned char)**cursor)) {
-      (*cursor)++;
-    }
-  }
-
-  if ((**cursor == 'e') || (**cursor == 'E')) {
-    (*cursor)++;
-    if ((**cursor == '+') || (**cursor == '-')) {
-      (*cursor)++;
-    }
-    if (!isdigit((unsigned char)**cursor)) {
-      return false;
-    }
-    while (isdigit((unsigned char)**cursor)) {
-      (*cursor)++;
-    }
-  }
-
-  return (*cursor > start);
-}
-
-static bool JsonParseLiteral(const char** cursor, const char* literal) {
-  if (!cursor || !(*cursor) || !literal) {
-    return false;
-  }
-
-  size_t len = strlen(literal);
-  if (strncmp(*cursor, literal, len) != 0) {
-    return false;
-  }
-  *cursor += len;
-  return true;
-}
-
-static bool JsonParseValue(const char** cursor, uint8_t depth);
-
-static bool JsonParseArray(const char** cursor, uint8_t depth) {
-  if (!cursor || !(*cursor) || (**cursor != '[') || (depth > HX_PINMAP_JSON_MAX_DEPTH)) {
-    return false;
-  }
-
-  (*cursor)++;
-  JsonSkipWhitespace(cursor);
-  if (**cursor == ']') {
-    (*cursor)++;
-    return true;
-  }
-
-  while (**cursor != '\0') {
-    if (!JsonParseValue(cursor, (uint8_t)(depth + 1U))) {
-      return false;
-    }
-    JsonSkipWhitespace(cursor);
-    if (**cursor == ',') {
-      (*cursor)++;
-      JsonSkipWhitespace(cursor);
-      continue;
-    }
-    if (**cursor == ']') {
-      (*cursor)++;
-      return true;
-    }
-    return false;
-  }
-
-  return false;
-}
-
-static bool JsonParseObject(const char** cursor, uint8_t depth) {
-  if (!cursor || !(*cursor) || (**cursor != '{') || (depth > HX_PINMAP_JSON_MAX_DEPTH)) {
-    return false;
-  }
-
-  (*cursor)++;
-  JsonSkipWhitespace(cursor);
-  if (**cursor == '}') {
-    (*cursor)++;
-    return true;
-  }
-
-  while (**cursor != '\0') {
-    if (!JsonParseString(cursor)) {
-      return false;
-    }
-    JsonSkipWhitespace(cursor);
-    if (**cursor != ':') {
-      return false;
-    }
-    (*cursor)++;
-    JsonSkipWhitespace(cursor);
-    if (!JsonParseValue(cursor, (uint8_t)(depth + 1U))) {
-      return false;
-    }
-    JsonSkipWhitespace(cursor);
-    if (**cursor == ',') {
-      (*cursor)++;
-      JsonSkipWhitespace(cursor);
-      continue;
-    }
-    if (**cursor == '}') {
-      (*cursor)++;
-      return true;
-    }
-    return false;
-  }
-
-  return false;
-}
-
-static bool JsonParseValue(const char** cursor, uint8_t depth) {
-  if (!cursor || !(*cursor)) {
-    return false;
-  }
-
-  JsonSkipWhitespace(cursor);
-  switch (**cursor) {
-    case '{':
-      return JsonParseObject(cursor, depth);
-    case '[':
-      return JsonParseArray(cursor, depth);
-    case '"':
-      return JsonParseString(cursor);
-    case 't':
-      return JsonParseLiteral(cursor, "true");
-    case 'f':
-      return JsonParseLiteral(cursor, "false");
-    case 'n':
-      return JsonParseLiteral(cursor, "null");
-    default:
-      return JsonParseNumber(cursor);
-  }
-}
-
-static bool JsonValidateRootObject(const char* json_text) {
-  if (!json_text) {
-    return false;
-  }
-
-  const char* cursor = json_text;
-  JsonSkipWhitespace(&cursor);
-  if (!JsonParseObject(&cursor, 0)) {
-    return false;
-  }
-  JsonSkipWhitespace(&cursor);
-  return (*cursor == '\0');
-}
-
-static bool PinmapParseUint16(const char** cursor, uint16_t* out_value) {
-  if (!cursor || !(*cursor) || !out_value) {
-    return false;
-  }
-
-  JsonSkipWhitespace(cursor);
-  if (!isdigit((unsigned char)**cursor)) {
-    return false;
-  }
-
-  char* end_ptr = nullptr;
-  unsigned long raw = strtoul(*cursor, &end_ptr, 10);
-  if ((end_ptr == *cursor) || (raw > 65535UL)) {
-    return false;
-  }
-
-  *out_value = (uint16_t)raw;
-  *cursor = end_ptr;
-  return true;
-}
-
-static bool JsonParseInt32Strict(const char** cursor, int32_t* out_value) {
-  if (!cursor || !(*cursor) || !out_value) {
-    return false;
-  }
-
-  JsonSkipWhitespace(cursor);
-  char* end_ptr = nullptr;
-  long raw = strtol(*cursor, &end_ptr, 10);
-  if (end_ptr == *cursor) {
-    return false;
-  }
-  *out_value = (int32_t)raw;
-  *cursor = end_ptr;
-  return true;
-}
-
-static bool JsonExpectChar(const char** cursor, char expected) {
-  if (!cursor || !(*cursor)) {
-    return false;
-  }
-  JsonSkipWhitespace(cursor);
-  if (**cursor != expected) {
-    return false;
-  }
-  (*cursor)++;
-  return true;
-}
-
-static bool JsonParseInstanceKey(const char** cursor, uint8_t* out_instance) {
-  char key_text[12];
-  if (!cursor || !out_instance) {
-    return false;
-  }
-  JsonSkipWhitespace(cursor);
-  if (!JsonParseStringCopy(cursor, key_text, sizeof(key_text))) {
-    return false;
-  }
   char* end_ptr = nullptr;
   unsigned long raw = strtoul(key_text, &end_ptr, 10);
   if ((end_ptr == key_text) || (*end_ptr != '\0') || (raw > 255UL)) {
     return false;
   }
+
   *out_instance = (uint8_t)raw;
+  return true;
+}
+
+static bool PinmapSerializeJsonToBuffer(JsonVariantConst value, char* out_text, size_t out_size, const char* label) {
+  if (!out_text || (out_size == 0)) {
+    return false;
+  }
+
+  out_text[0] = '\0';
+
+  size_t required = measureJson(value);
+  if (required >= out_size) {
+    HX_LOGE("PIN", "%s serialized length=%u exceeds max=%u",
+            label ? label : "json",
+            (unsigned int)required,
+            (unsigned int)(out_size - 1));
+    return false;
+  }
+
+  size_t written = serializeJson(value, out_text, out_size);
+  if (written != required) {
+    HX_LOGE("PIN", "%s serialize failed", label ? label : "json");
+    return false;
+  }
+
+  out_text[written] = '\0';
+  return true;
+}
+
+static bool PinmapDeserializeJson(JsonDocument& doc, const char* json_text, const char* label) {
+  if (!json_text) {
+    HX_LOGE("PIN", "%s missing JSON input", label ? label : "json");
+    return false;
+  }
+
+  DeserializationError error = deserializeJson(
+      doc,
+      json_text,
+      DeserializationOption::NestingLimit(HX_PINMAP_JSON_MAX_DEPTH));
+  if (error) {
+    HX_LOGE("PIN", "%s parse failed: %s", label ? label : "json", error.c_str());
+    return false;
+  }
+
+  if (doc.overflowed()) {
+    HX_LOGE("PIN", "%s document overflowed", label ? label : "json");
+    return false;
+  }
+
   return true;
 }
 
@@ -617,46 +348,33 @@ static bool PinmapValidateHelperGpio(int32_t gpio, const char* owner_text) {
   return true;
 }
 
-static bool PinmapParseDenseArray(const char* json_text, uint16_t* out_gpio_to_function, uint8_t* out_mapped_count) {
-  if (!json_text || !out_gpio_to_function || !out_mapped_count) {
+static bool PinmapParseDenseArray(JsonArrayConst pinmap_array, uint16_t* out_gpio_to_function, uint8_t* out_mapped_count) {
+  if (pinmap_array.isNull() || !out_gpio_to_function || !out_mapped_count) {
     return false;
   }
 
   *out_mapped_count = 0;
   memset(out_gpio_to_function, 0, sizeof(uint16_t) * HX_PINMAP_MAX_GPIO);
 
-  const char* cursor = json_text;
-  JsonSkipWhitespace(&cursor);
-  if (*cursor != '[') {
-    HX_LOGE("PIN", "board.pinmap must be a JSON array");
+  size_t value_count = pinmap_array.size();
+  if (value_count > HX_TARGET_CAPS_CURRENT_DEF.gpio_count) {
+    HX_LOGE("PIN", "board.pinmap exceeds target gpio count=%u", (unsigned int)HX_TARGET_CAPS_CURRENT_DEF.gpio_count);
     return false;
   }
-  cursor++;
-  JsonSkipWhitespace(&cursor);
 
-  uint8_t gpio_index = 0;
-  if (*cursor == ']') {
-    cursor++;
-    JsonSkipWhitespace(&cursor);
-    return (*cursor == '\0');
-  }
-
-  while (*cursor != '\0') {
-    if (gpio_index >= HX_TARGET_CAPS_CURRENT_DEF.gpio_count) {
-      HX_LOGE("PIN", "board.pinmap exceeds target gpio count=%u", (unsigned int)HX_TARGET_CAPS_CURRENT_DEF.gpio_count);
-      return false;
-    }
-
-    uint16_t value = 0;
-    if (!PinmapParseUint16(&cursor, &value)) {
+  for (size_t gpio_index = 0; gpio_index < value_count; gpio_index++) {
+    JsonVariantConst item = pinmap_array[gpio_index];
+    if (!item.is<uint16_t>()) {
       HX_LOGE("PIN", "board.pinmap invalid integer at gpio=%u", (unsigned int)gpio_index);
       return false;
     }
+
+    uint16_t value = item.as<uint16_t>();
     if (value > HX_PINFUNC_MAX_ID) {
       HX_LOGE("PIN", "board.pinmap invalid function id=%u at gpio=%u", (unsigned int)value, (unsigned int)gpio_index);
       return false;
     }
-    if ((value != HX_PIN_NONE) && !PinmapValidateGpioAssignment(gpio_index, value)) {
+    if ((value != HX_PIN_NONE) && !PinmapValidateGpioAssignment((uint8_t)gpio_index, value)) {
       return false;
     }
 
@@ -664,29 +382,9 @@ static bool PinmapParseDenseArray(const char* json_text, uint16_t* out_gpio_to_f
     if (value != HX_PIN_NONE) {
       (*out_mapped_count)++;
     }
-
-    JsonSkipWhitespace(&cursor);
-    if (*cursor == ',') {
-      cursor++;
-      JsonSkipWhitespace(&cursor);
-      gpio_index++;
-      continue;
-    }
-    if (*cursor == ']') {
-      cursor++;
-      JsonSkipWhitespace(&cursor);
-      if (*cursor != '\0') {
-        HX_LOGE("PIN", "board.pinmap trailing data detected");
-        return false;
-      }
-      return true;
-    }
-
-    HX_LOGE("PIN", "board.pinmap syntax error at gpio=%u", (unsigned int)gpio_index);
-    return false;
   }
 
-  return false;
+  return true;
 }
 
 static bool PinmapBuildReverseLookup(const uint16_t* gpio_to_function) {
@@ -715,7 +413,6 @@ static bool PinmapBuildReverseLookup(const uint16_t* gpio_to_function) {
 
   return true;
 }
-
 
 static uint16_t PinmapI2cSdaFunctionForPort(uint8_t port) {
   switch (port) {
@@ -818,251 +515,143 @@ static bool PinmapStoreUartBinding(const char* type_name, uint8_t instance, int8
   return true;
 }
 
-static bool PinmapParseI2cInstanceObject(const char** cursor, const char* type_name, uint8_t instance) {
-  if (!JsonExpectChar(cursor, '{')) {
+static bool PinmapParseI2cTypeObject(const char* type_name, JsonObjectConst type_object) {
+  if (!type_name || !type_name[0] || type_object.isNull()) {
     return false;
   }
 
-  int32_t port = -1;
-  int32_t address = -1;
-
-  JsonSkipWhitespace(cursor);
-  if (**cursor == '}') {
-    return false;
-  }
-
-  while (**cursor != '\0') {
-    char key[16];
-    if (!JsonParseStringCopy(cursor, key, sizeof(key))) {
-      return false;
-    }
-    if (!JsonExpectChar(cursor, ':')) {
-      return false;
-    }
-
-    if (strcmp(key, "i2c") == 0) {
-      if (!JsonParseInt32Strict(cursor, &port)) {
-        return false;
-      }
-    } else if (strcmp(key, "address") == 0) {
-      if (!JsonParseInt32Strict(cursor, &address)) {
-        return false;
-      }
-    } else {
-      if (!JsonParseValue(cursor, 1)) {
-        return false;
-      }
-    }
-
-    JsonSkipWhitespace(cursor);
-    if (**cursor == ',') {
-      (*cursor)++;
-      JsonSkipWhitespace(cursor);
-      continue;
-    }
-    if (**cursor == '}') {
-      (*cursor)++;
-      break;
-    }
-    return false;
-  }
-
-  if ((port < 0) || (port > 255) || (address < 0) || (address > 65535)) {
-    return false;
-  }
-
-  return PinmapStoreI2cBinding(type_name, instance, (uint8_t)port, (uint16_t)address);
-}
-
-static bool PinmapParseI2cTypeObject(const char** cursor, const char* type_name) {
-  if (!JsonExpectChar(cursor, '{')) {
-    return false;
-  }
-  JsonSkipWhitespace(cursor);
-  if (**cursor == '}') {
-    (*cursor)++;
-    return true;
-  }
-  while (**cursor != '\0') {
+  for (JsonPairConst pair : type_object) {
+    const char* instance_key = pair.key().c_str();
     uint8_t instance = 0;
-    if (!JsonParseInstanceKey(cursor, &instance)) {
+    if (!PinmapParseInstanceKey(instance_key, &instance)) {
+      HX_LOGE("PIN", "invalid i2c instance key=%s for type=%s", instance_key ? instance_key : "", type_name);
       return false;
     }
-    if (!JsonExpectChar(cursor, ':')) {
+
+    JsonObjectConst instance_object = pair.value().as<JsonObjectConst>();
+    if (instance_object.isNull()) {
+      HX_LOGE("PIN", "i2c.%s.%u instance must be an object", type_name, (unsigned int)instance);
       return false;
     }
-    if (!PinmapParseI2cInstanceObject(cursor, type_name, instance)) {
+
+    JsonVariantConst port_value = instance_object["i2c"];
+    JsonVariantConst address_value = instance_object["address"];
+    if (!port_value.is<uint8_t>() || !address_value.is<uint16_t>()) {
+      HX_LOGE("PIN", "i2c.%s.%u missing or invalid i2c/address", type_name, (unsigned int)instance);
       return false;
     }
-    JsonSkipWhitespace(cursor);
-    if (**cursor == ',') {
-      (*cursor)++;
-      JsonSkipWhitespace(cursor);
-      continue;
+
+    if (!PinmapStoreI2cBinding(type_name, instance, port_value.as<uint8_t>(), address_value.as<uint16_t>())) {
+      return false;
     }
-    if (**cursor == '}') {
-      (*cursor)++;
-      return true;
-    }
-    return false;
   }
-  return false;
+
+  return true;
 }
 
-static bool PinmapParseUartInstanceObject(const char** cursor, const char* type_name, uint8_t instance) {
-  if (!JsonExpectChar(cursor, '{')) {
+static bool PinmapParseUartTypeObject(const char* type_name, JsonObjectConst type_object) {
+  if (!type_name || !type_name[0] || type_object.isNull()) {
     return false;
   }
 
-  int32_t uart = -1;
-  int32_t txen = -1;
-  int32_t re = -1;
-  int32_t de = -1;
-
-  JsonSkipWhitespace(cursor);
-  if (**cursor == '}') {
-    return false;
-  }
-
-  while (**cursor != '\0') {
-    char key[16];
-    if (!JsonParseStringCopy(cursor, key, sizeof(key))) {
-      return false;
-    }
-    if (!JsonExpectChar(cursor, ':')) {
-      return false;
-    }
-    if (strcmp(key, "uart") == 0) {
-      if (!JsonParseInt32Strict(cursor, &uart)) {
-        return false;
-      }
-    } else if (strcmp(key, "txen") == 0) {
-      if (!JsonParseInt32Strict(cursor, &txen)) {
-        return false;
-      }
-    } else if (strcmp(key, "re") == 0) {
-      if (!JsonParseInt32Strict(cursor, &re)) {
-        return false;
-      }
-    } else if (strcmp(key, "de") == 0) {
-      if (!JsonParseInt32Strict(cursor, &de)) {
-        return false;
-      }
-    } else {
-      if (!JsonParseValue(cursor, 1)) {
-        return false;
-      }
-    }
-
-    JsonSkipWhitespace(cursor);
-    if (**cursor == ',') {
-      (*cursor)++;
-      JsonSkipWhitespace(cursor);
-      continue;
-    }
-    if (**cursor == '}') {
-      (*cursor)++;
-      break;
-    }
-    return false;
-  }
-
-  if ((uart < 0) || (uart > 127)) {
-    return false;
-  }
-
-  return PinmapStoreUartBinding(type_name, instance, (int8_t)uart, (int8_t)txen, (int8_t)re, (int8_t)de);
-}
-
-static bool PinmapParseUartTypeObject(const char** cursor, const char* type_name) {
-  if (!JsonExpectChar(cursor, '{')) {
-    return false;
-  }
-  JsonSkipWhitespace(cursor);
-  if (**cursor == '}') {
-    (*cursor)++;
-    return true;
-  }
-  while (**cursor != '\0') {
+  for (JsonPairConst pair : type_object) {
+    const char* instance_key = pair.key().c_str();
     uint8_t instance = 0;
-    if (!JsonParseInstanceKey(cursor, &instance)) {
+    if (!PinmapParseInstanceKey(instance_key, &instance)) {
+      HX_LOGE("PIN", "invalid uart instance key=%s for type=%s", instance_key ? instance_key : "", type_name);
       return false;
     }
-    if (!JsonExpectChar(cursor, ':')) {
+
+    JsonObjectConst instance_object = pair.value().as<JsonObjectConst>();
+    if (instance_object.isNull()) {
+      HX_LOGE("PIN", "uart.%s.%u instance must be an object", type_name, (unsigned int)instance);
       return false;
     }
-    if (!PinmapParseUartInstanceObject(cursor, type_name, instance)) {
+
+    JsonVariantConst uart_value = instance_object["uart"];
+    JsonVariantConst txen_value = instance_object["txen"];
+    JsonVariantConst re_value = instance_object["re"];
+    JsonVariantConst de_value = instance_object["de"];
+
+    if (!uart_value.is<int8_t>()) {
+      HX_LOGE("PIN", "uart.%s.%u missing or invalid uart", type_name, (unsigned int)instance);
       return false;
     }
-    JsonSkipWhitespace(cursor);
-    if (**cursor == ',') {
-      (*cursor)++;
-      JsonSkipWhitespace(cursor);
-      continue;
+
+    int8_t txen_gpio = -1;
+    int8_t re_gpio = -1;
+    int8_t de_gpio = -1;
+
+    if (!txen_value.isNull()) {
+      if (!txen_value.is<int8_t>()) {
+        HX_LOGE("PIN", "uart.%s.%u invalid txen", type_name, (unsigned int)instance);
+        return false;
+      }
+      txen_gpio = txen_value.as<int8_t>();
     }
-    if (**cursor == '}') {
-      (*cursor)++;
-      return true;
+
+    if (!re_value.isNull()) {
+      if (!re_value.is<int8_t>()) {
+        HX_LOGE("PIN", "uart.%s.%u invalid re", type_name, (unsigned int)instance);
+        return false;
+      }
+      re_gpio = re_value.as<int8_t>();
     }
-    return false;
+
+    if (!de_value.isNull()) {
+      if (!de_value.is<int8_t>()) {
+        HX_LOGE("PIN", "uart.%s.%u invalid de", type_name, (unsigned int)instance);
+        return false;
+      }
+      de_gpio = de_value.as<int8_t>();
+    }
+
+    if (!PinmapStoreUartBinding(type_name, instance, uart_value.as<int8_t>(), txen_gpio, re_gpio, de_gpio)) {
+      return false;
+    }
   }
-  return false;
+
+  return true;
 }
 
-static bool PinmapParseBindingsObject(const char* json_text) {
-  if (!json_text) {
+static bool PinmapParseBindingsObject(JsonObjectConst bindings_object) {
+  if (bindings_object.isNull()) {
     return false;
   }
 
-  const char* cursor = json_text;
-  JsonSkipWhitespace(&cursor);
-  if (!JsonExpectChar(&cursor, '{')) {
-    return false;
-  }
-  JsonSkipWhitespace(&cursor);
-  if (*cursor == '}') {
-    cursor++;
-    JsonSkipWhitespace(&cursor);
-    return (*cursor == '\0');
-  }
-
-  while (*cursor != '\0') {
-    char type_name[HX_PINMAP_MAX_BINDING_TYPE_LEN + 1];
-    if (!JsonParseStringCopy(&cursor, type_name, sizeof(type_name))) {
+  for (JsonPairConst pair : bindings_object) {
+    const char* type_name = pair.key().c_str();
+    if (!type_name || !type_name[0]) {
+      HX_LOGE("PIN", "drivers.bindings contains empty driver type");
       return false;
     }
-    if (!JsonExpectChar(&cursor, ':')) {
+
+    if (strlen(type_name) > HX_PINMAP_MAX_BINDING_TYPE_LEN) {
+      HX_LOGE("PIN", "drivers.bindings type name too long: %s", type_name);
+      return false;
+    }
+
+    JsonObjectConst type_object = pair.value().as<JsonObjectConst>();
+    if (type_object.isNull()) {
+      HX_LOGE("PIN", "drivers.bindings type=%s must be an object", type_name);
       return false;
     }
 
     if (PinmapTypeInRegistry(type_name, kHxBuildI2cDriverTypes)) {
-      if (!PinmapParseI2cTypeObject(&cursor, type_name)) {
+      if (!PinmapParseI2cTypeObject(type_name, type_object)) {
         return false;
       }
     } else if (PinmapTypeInRegistry(type_name, kHxBuildUartDriverTypes)) {
-      if (!PinmapParseUartTypeObject(&cursor, type_name)) {
+      if (!PinmapParseUartTypeObject(type_name, type_object)) {
         return false;
       }
     } else {
       HX_LOGE("PIN", "drivers.bindings contains unknown or unregistered driver type=%s", type_name);
       return false;
     }
-
-    JsonSkipWhitespace(&cursor);
-    if (*cursor == ',') {
-      cursor++;
-      JsonSkipWhitespace(&cursor);
-      continue;
-    }
-    if (*cursor == '}') {
-      cursor++;
-      JsonSkipWhitespace(&cursor);
-      return (*cursor == '\0');
-    }
-    return false;
   }
 
-  return false;
+  return true;
 }
 
 static bool PinmapValidateBindingsAgainstPinmap(const uint16_t* gpio_to_function) {
@@ -1149,15 +738,21 @@ static bool PinmapValidateBindingsAgainstPinmap(const uint16_t* gpio_to_function
 bool PinmapInit() {
   PinmapResetState();
 
-  uint16_t next_gpio_to_function[HX_PINMAP_MAX_GPIO] = {0};
-  uint8_t mapped_count = 0;
-  if (!PinmapParseDenseArray(HxConfigData.board_pinmap, next_gpio_to_function, &mapped_count)) {
-    HX_LOGE("PIN", "board.pinmap parse failed");
+  JsonDocument board_pinmap_doc;
+  if (!PinmapDeserializeJson(board_pinmap_doc, HxConfigData.board_pinmap, "board.pinmap")) {
     return false;
   }
 
-  if (!JsonValidateRootObject(HxConfigData.drivers_bindings)) {
-    HX_LOGE("PIN", "drivers.bindings must be a valid JSON object");
+  JsonArrayConst board_pinmap_array = board_pinmap_doc.as<JsonArrayConst>();
+  if (board_pinmap_array.isNull()) {
+    HX_LOGE("PIN", "board.pinmap must be a JSON array");
+    return false;
+  }
+
+  uint16_t next_gpio_to_function[HX_PINMAP_MAX_GPIO] = {0};
+  uint8_t mapped_count = 0;
+  if (!PinmapParseDenseArray(board_pinmap_array, next_gpio_to_function, &mapped_count)) {
+    HX_LOGE("PIN", "board.pinmap parse failed");
     return false;
   }
 
@@ -1165,7 +760,18 @@ bool PinmapInit() {
     return false;
   }
 
-  if (!PinmapParseBindingsObject(HxConfigData.drivers_bindings)) {
+  JsonDocument bindings_doc;
+  if (!PinmapDeserializeJson(bindings_doc, HxConfigData.drivers_bindings, "drivers.bindings")) {
+    return false;
+  }
+
+  JsonObjectConst bindings_object = bindings_doc.as<JsonObjectConst>();
+  if (bindings_object.isNull()) {
+    HX_LOGE("PIN", "drivers.bindings must be a valid JSON object");
+    return false;
+  }
+
+  if (!PinmapParseBindingsObject(bindings_object)) {
     HX_LOGE("PIN", "drivers.bindings parse failed");
     return false;
   }
@@ -1175,7 +781,9 @@ bool PinmapInit() {
   }
 
   memcpy(g_gpio_to_function, next_gpio_to_function, sizeof(g_gpio_to_function));
-  snprintf(g_bindings_json, sizeof(g_bindings_json), "%s", HxConfigData.drivers_bindings);
+  if (!PinmapSerializeJsonToBuffer(bindings_object, g_bindings_json, sizeof(g_bindings_json), "drivers.bindings")) {
+    return false;
+  }
   g_mapped_count = mapped_count;
 
   g_pinmap_ready = true;
