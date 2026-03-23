@@ -9,9 +9,12 @@
 
   Initialisation order (WifiAdapterInit):
     1. [HX_ENABLE_FEATURE_ESP_HOSTED] Resolve HOSTED0 SDIO pins from the
-       pinmap, pass them to hostedSetPins(), then call hostedInitWiFi() from
-       the Arduino HAL (esp32-hal-hosted.h). The HAL handles the full sequence:
-       esp_hosted_sdio_set_config → esp_hosted_init → esp_hosted_connect_to_slave.
+       pinmap, then run the IDF ESP-Hosted sequence directly (no Arduino HAL):
+         esp_hosted_get_default_sdio_config() → override pin fields
+         → esp_hosted_sdio_set_config() → esp_hosted_init()
+         → esp_hosted_connect_to_slave().
+       Headers: esp_hosted.h + esp_hosted_transport_config.h
+       (managed_components/espressif__esp_hosted).
     2. esp_netif_init() — network interface layer.
     3. esp_event_loop_create_default() — IDF default event loop.
        ESP_ERR_INVALID_STATE is treated as success (already created).
@@ -40,7 +43,10 @@
 #include "esp_wifi_types.h"
 
 #if HX_ENABLE_FEATURE_ESP_HOSTED
-#include "esp32-hal-hosted.h"
+#include "esp_hosted.h"
+extern "C" {
+#include "esp_hosted_transport_config.h"
+}
 #endif
 
 #include <string.h>
@@ -116,10 +122,11 @@ static bool WifiAdapterInitHosted() {
   int d3    = PinmapGetGpioForFunction(HX_PIN_HOSTED0_SDIO_D3);
   int reset = PinmapGetGpioForFunction(HX_PIN_HOSTED0_RESET);
 
-  if (clk < 0 || cmd < 0 || d0 < 0 || reset < 0) {
+  if (clk < 0 || cmd < 0 || d0 < 0 || d1 < 0 || d2 < 0 || d3 < 0 || reset < 0) {
     HX_LOGE(HX_WIFI_TAG,
-            "ESP-Hosted: mandatory SDIO pins not mapped (clk=%d cmd=%d d0=%d reset=%d)",
-            clk, cmd, d0, reset);
+            "ESP-Hosted: mandatory SDIO pins not mapped "
+            "(clk=%d cmd=%d d0=%d d1=%d d2=%d d3=%d reset=%d)",
+            clk, cmd, d0, d1, d2, d3, reset);
     return false;
   }
 
@@ -127,24 +134,30 @@ static bool WifiAdapterInitHosted() {
            "ESP-Hosted SDIO: clk=%d cmd=%d d0=%d d1=%d d2=%d d3=%d reset=%d",
            clk, cmd, d0, d1, d2, d3, reset);
 
-  // Delegate pin setup and full init sequence to the Arduino HAL.
-  // hostedSetPins must be called before hostedInitWiFi.
-  // hostedInitWiFi internally calls esp_hosted_sdio_set_config,
-  // esp_hosted_init and esp_hosted_connect_to_slave.
-  if (!hostedSetPins(
-        static_cast<int8_t>(clk),
-        static_cast<int8_t>(cmd),
-        static_cast<int8_t>(d0),
-        static_cast<int8_t>(d1),
-        static_cast<int8_t>(d2),
-        static_cast<int8_t>(d3),
-        static_cast<int8_t>(reset))) {
-    HX_LOGE(HX_WIFI_TAG, "ESP-Hosted: hostedSetPins failed");
+  struct esp_hosted_sdio_config conf = INIT_DEFAULT_HOST_SDIO_CONFIG();
+  conf.pin_clk.pin   = clk;
+  conf.pin_cmd.pin   = cmd;
+  conf.pin_d0.pin    = d0;
+  conf.pin_d1.pin    = d1;
+  conf.pin_d2.pin    = d2;
+  conf.pin_d3.pin    = d3;
+  conf.pin_reset.pin = reset;
+
+  esp_err_t err = esp_hosted_sdio_set_config(&conf);
+  if (err != ESP_OK) {
+    HX_LOGE(HX_WIFI_TAG, "ESP-Hosted: sdio_set_config failed: %s", esp_err_to_name(err));
     return false;
   }
 
-  if (!hostedInitWiFi()) {
-    HX_LOGE(HX_WIFI_TAG, "ESP-Hosted: hostedInitWiFi failed");
+  err = esp_hosted_init();
+  if (err != ESP_OK) {
+    HX_LOGE(HX_WIFI_TAG, "ESP-Hosted: init failed: %s", esp_err_to_name(err));
+    return false;
+  }
+
+  err = esp_hosted_connect_to_slave();
+  if (err != ESP_OK) {
+    HX_LOGE(HX_WIFI_TAG, "ESP-Hosted: connect_to_slave failed: %s", esp_err_to_name(err));
     return false;
   }
 

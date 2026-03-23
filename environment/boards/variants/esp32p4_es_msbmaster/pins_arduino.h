@@ -88,7 +88,8 @@ static const uint8_t SDMMC_D1  = 40;
 static const uint8_t SDMMC_D2  = 41;
 static const uint8_t SDMMC_D3  = 42;
 
-//WIFI - ESP32C6
+//WIFI - ESP32C6 
+
 #define BOARD_HAS_SDIO_ESP_HOSTED
 #define BOARD_SDIO_ESP_HOSTED_CLK   18
 #define BOARD_SDIO_ESP_HOSTED_CMD   19

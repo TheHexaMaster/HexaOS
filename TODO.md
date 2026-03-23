@@ -4,6 +4,9 @@
 - [x] Define `mod_network` architecture — abstraction over transport (WiFi / ESP-Hosted / ETH same API)
 - [x] WiFi driver — init, connect, disconnect, event callbacks (connected, lost, IP acquired)
 - [x] ESP-Hosted integration as transport backend behind `mod_network` (P4 path, mandatory)
+  - `wifi_adapter` refactored to pure IDF path — `esp_hosted_sdio_set_config` + `esp_hosted_init`
+    + `esp_hosted_connect_to_slave`, no Arduino HAL dependency, pins from pinmap at runtime
+  - [ ] **Hosted OTA** — OTA via ESP-Hosted RPC (`esp_hosted_ota_api.h`), needed for P4 field updates
 - [x] Config persistence for network settings (SSID, password) via existing config handler
 
 ### 2. WiFi provisioning — LATER
@@ -15,6 +18,9 @@
 - [x] Ethernet driver under `mod_network` (same interface as WiFi)
 - [x] Link-up / link-down event handling
 - [x] WiFi + ETH coexistence (prioritization, failover)
+  - **REFACTOR NEEDED:** `eth_adapter` is functional (raw phase) but uses `esp_eth_phy_new_generic()`
+    as a stand-in for TLK110 (no dedicated P4 IDF driver). Needs validation on hardware and
+    potentially a custom PHY driver or verified generic register compatibility.
 
 ### 4. Async Central Sensoric Database (IRAM / PSRAM)
 - [ ] Define schema: variable type, timestamp, source, TTL
