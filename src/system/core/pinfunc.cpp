@@ -116,7 +116,8 @@ const char* HxPinFunctionText(uint16_t pin_function) {
     case HX_PIN_SDMMC0_D4: return "SDMMC0_D4";
     case HX_PIN_SDMMC0_D5: return "SDMMC0_D5";
     case HX_PIN_SDMMC0_D6: return "SDMMC0_D6";
-    case HX_PIN_SDMMC0_D7: return "SDMMC0_D7";
+    case HX_PIN_SDMMC0_D7:    return "SDMMC0_D7";
+    case HX_PIN_SDMMC0_POWER: return "SDMMC0_POWER";
     case HX_PIN_ETH0_MDC: return "ETH0_MDC";
     case HX_PIN_ETH0_MDIO: return "ETH0_MDIO";
     case HX_PIN_ETH0_POWER: return "ETH0_POWER";

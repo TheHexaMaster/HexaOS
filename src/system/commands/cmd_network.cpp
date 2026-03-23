@@ -21,7 +21,6 @@
 
 #if HX_ENABLE_MODULE_NETWORK
 
-#include "system/adapters/wifi_adapter.h"
 #include "system/core/config.h"
 #include "system/handlers/network_handler.h"
 
@@ -123,13 +122,15 @@ static HxCmdStatus CmdNetInfo(const char* args, HxCmdOutput* out) {
     CmdOutWriteLine(out,  "  ssid         = (not set)");
   }
 
+#if HX_ENABLE_FEATURE_WIFI
   if (state == HX_NETWORK_STATE_CONNECTED) {
     char ip[32];
-    if (WifiAdapterGetIp(ip, sizeof(ip))) {
+    if (NetworkGetIp(ip, sizeof(ip))) {
       CmdOutPrintfLine(out, "  wifi_ip      = %s", ip);
     }
     CmdOutPrintfLine(out, "  rssi         = %d dBm", (int)NetworkGetRssi());
   }
+#endif
 
 #if HX_ENABLE_FEATURE_ETH
   CmdOutPrintfLine(out, "  eth_link     = %s", NetworkEthIsUp() ? "up" : "down");

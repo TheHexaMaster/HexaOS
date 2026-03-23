@@ -49,7 +49,7 @@ enum HxSchemaValueType : uint8_t {
   XI(log_level_wc,       "log.level_wc",        0,        4,                        HX_CONFIG_DEFAULT_LOG_LEVEL,              true, true) \
   XB(safeboot_enable,    "safeboot.enable",                                         HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE,        true, true) \
   XI(states_delay,       "states.delay",        0,        600000,                   HX_CONFIG_DEFAULT_STATE_DELAY,            true, true) \
-  XS(board_pinmap,       "board.pinmap",        HX_BUILD_BOARD_PINMAP_MAX_LEN,      HX_BUILD_DEFAULT_BOARD_PINMAP_JSON,       true, false) \
+  XS(board_pinmap,       "board.pinmap",        HX_BUILD_BOARD_PINMAP_MAX_LEN,      HX_BUILD_DEFAULT_BOARD_PINMAP_JSON,       true, true) \
   XS(drivers_bindings,   "drivers.bindings",    HX_BUILD_DRIVERS_BINDINGS_MAX_LEN,  HX_BUILD_DEFAULT_DRIVERS_BINDINGS_JSON,   true, false) \
   XS(wifi_ssid,          "wifi.ssid",           64,                                 "",                                       true,  true) \
   XS(wifi_password,      "wifi.password",       64,                                 "",                                       false, true)

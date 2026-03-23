@@ -38,6 +38,12 @@
 #include "system/core/runtime.h"
 #include "system/web/assets/alpine_js_gz.h"
 #include "system/web/pages/page_root.h"
+#include <ArduinoJson.h>
+#include "esp_timer.h"
+#include "headers/hx_pinfunc.h"
+#include "headers/hx_target_caps.h"
+#include "system/core/config.h"
+#include "system/core/pinmap.h"
 #if HX_ENABLE_MODULE_NETWORK
 #include "system/handlers/network_handler.h"
 #endif
@@ -152,6 +158,39 @@ static void OnWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
 // Routes
 // ---------------------------------------------------------------------------
 
+// Human-readable constraint description for a config key, used in error responses.
+static void WebConfigConstraintDescription(const HxConfigKeyDef* k, char* out, size_t out_size) {
+  switch (k->type) {
+    case HX_SCHEMA_VALUE_BOOL:
+      snprintf(out, out_size, "Must be 'true' or 'false'");
+      break;
+    case HX_SCHEMA_VALUE_INT32:
+      snprintf(out, out_size, "Must be an integer from %ld to %ld", (long)k->min_i32, (long)k->max_i32);
+      break;
+    case HX_SCHEMA_VALUE_FLOAT:
+      snprintf(out, out_size, "Must be a number from %.4g to %.4g", (double)k->min_f32, (double)k->max_f32);
+      break;
+    case HX_SCHEMA_VALUE_STRING:
+      snprintf(out, out_size, "Must be at most %u characters", (unsigned)k->max_len);
+      break;
+    default:
+      snprintf(out, out_size, "Invalid value");
+      break;
+  }
+}
+
+// Schedule esp_restart() via a one-shot timer so the HTTP response is
+// transmitted before the chip resets (500 ms is sufficient for lwIP flush).
+static void WebScheduleRestart() {
+  esp_timer_handle_t timer;
+  esp_timer_create_args_t args = {};
+  args.callback = [](void*) { esp_restart(); };
+  args.name     = "web_rst";
+  if (esp_timer_create(&args, &timer) == ESP_OK) {
+    esp_timer_start_once(timer, 500000); // 500 ms in microseconds
+  }
+}
+
 static void RegisterRoutes() {
   g_server->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->send_P(200, "text/html", PAGE_ROOT);
@@ -204,6 +243,218 @@ static void RegisterRoutes() {
              uptime);
 
     request->send(200, "application/json", json);
+  });
+
+  // GET /api/config — all console-visible config keys (large read-only strings excluded)
+  g_server->on("/api/config", HTTP_GET, [](AsyncWebServerRequest* request) {
+    char* buf = (char*)malloc(4096);
+    if (!buf) { request->send(503, "application/json", "{\"error\":\"oom\"}"); return; }
+    size_t pos  = 0;
+    size_t n    = ConfigKeyCount();
+    pos += snprintf(buf + pos, 4096 - pos, "[");
+    bool first = true;
+    for (size_t i = 0; i < n; i++) {
+      const HxConfigKeyDef* k = ConfigKeyAt(i);
+      if (!k->console_visible) continue;
+      if (k->type == HX_SCHEMA_VALUE_STRING && k->max_len > 128) continue;
+      char val[130];
+      if (!ConfigValueToString(k, val, sizeof(val))) val[0] = '\0';
+      // JSON-escape the value (handle quotes and backslashes)
+      char esc[260];
+      size_t ei = 0;
+      for (const char* p = val; *p && ei < sizeof(esc) - 2; p++) {
+        if (*p == '"' || *p == '\\') esc[ei++] = '\\';
+        esc[ei++] = *p;
+      }
+      esc[ei] = '\0';
+      const char* type_str =
+        k->type == HX_SCHEMA_VALUE_BOOL  ? "bool"   :
+        k->type == HX_SCHEMA_VALUE_INT32 ? "int"    :
+        k->type == HX_SCHEMA_VALUE_FLOAT ? "float"  : "string";
+      pos += snprintf(buf + pos, 4096 - pos,
+        "%s{\"key\":\"%s\",\"value\":\"%s\",\"type\":\"%s\",\"writable\":%s}",
+        first ? "" : ",", k->key, esc, type_str,
+        k->console_writable ? "true" : "false");
+      first = false;
+    }
+    pos += snprintf(buf + pos, 4096 - pos, "]");
+    buf[pos] = '\0';
+    request->send(200, "application/json", buf);
+    free(buf);
+  });
+
+  // POST /api/config — set a single key; body: key=...&value=...
+  g_server->on("/api/config", HTTP_POST, [](AsyncWebServerRequest* request) {
+    if (!request->hasParam("key", true) || !request->hasParam("value", true)) {
+      request->send(400, "application/json", "{\"ok\":false,\"error\":\"missing params\"}");
+      return;
+    }
+    String key_str   = request->getParam("key",   true)->value();
+    String value_str = request->getParam("value", true)->value();
+    const HxConfigKeyDef* k = ConfigFindConfigKey(key_str.c_str());
+    if (!k) {
+      request->send(404, "application/json", "{\"ok\":false,\"error\":\"key not found\"}");
+      return;
+    }
+    if (!k->console_writable) {
+      request->send(403, "application/json", "{\"ok\":false,\"error\":\"read only\"}");
+      return;
+    }
+    if (!ConfigSetValueFromString(k, value_str.c_str())) {
+      char detail[128];
+      WebConfigConstraintDescription(k, detail, sizeof(detail));
+      char resp[192];
+      snprintf(resp, sizeof(resp), "{\"ok\":false,\"error\":\"%s\"}", detail);
+      request->send(400, "application/json", resp);
+      return;
+    }
+    ConfigSave();
+    ConfigApply();
+    request->send(200, "application/json", "{\"ok\":true}");
+  });
+
+  // GET /api/pinmap
+  // Response:
+  //   gpio_count  - total GPIOs on target (table rows)
+  //   writable    - whether board.pinmap can be changed at runtime
+  //   gpios[]     - dense array, index=GPIO number, value=HxPinFunction ID (0=none)
+  //   defaults[]  - dense array, index=GPIO number, value=build-default HxPinFunction ID
+  //   reserved[]  - GPIO indices that are not user-assignable (flash/PSRAM/invalid)
+  //   functions[] - all available {func, name} pairs for the select options
+  g_server->on("/api/pinmap", HTTP_GET, [](AsyncWebServerRequest* request) {
+    uint8_t gpio_count = PinmapGpioCount();
+    char* buf = (char*)malloc(10240);
+    if (!buf) { request->send(503, "application/json", "{\"error\":\"oom\"}"); return; }
+    size_t pos = 0;
+    const size_t bufsz = 10240;
+
+    const HxConfigKeyDef* pm_key = ConfigFindConfigKey("board.pinmap");
+    bool pm_writable = pm_key && pm_key->console_writable;
+
+    // gpio_count + writable
+    pos += snprintf(buf + pos, bufsz - pos,
+      "{\"gpio_count\":%u,\"writable\":%s,", (unsigned)gpio_count, pm_writable ? "true" : "false");
+
+    // gpios — dense array: index=GPIO, value=current function ID
+    pos += snprintf(buf + pos, bufsz - pos, "\"gpios\":[");
+    for (uint8_t gpio = 0; gpio < gpio_count; gpio++) {
+      uint16_t func = 0;
+      PinmapGetFunctionForGpio(gpio, &func);
+      pos += snprintf(buf + pos, bufsz - pos, "%s%u", gpio ? "," : "", (unsigned)func);
+    }
+    pos += snprintf(buf + pos, bufsz - pos, "],");
+
+    // defaults — build-time default function IDs per GPIO
+    pos += snprintf(buf + pos, bufsz - pos, "\"defaults\":[");
+    if (pm_key) {
+      char def_str[HX_BUILD_BOARD_PINMAP_MAX_LEN + 1];
+      if (ConfigDefaultToString(pm_key, def_str, sizeof(def_str))) {
+        JsonDocument def_doc;
+        if (deserializeJson(def_doc, def_str) == DeserializationError::Ok && def_doc.is<JsonArray>()) {
+          JsonArray def_arr = def_doc.as<JsonArray>();
+          uint8_t di = 0;
+          for (JsonVariant v : def_arr) {
+            if (di >= gpio_count) break;
+            pos += snprintf(buf + pos, bufsz - pos, "%s%u", di ? "," : "", (unsigned)v.as<uint16_t>());
+            di++;
+          }
+          for (; di < gpio_count; di++) {
+            pos += snprintf(buf + pos, bufsz - pos, "%s0", di ? "," : "");
+          }
+        }
+      }
+    }
+    pos += snprintf(buf + pos, bufsz - pos, "],");
+
+    // reserved — GPIOs the user must not modify
+    pos += snprintf(buf + pos, bufsz - pos, "\"reserved\":[");
+    bool first = true;
+    for (uint8_t gpio = 0; gpio < gpio_count; gpio++) {
+      uint16_t caps = PinmapGetGpioCaps(gpio);
+      bool r = !(caps & HX_GPIO_CAP_VALID) ||
+                (caps & HX_GPIO_CAP_FLASH)  ||
+                (caps & HX_GPIO_CAP_PSRAM);
+      if (!r) continue;
+      pos += snprintf(buf + pos, bufsz - pos, "%s%u", first ? "" : ",", (unsigned)gpio);
+      first = false;
+    }
+    pos += snprintf(buf + pos, bufsz - pos, "],");
+
+    // functions — all assignable pin functions (excluding NONE and gap IDs)
+    pos += snprintf(buf + pos, bufsz - pos, "\"functions\":[");
+    first = true;
+    for (uint16_t func = 1; func <= HX_PINFUNC_MAX_ID; func++) {
+      const char* name = HxPinFunctionText(func);
+      if (!name || strcmp(name, "UNKNOWN") == 0) continue;
+      pos += snprintf(buf + pos, bufsz - pos,
+        "%s{\"func\":%u,\"name\":\"%s\"}", first ? "" : ",", (unsigned)func, name);
+      first = false;
+    }
+    pos += snprintf(buf + pos, bufsz - pos, "]}");
+    buf[pos] = '\0';
+    request->send(200, "application/json", buf);
+    free(buf);
+  });
+
+  // POST /api/pinmap/reset — revert board.pinmap to build default and restart.
+  g_server->on("/api/pinmap/reset", HTTP_POST, [](AsyncWebServerRequest* request) {
+    const HxConfigKeyDef* k = ConfigFindConfigKey("board.pinmap");
+    if (!k) {
+      request->send(500, "application/json", "{\"ok\":false,\"error\":\"key missing\"}");
+      return;
+    }
+    if (!ConfigResetValue(k)) {
+      HX_LOGE(HX_WEB_TAG, "POST /api/pinmap/reset: ConfigResetValue failed");
+      request->send(500, "application/json", "{\"ok\":false,\"error\":\"reset failed\"}");
+      return;
+    }
+    ConfigSave();
+    request->send(200, "application/json", "{\"ok\":true}");
+    WebScheduleRestart();
+  });
+
+  // POST /api/pinmap — save the full pinmap dense JSON array and restart.
+  // Data is passed as a URL query parameter (?pinmap=[...]) so it is always
+  // parsed by ESPAsyncWebServer regardless of body-handler registration.
+  // ConfigApply is NOT called before restart; the boot sequence re-applies.
+  g_server->on("/api/pinmap", HTTP_POST, [](AsyncWebServerRequest* request) {
+    if (!request->hasParam("pinmap")) {
+      HX_LOGE(HX_WEB_TAG, "POST /api/pinmap: missing pinmap param");
+      request->send(400, "application/json", "{\"ok\":false,\"error\":\"missing pinmap\"}");
+      return;
+    }
+    String pinmap_str = request->getParam("pinmap")->value();
+    HX_LOGD(HX_WEB_TAG, "POST /api/pinmap: len=%u json=%s", (unsigned)pinmap_str.length(), pinmap_str.c_str());
+    JsonDocument doc;
+    DeserializationError derr = deserializeJson(doc, pinmap_str.c_str());
+    if (derr != DeserializationError::Ok || !doc.is<JsonArray>()) {
+      HX_LOGE(HX_WEB_TAG, "POST /api/pinmap: json parse error: %s", derr.c_str());
+      request->send(400, "application/json", "{\"ok\":false,\"error\":\"invalid json\"}");
+      return;
+    }
+    const HxConfigKeyDef* k = ConfigFindConfigKey("board.pinmap");
+    if (!k) {
+      HX_LOGE(HX_WEB_TAG, "POST /api/pinmap: board.pinmap key not found");
+      request->send(500, "application/json", "{\"ok\":false,\"error\":\"key missing\"}");
+      return;
+    }
+    // Re-serialize to canonical compact form for storage
+    char new_pinmap[HX_BUILD_BOARD_PINMAP_MAX_LEN + 1];
+    size_t written = serializeJson(doc, new_pinmap, sizeof(new_pinmap));
+    if (written == 0 || written >= sizeof(new_pinmap)) {
+      HX_LOGE(HX_WEB_TAG, "POST /api/pinmap: too large written=%u max=%u", (unsigned)written, (unsigned)HX_BUILD_BOARD_PINMAP_MAX_LEN);
+      request->send(500, "application/json", "{\"ok\":false,\"error\":\"too large\"}");
+      return;
+    }
+    new_pinmap[written] = '\0';
+    if (!ConfigSetValueFromString(k, new_pinmap)) {
+      HX_LOGE(HX_WEB_TAG, "POST /api/pinmap: ConfigSetValueFromString failed");
+      request->send(400, "application/json", "{\"ok\":false,\"error\":\"set failed\"}");
+      return;
+    }
+    ConfigSave();
+    request->send(200, "application/json", "{\"ok\":true}");
+    WebScheduleRestart();
   });
 
   g_ws = new AsyncWebSocket("/ws/console");

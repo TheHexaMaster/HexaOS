@@ -68,15 +68,17 @@
 
 static constexpr const char* HX_NET_TAG = "NET";
 
+#if HX_ENABLE_FEATURE_WIFI
 static HxNetworkState   g_state          = HX_NETWORK_STATE_IDLE;
 static int              g_retry_count    = 0;
 static HxScheduler      g_retry_sched;
+static char             g_ssid[64];
+static char             g_password[64];
+#endif
+
 static HxNetworkEventCb g_event_cb       = nullptr;
 static void*            g_event_cb_user  = nullptr;
 static bool             g_eth_has_ip     = false;
-
-static char g_ssid[64];
-static char g_password[64];
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -91,7 +93,11 @@ static void FireEvent(HxNetworkEvent event) {
 // Recompute Hx.net_* from the combined WiFi + ETH state.
 // Must be called whenever either transport changes its IP state.
 static void UpdateRuntimeFlags() {
+#if HX_ENABLE_FEATURE_WIFI
   bool any_ip = (g_state == HX_NETWORK_STATE_CONNECTED) || g_eth_has_ip;
+#else
+  bool any_ip = g_eth_has_ip;
+#endif
   Hx.net_connected = any_ip;
   Hx.net_has_ip    = any_ip;
 }
@@ -106,6 +112,7 @@ static void EthSetDefault() {
   }
 }
 
+#if HX_ENABLE_FEATURE_WIFI
 // Restore WiFi STA as the IDF default netif (ETH unavailable).
 static void WifiSetDefault() {
   esp_netif_t* wifi_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
@@ -114,8 +121,10 @@ static void WifiSetDefault() {
     HX_LOGI(HX_NET_TAG, "WiFi set as default netif");
   }
 }
+#endif // HX_ENABLE_FEATURE_WIFI
 #endif // HX_ENABLE_FEATURE_ETH
 
+#if HX_ENABLE_FEATURE_WIFI
 static void OnWifiAdapterEvent(WifiAdapterEvent event, void* user) {
   (void)user;
 
@@ -165,6 +174,7 @@ static void OnWifiAdapterEvent(WifiAdapterEvent event, void* user) {
       break;
   }
 }
+#endif // HX_ENABLE_FEATURE_WIFI
 
 #if HX_ENABLE_FEATURE_ETH
 static void OnEthAdapterEvent(EthAdapterEvent event, void* user) {
@@ -188,18 +198,22 @@ static void OnEthAdapterEvent(EthAdapterEvent event, void* user) {
       g_eth_has_ip = false;
       UpdateRuntimeFlags();
       // Fall back to WiFi as default if it has an IP.
+#if HX_ENABLE_FEATURE_WIFI
       if (g_state == HX_NETWORK_STATE_CONNECTED) {
         WifiSetDefault();
       }
+#endif
       FireEvent(HX_NETWORK_EVENT_IP_LOST);
       break;
 
     case ETH_ADAPTER_EVENT_LINK_DOWN:
       g_eth_has_ip = false;
       UpdateRuntimeFlags();
+#if HX_ENABLE_FEATURE_WIFI
       if (g_state == HX_NETWORK_STATE_CONNECTED) {
         WifiSetDefault();
       }
+#endif
       FireEvent(HX_NETWORK_EVENT_DISCONNECTED);
       break;
   }
@@ -211,6 +225,7 @@ static void OnEthAdapterEvent(EthAdapterEvent event, void* user) {
 // ---------------------------------------------------------------------------
 
 bool NetworkInit() {
+#if HX_ENABLE_FEATURE_WIFI
   memset(g_ssid,     0, sizeof(g_ssid));
   memset(g_password, 0, sizeof(g_password));
   HxSchedulerInit(&g_retry_sched, HX_WIFI_RETRY_INTERVAL_MS, 0);
@@ -219,6 +234,7 @@ bool NetworkInit() {
   if (!WifiAdapterInit()) {
     return false;
   }
+#endif
 
 #if HX_ENABLE_FEATURE_ETH
   // Non-fatal: ETH failure does not prevent WiFi from working.
@@ -231,7 +247,9 @@ bool NetworkInit() {
 }
 
 void NetworkStart() {
+#if HX_ENABLE_FEATURE_WIFI
   WifiAdapterSetEventCallback(OnWifiAdapterEvent, nullptr);
+#endif
 
 #if HX_ENABLE_FEATURE_ETH
   EthAdapterSetEventCallback(OnEthAdapterEvent, nullptr);
@@ -241,6 +259,7 @@ void NetworkStart() {
 }
 
 void NetworkEverySecond() {
+#if HX_ENABLE_FEATURE_WIFI
   if (g_state != HX_NETWORK_STATE_FAILED) {
     return;
   }
@@ -257,6 +276,7 @@ void NetworkEverySecond() {
   HX_LOGI(HX_NET_TAG, "retry connect attempt %d", g_retry_count + 1);
   g_state = HX_NETWORK_STATE_CONNECTING;
   WifiAdapterConnect(g_ssid, g_password);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -264,6 +284,7 @@ void NetworkEverySecond() {
 // ---------------------------------------------------------------------------
 
 bool NetworkConnect(const char* ssid, const char* password) {
+#if HX_ENABLE_FEATURE_WIFI
   if (!ssid || ssid[0] == '\0') {
     return false;
   }
@@ -289,16 +310,27 @@ bool NetworkConnect(const char* ssid, const char* password) {
   HxSchedulerEnable(&g_retry_sched);
 
   return WifiAdapterConnect(g_ssid, g_password);
+#else
+  (void)ssid; (void)password;
+  return false;
+#endif
 }
 
 bool NetworkDisconnect() {
+#if HX_ENABLE_FEATURE_WIFI
   g_state       = HX_NETWORK_STATE_IDLE;
   g_retry_count = 0;
   HxSchedulerDisable(&g_retry_sched);
   return WifiAdapterDisconnect();
+#else
+  return false;
+#endif
 }
 
 bool NetworkAutoConnect() {
+#if !HX_ENABLE_FEATURE_WIFI
+  return false;
+#else
   const HxConfigKeyDef* ssid_key = ConfigFindConfigKey("wifi.ssid");
   const HxConfigKeyDef* pass_key = ConfigFindConfigKey("wifi.password");
 
@@ -319,6 +351,7 @@ bool NetworkAutoConnect() {
 
   HX_LOGI(HX_NET_TAG, "auto-connecting to \"%s\"", ssid);
   return NetworkConnect(ssid, password);
+#endif // HX_ENABLE_FEATURE_WIFI
 }
 
 // ---------------------------------------------------------------------------
@@ -326,7 +359,11 @@ bool NetworkAutoConnect() {
 // ---------------------------------------------------------------------------
 
 HxNetworkState NetworkGetState() {
+#if HX_ENABLE_FEATURE_WIFI
   return g_state;
+#else
+  return HX_NETWORK_STATE_IDLE;
+#endif
 }
 
 const char* NetworkStateStr(HxNetworkState state) {
@@ -340,7 +377,11 @@ const char* NetworkStateStr(HxNetworkState state) {
 }
 
 bool NetworkIsConnected() {
+#if HX_ENABLE_FEATURE_WIFI
   return (g_state == HX_NETWORK_STATE_CONNECTED) || g_eth_has_ip;
+#else
+  return g_eth_has_ip;
+#endif
 }
 
 bool NetworkGetIp(char* out, size_t out_size) {
@@ -350,11 +391,20 @@ bool NetworkGetIp(char* out, size_t out_size) {
     return true;
   }
 #endif
+#if HX_ENABLE_FEATURE_WIFI
   return WifiAdapterGetIp(out, out_size);
+#else
+  if (out && out_size > 0) { out[0] = '\0'; }
+  return false;
+#endif
 }
 
 int8_t NetworkGetRssi() {
+#if HX_ENABLE_FEATURE_WIFI
   return WifiAdapterGetRssi();
+#else
+  return 0;
+#endif
 }
 
 bool NetworkEthIsUp() {

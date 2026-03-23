@@ -161,8 +161,11 @@ bool EthAdapterInit() {
 
   // PHY
   eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();
-  phy_config.phy_addr       = HX_ETH_PHY_ADDR;
-  phy_config.reset_gpio_num = power;  // -1 when not mapped — no hard reset
+  phy_config.phy_addr            = HX_ETH_PHY_ADDR;
+  phy_config.reset_gpio_num      = power;  // -1 when not mapped — no hard reset
+  // Do not block boot waiting for auto-negotiation. Link state arrives via
+  // ETHERNET_EVENT_CONNECTED event; 100 ms is enough for a cable-present check.
+  phy_config.autonego_timeout_ms = 500; //100 ms causing boot loop when eth init. Avoid. Min 500ms
 
 #if HX_ETH_PHY_TYPE == HX_ETH_PHY_TLK110
   // TLK110 has no dedicated IDF driver on ESP32-P4; it is IEEE 802.3 compliant
