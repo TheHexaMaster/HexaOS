@@ -24,7 +24,6 @@
 #include "system/core/runtime.h"
 #include "system/core/time.h"
 #include "system/core/user_interface.h"
-#include "system/handlers/littlefs_handler.h"
 #include "system/core/config.h"
 #include "system/core/pinmap.h"
 #include "system/core/state.h"
@@ -114,16 +113,8 @@ void BootInit() {
     LogWarn("STA: init failed");
   }
 
-  if (!FilesInit()) {
-    LogWarn("FIL: init failed");
-  }
-
   if (!StateLoad()) {
     LogWarn("STA: load failed");
-  }
-
-  if (!FilesMount()) {
-    LogWarn("FIL: mount failed");
   }
 
   if (!CommandInit()) {

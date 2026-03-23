@@ -24,14 +24,10 @@
 #define HX_CONFIG_DEFAULT_DEVICE_NAME     "HexaOS Device"
 
 // MODULES
-#define HX_ENABLE_MODULE_STORAGE          false
+#define HX_ENABLE_MODULE_STORAGE          true
 #define HX_ENABLE_MODULE_BERRY            false
 #define HX_ENABLE_MODULE_WEB              false
 #define HX_ENABLE_MODULE_LVGL             false
-
-// HANDLERS
-
-#define HX_ENABLE_HANDLER_LITTLEFS        true
 
 // PANIC ACTION
 #define HX_PANIC_ACTION_HALT     1   // Halt in infinite loop (default, safe for debugging)
@@ -46,6 +42,7 @@
 #define HX_ENABLE_FEATURE_WIFI            true
 #define HX_ENABLE_FEATURE_ETH             true
 #define HX_ENABLE_FEATURE_LITTLEFS        true
+#define HX_ENABLE_FEATURE_SD              false
 #define HX_CONFIG_DEFAULT_LOG_LEVEL        3                 // 0-err, 1-warn, 2-info, 3-debug
 #define HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE  false
 #define HX_CONFIG_DEFAULT_STATE_DELAY     2000

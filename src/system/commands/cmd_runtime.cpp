@@ -33,7 +33,7 @@ static HxCmdStatus CmdRuntimeStatus(const char* args, HxCmdOutput* out) {
   CmdOutPrintfLine(out, "  config_loaded    = %s", Hx.config_loaded     ? "true" : "false");
   CmdOutPrintfLine(out, "  pinmap_ready     = %s", Hx.pinmap_ready      ? "true" : "false");
   CmdOutPrintfLine(out, "  state_loaded     = %s", Hx.state_loaded      ? "true" : "false");
-  CmdOutPrintfLine(out, "  littlefs_mounted = %s", Hx.littlefs_mounted  ? "true" : "false");
+  CmdOutPrintfLine(out, "  files_mounted    = %s", Hx.files_mounted     ? "true" : "false");
   CmdOutPrintfLine(out, "  safeboot         = %s", Hx.safeboot          ? "true" : "false");
   CmdOutPrintfLine(out, "  uptime           = %s", uptime_text);
   CmdOutPrintfLine(out, "  boot_count       = %lu", (unsigned long)Hx.boot_count);
