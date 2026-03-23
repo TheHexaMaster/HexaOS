@@ -46,6 +46,9 @@ typedef struct {
 // ---------------------------------------------------------------------------
 
 extern const HxModule ModuleStorage;
+extern const HxModule ModuleI2c;
+extern const HxModule ModuleSpi;
+extern const HxModule ModuleUart;
 extern const HxModule ModuleBerry;
 extern const HxModule ModuleWeb;
 extern const HxModule ModuleLvgl;

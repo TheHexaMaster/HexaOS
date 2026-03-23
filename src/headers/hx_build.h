@@ -27,6 +27,9 @@
 
 // MODULES
 #define HX_ENABLE_MODULE_STORAGE          true
+#define HX_ENABLE_MODULE_I2C              true
+#define HX_ENABLE_MODULE_SPI              true
+#define HX_ENABLE_MODULE_UART             true
 #define HX_ENABLE_MODULE_BERRY            false
 #define HX_ENABLE_MODULE_WEB              false
 #define HX_ENABLE_MODULE_LVGL             false
@@ -70,6 +73,30 @@
     #define HX_SDMMC_POWER_CHANNEL (-1)  // -1 = no on-chip LDO channel
   #endif
 #endif
+// I2C handler device registry capacity.
+// Covers boards with many sensors across multiple I2C buses.
+#ifndef HX_I2C_DEVICE_MAX
+  #define HX_I2C_DEVICE_MAX 64
+#endif
+
+// Number of consecutive transaction failures before a device is marked
+// unavailable. Prevents error log spam for disconnected sensors.
+// Set to 0 to disable the availability policy.
+#ifndef HX_I2C_DEVICE_FAILURE_THRESHOLD
+  #define HX_I2C_DEVICE_FAILURE_THRESHOLD 5
+#endif
+
+// SPI handler device registry capacity.
+#ifndef HX_SPI_DEVICE_MAX
+  #define HX_SPI_DEVICE_MAX 32
+#endif
+
+// Consecutive SPI transaction failures before a device is marked unavailable.
+// Set to 0 to disable the availability policy.
+#ifndef HX_SPI_DEVICE_FAILURE_THRESHOLD
+  #define HX_SPI_DEVICE_FAILURE_THRESHOLD 5
+#endif
+
 // SD card presence check interval used by the storage module scheduler.
 #ifndef HX_STORAGE_SD_CHECK_INTERVAL_MS
   #define HX_STORAGE_SD_CHECK_INTERVAL_MS  3000
