@@ -1,4 +1,4 @@
-# HexaOS
+![HexaOS logo](/hexaos_logo.png)
 
 **HexaOS** is an open-source embedded operating platform for **ESP32-class microcontrollers**, built for developers who want a **clean, long-term maintainable firmware architecture** without turning the project into a bloated framework.
 
