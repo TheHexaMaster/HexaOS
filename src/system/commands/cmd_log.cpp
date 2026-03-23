@@ -6,7 +6,7 @@
 
   Description
   Log inspection commands for HexaOS.
-  Registers: log, logclr, logstat.
+  Registers: log, log clear, log stat, log level.
 */
 
 #include <stdlib.h>
@@ -104,8 +104,8 @@ static HxCmdStatus CmdLogLevel(const char* args, HxCmdOutput* out) {
 
 static const HxCmdDef kLogCommands[] = {
   { "log",       CmdLogHistory, "Show log history" },
-  { "logclr",    CmdLogClear,   "Clear log history" },
-  { "logstat",   CmdLogStats,   "Show log level and statistics" },
+  { "log clear", CmdLogClear,   "Clear log history" },
+  { "log stat",  CmdLogStats,   "Show log level and statistics" },
   { "log level", CmdLogLevel,   "Get or set log level: log level <error|warn|info|debug|lld>" }
 };
 

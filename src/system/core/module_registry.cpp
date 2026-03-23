@@ -76,12 +76,12 @@ void ModuleInitAll() {
       continue;
     }
 
-    LogInfo("MOD: init %s", mod->name);
+    HX_LOGI("MOD", "init %s", mod->name);
     g_module_ready[i]         = mod->init();
     g_module_records[i].ready = g_module_ready[i];
 
     if (!g_module_ready[i]) {
-      LogWarn("MOD: init failed %s", mod->name);
+      HX_LOGW("MOD", "init failed %s", mod->name);
     }
   }
 }
@@ -93,7 +93,7 @@ void ModuleStartAll() {
       continue;
     }
 
-    LogInfo("MOD: start %s", mod->name);
+    HX_LOGI("MOD", "start %s", mod->name);
     mod->start();
     g_module_records[i].started = true;
   }

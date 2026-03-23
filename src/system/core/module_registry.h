@@ -16,6 +16,8 @@
 
 #include <stddef.h>
 
+#include "headers/hx_build.h"
+
 // ---------------------------------------------------------------------------
 // Module descriptor — defines the lifecycle contract for one domain module
 // ---------------------------------------------------------------------------
@@ -45,13 +47,27 @@ typedef struct {
 // Module instances (defined in mod_*.cpp)
 // ---------------------------------------------------------------------------
 
+#if HX_ENABLE_MODULE_STORAGE
 extern const HxModule ModuleStorage;
+#endif
+#if HX_ENABLE_MODULE_I2C
 extern const HxModule ModuleI2c;
+#endif
+#if HX_ENABLE_MODULE_SPI
 extern const HxModule ModuleSpi;
+#endif
+#if HX_ENABLE_MODULE_UART
 extern const HxModule ModuleUart;
+#endif
+#if HX_ENABLE_MODULE_BERRY
 extern const HxModule ModuleBerry;
+#endif
+#if HX_ENABLE_MODULE_WEB
 extern const HxModule ModuleWeb;
+#endif
+#if HX_ENABLE_MODULE_LVGL
 extern const HxModule ModuleLvgl;
+#endif
 
 // ---------------------------------------------------------------------------
 // Lifecycle dispatch

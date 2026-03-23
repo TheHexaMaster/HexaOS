@@ -30,6 +30,7 @@
 #define HX_ENABLE_MODULE_I2C              true
 #define HX_ENABLE_MODULE_SPI              true
 #define HX_ENABLE_MODULE_UART             true
+// Not yet implemented — shell only, disabled until functional
 #define HX_ENABLE_MODULE_BERRY            false
 #define HX_ENABLE_MODULE_WEB              false
 #define HX_ENABLE_MODULE_LVGL             false

@@ -97,7 +97,7 @@ The work below is ordered chronologically. Later items assume earlier items are 
 
 ---
 
-## 1. Freeze Build Selector Taxonomy and Feature Gating
+## 1. ✅ Freeze Build Selector Taxonomy and Feature Gating
 
 **Goal:** make build-time feature control match the architecture.
 

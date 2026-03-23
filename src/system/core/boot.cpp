@@ -46,25 +46,25 @@ static const char* EspResetReasonText(uint32_t reason) {
 
 static void BootPrintBanner() {
   LogRaw("========================================");
-  LogInfo("%s boot start", HX_SYSTEM_NAME);
-  LogInfo("Version: %s", HX_VERSION);
-  LogInfo("Board:   %s", HX_TARGET_NAME);
+  HX_LOGI("BOOT", "%s boot start", HX_SYSTEM_NAME);
+  HX_LOGI("BOOT", "Version: %s", HX_VERSION);
+  HX_LOGI("BOOT", "Board:   %s", HX_TARGET_NAME);
   LogRaw("========================================");
 }
 
 static void BootPrintResetInfo() {
   uint32_t reason = (uint32_t)esp_reset_reason();
-  LogInfo("Reset reason: %s (%lu)", EspResetReasonText(reason), (unsigned long)reason);
+  HX_LOGI("BOOT", "Reset reason: %s (%lu)", EspResetReasonText(reason), (unsigned long)reason);
 }
 
 static void BootPrintChipInfo() {
   esp_chip_info_t info;
   esp_chip_info(&info);
 
-  LogInfo("Chip model: %s", CONFIG_IDF_TARGET);
-  LogInfo("Chip rev:   %d", info.revision);
-  LogInfo("CPU cores:  %d", info.cores);
-  LogInfo("Flash size: %u KB", ESP.getFlashChipSize() / 1024U);
+  HX_LOGI("BOOT", "Chip model: %s", CONFIG_IDF_TARGET);
+  HX_LOGI("BOOT", "Chip rev:   %d", info.revision);
+  HX_LOGI("BOOT", "CPU cores:  %d", info.cores);
+  HX_LOGI("BOOT", "Flash size: %u KB", ESP.getFlashChipSize() / 1024U);
 }
 
 void BootInit() {
@@ -73,18 +73,18 @@ void BootInit() {
   LogInit();
 
   if (!UserInterfaceInit()) {
-    LogWarn("UI: init failed");
+    HX_LOGW("UI", "init failed");
   }
 
   Hx.time_ready = TimeInit();
   if (!Hx.time_ready) {
-    LogWarn("TIM: init failed");
+    HX_LOGW("TIM", "init failed");
   } else {
     HX_LOGI("TIM", "init OK");
   }
 
   if (!Hx.rtos_ready) {
-    LogError("RTS: init failed");
+    HX_LOGE("RTS", "init failed");
   } else {
     HX_LOGI("RTS", "init OK");
   }
@@ -94,31 +94,31 @@ void BootInit() {
   BootPrintChipInfo();
 
   if (!ConfigInit()) {
-    LogWarn("CFG: init failed");
+    HX_LOGW("CFG", "init failed");
   }
 
   if (!ConfigLoad()) {
-    LogWarn("CFG: load failed");
+    HX_LOGW("CFG", "load failed");
   }
 
   ConfigApply();
 
   if (!PinmapInit()) {
-    LogWarn("PIN: init failed");
+    HX_LOGW("PIN", "init failed");
   }
 
   TimeSyncBootTryRtc();
 
   if (!StateInit()) {
-    LogWarn("STA: init failed");
+    HX_LOGW("STA", "init failed");
   }
 
   if (!StateLoad()) {
-    LogWarn("STA: load failed");
+    HX_LOGW("STA", "load failed");
   }
 
   if (!CommandInit()) {
-    LogWarn("CMD: init failed");
+    HX_LOGW("CMD", "init failed");
   }
 
   UserInterfaceStart();
