@@ -23,7 +23,8 @@
 
 #include <ESPAsyncWebServer.h>
 
-#include "system/core/runtime.h"
+#include "system/web/assets/alpine_js_gz.h"
+#include "system/web/pages/page_root.h"
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -39,7 +40,15 @@ static AsyncWebServer* g_server = nullptr;
 
 static void RegisterRoutes() {
   g_server->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(200, "text/plain", HX_SYSTEM_NAME " v" HX_VERSION);
+    request->send_P(200, "text/html", PAGE_ROOT);
+  });
+
+  g_server->on("/assets/alpine.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
+    AsyncWebServerResponse* response = request->beginResponse_P(
+        200, "application/javascript", kAlpineJsGz, kAlpineJsGzLen);
+    response->addHeader("Content-Encoding", "gzip");
+    response->addHeader("Cache-Control", "public, max-age=31536000, immutable");
+    request->send(response);
   });
 
   g_server->onNotFound([](AsyncWebServerRequest* request) {
