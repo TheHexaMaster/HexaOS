@@ -17,6 +17,7 @@ HxRuntime Hx = {
   .config_loaded = false,
   .state_loaded = false,
   .files_mounted = false,
+  .sd_mounted = false,
   .time_ready = false,
   .pinmap_ready = false,
   .uptime_ms = 0,

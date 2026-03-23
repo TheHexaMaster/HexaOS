@@ -5,18 +5,19 @@
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  Unified filesystem handler for HexaOS.
-  Provides backend-agnostic file and directory operations with thread-safe
-  internal mutex protection. Backend selection (LittleFS on internal flash
-  or FatFS on SD card) is resolved at compile time via build flags.
-  Gated by HX_ENABLE_MODULE_STORAGE.
+  LittleFS filesystem handler for HexaOS internal flash storage.
+  Provides thread-safe file and directory operations backed by the LittleFS
+  adapter. Gated by HX_ENABLE_MODULE_STORAGE and HX_ENABLE_FEATURE_LITTLEFS.
+
+  SD card storage is a separate backend managed independently by mod_storage
+  via sdmmc_adapter and is available through POSIX VFS at /sd.
 */
 
 #pragma once
 
 #include "headers/hx_build.h"
 
-#if HX_ENABLE_MODULE_STORAGE
+#if HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS
 
 #include <stddef.h>
 #include <stdint.h>
@@ -69,4 +70,4 @@ bool FilesAppendBytes(const char* path, const uint8_t* data, size_t len);
 bool FilesWriteTextAtomic(const char* path, const char* text);
 bool FilesWriteBytesAtomic(const char* path, const uint8_t* data, size_t len);
 
-#endif // HX_ENABLE_MODULE_STORAGE
+#endif // HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS

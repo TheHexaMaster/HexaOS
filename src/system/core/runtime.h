@@ -19,6 +19,7 @@ struct HxRuntime {
   bool config_loaded;
   bool state_loaded;
   bool files_mounted;
+  bool sd_mounted;
   bool time_ready;
   bool pinmap_ready;
   uint32_t uptime_ms;

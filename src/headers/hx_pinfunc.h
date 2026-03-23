@@ -154,7 +154,8 @@ enum HxPinFunction : uint16_t {
   HX_PIN_SDMMC0_D4  = 606,
   HX_PIN_SDMMC0_D5  = 607,
   HX_PIN_SDMMC0_D6  = 608,
-  HX_PIN_SDMMC0_D7  = 609,
+  HX_PIN_SDMMC0_D7    = 609,
+  HX_PIN_SDMMC0_POWER = 610,   // Optional GPIO power switch (active level set by HX_SDMMC_POWER_ON_LEVEL)
 
   // Ethernet family.
   HX_PIN_ETH0_MDC          = 700,

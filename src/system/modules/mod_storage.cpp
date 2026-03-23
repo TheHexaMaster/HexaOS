@@ -6,9 +6,16 @@
 
   Description
   Storage lifecycle module for HexaOS.
-  Owns the init and start hooks for the filesystem subsystem. FilesInit is
-  called during module init (after boot), FilesMount during module start.
-  Gated by HX_ENABLE_MODULE_STORAGE.
+  Coordinates independent initialisation and mount of each enabled storage
+  backend. Each backend fails independently — an error on one does not
+  prevent the other from starting.
+
+  Backends managed here:
+    - LittleFS (internal flash): via files_handler.
+      Gated by HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS.
+    - SDMMC + FatFS (SD card): via sdmmc_adapter.
+      Gated by HX_ENABLE_FEATURE_SD.
+      Mount failure is expected when no card is inserted.
 */
 
 #include "system/core/log.h"
@@ -16,24 +23,46 @@
 
 #include "headers/hx_build.h"
 
-#if HX_ENABLE_MODULE_STORAGE
+#if HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS
   #include "system/handlers/files_handler.h"
 #endif
 
+#if HX_ENABLE_FEATURE_SD
+  #include "system/adapters/sdmmc_adapter.h"
+#endif
+
+static constexpr const char* HX_STO_TAG = "STO";
+
 static bool StorageInit() {
-#if HX_ENABLE_MODULE_STORAGE
+  bool ok = true;
+
+#if HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS
   if (!FilesInit()) {
-    LogWarn("STO: files init failed");
-    return false;
+    HX_LOGE(HX_STO_TAG, "LittleFS init failed");
+    ok = false;
   }
 #endif
-  return true;
+
+#if HX_ENABLE_FEATURE_SD
+  if (!SdmmcInit()) {
+    // Not a hard failure — missing or unconnected SD card is normal.
+    HX_LOGE(HX_STO_TAG, "SDMMC init failed (no card or pinmap incomplete)");
+  }
+#endif
+
+  return ok;
 }
 
 static void StorageStart() {
-#if HX_ENABLE_MODULE_STORAGE
+#if HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS
   if (!FilesMount()) {
-    LogWarn("STO: files mount failed");
+    HX_LOGE(HX_STO_TAG, "LittleFS mount failed");
+  }
+#endif
+
+#if HX_ENABLE_FEATURE_SD
+  if (!SdmmcMount()) {
+    HX_LOGW(HX_STO_TAG, "SDMMC mount failed (card may not be inserted)");
   }
 #endif
 }

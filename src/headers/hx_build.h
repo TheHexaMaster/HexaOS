@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "arduino.h"
+
 // CONSOLE ADAPTERS VARIANTS
 #define HX_CONSOLE_ADAPTER_ARDUINO_USB_CDC      1
 #define HX_CONSOLE_ADAPTER_IDF_USB_SERIAL_JTAG  2
@@ -42,7 +44,32 @@
 #define HX_ENABLE_FEATURE_WIFI            true
 #define HX_ENABLE_FEATURE_ETH             true
 #define HX_ENABLE_FEATURE_LITTLEFS        true
-#define HX_ENABLE_FEATURE_SD              false
+#define HX_ENABLE_FEATURE_SD              true
+
+// SDMMC slot and power configuration.
+// These pick up board-level definitions (from pins_arduino.h) when present.
+// Override in your board config before including this header if needed.
+#ifndef HX_SDMMC_SLOT
+  #ifdef BOARD_SDMMC_SLOT
+    #define HX_SDMMC_SLOT BOARD_SDMMC_SLOT
+  #else
+    #define HX_SDMMC_SLOT 0
+  #endif
+#endif
+#ifndef HX_SDMMC_POWER_ON_LEVEL
+  #ifdef BOARD_SDMMC_POWER_ON_LEVEL
+    #define HX_SDMMC_POWER_ON_LEVEL BOARD_SDMMC_POWER_ON_LEVEL
+  #else
+    #define HX_SDMMC_POWER_ON_LEVEL 0   // 0 = active-LOW (most common)
+  #endif
+#endif
+#ifndef HX_SDMMC_POWER_CHANNEL
+  #ifdef BOARD_SDMMC_POWER_CHANNEL
+    #define HX_SDMMC_POWER_CHANNEL BOARD_SDMMC_POWER_CHANNEL
+  #else
+    #define HX_SDMMC_POWER_CHANNEL (-1)  // -1 = no on-chip LDO channel
+  #endif
+#endif
 #define HX_CONFIG_DEFAULT_LOG_LEVEL        3                 // 0-err, 1-warn, 2-info, 3-debug
 #define HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE  false
 #define HX_CONFIG_DEFAULT_STATE_DELAY     2000
