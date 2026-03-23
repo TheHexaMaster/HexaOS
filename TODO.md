@@ -460,7 +460,7 @@ A logging core that is stable enough for future web/UART/remote outputs without 
 
 ---
 
-## 13. Perform the First Real Documentation-to-Code Alignment Pass
+## 13. ✅ Perform the First Real Documentation-to-Code Alignment Pass
 
 **Goal:** make docs and code tell the same story at the `0.0.2` tag.
 
@@ -482,7 +482,7 @@ A release where architecture, documentation, and code are aligned enough to guid
 
 ---
 
-## 14. Final Pre-Release Hardening Pass
+## 14. ✅ Final Pre-Release Hardening Pass
 
 **Goal:** ship `0.0.2` as a clean architectural baseline rather than as an unfinished refactor branch.
 
