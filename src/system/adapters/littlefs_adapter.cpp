@@ -141,23 +141,26 @@ bool LfsReadBytes(const char* path, uint8_t* out, size_t out_size, size_t* out_l
 
   size_t file_size = (size_t)file.size();
 
-  if (out_len) {
-    *out_len = file_size;
-  }
-
   if (file_size > out_size) {
     file.close();
     return false;
   }
 
-  size_t read_len = file.read(out, file_size);
+  // Seek to beginning: some Arduino LittleFS builds internally seek inside
+  // size(), which would leave the position at EOF and cause file.read() to
+  // return 0 bytes even for a non-empty file.
+  file.seek(0);
+
+  // Read up to out_size bytes. Using out_size (>= file_size) rather than
+  // file_size makes this robust against inaccurate size() reporting.
+  size_t read_len = file.read(out, out_size);
   file.close();
 
   if (out_len) {
     *out_len = read_len;
   }
 
-  return (read_len == file_size);
+  return true;
 }
 
 bool LfsWriteBytes(const char* path, const uint8_t* data, size_t len, bool append) {

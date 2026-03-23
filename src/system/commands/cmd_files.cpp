@@ -220,22 +220,44 @@ static HxCmdStatus CmdFilesCat(const char* args, HxCmdOutput* out) {
 
   size_t read_len = 0;
   bool   ok       = FilesActiveReadBytes(path, buf, to_read, &read_len);
-  if (ok && read_len > 0) {
-    buf[read_len] = '\0';
-    CmdOutWriteRaw(out, reinterpret_cast<const char*>(buf));
-    CmdOutWriteRaw(out, "\n");
-    if (info.size_bytes > FILES_CAT_MAX) {
-      CmdOutPrintfLine(out, "(truncated — %u of %u B shown)",
-                       (unsigned)FILES_CAT_MAX, (unsigned)info.size_bytes);
-    }
-  } else if (ok) {
-    CmdOutWriteLine(out, "(empty)");
-  }
-  free(buf);
 
   if (!ok) {
+    free(buf);
     CmdOutWriteLine(out, "read failed");
     return HX_CMD_ERROR;
+  }
+
+  if (read_len == 0) {
+    free(buf);
+    CmdOutWriteLine(out, "(empty)");
+    return HX_CMD_OK;
+  }
+
+  // Write content line by line so each line gets \r\n and a flush.
+  // CmdOutWriteRaw has no line ending and no flush — raw blobs are
+  // dropped or invisible on VT100 terminals that need \r\n.
+  buf[read_len] = '\0';
+  char* p = reinterpret_cast<char*>(buf);
+  while (*p) {
+    char* nl = strchr(p, '\n');
+    if (nl) {
+      *nl = '\0';
+      if (nl > p && *(nl - 1) == '\r') {
+        *(nl - 1) = '\0';  // strip \r for CRLF files
+      }
+      CmdOutWriteLine(out, p);
+      p = nl + 1;
+    } else {
+      CmdOutWriteLine(out, p);  // last line without trailing newline
+      break;
+    }
+  }
+
+  free(buf);
+
+  if (info.size_bytes > FILES_CAT_MAX) {
+    CmdOutPrintfLine(out, "(truncated — %u of %u B shown)",
+                     (unsigned)FILES_CAT_MAX, (unsigned)info.size_bytes);
   }
   return HX_CMD_OK;
 }
