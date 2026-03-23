@@ -6,8 +6,7 @@
 
   Description
   Time synchronization service implementation for HexaOS.
-  Stub implementation. Future work: connect RTC driver reads/writes and NTP
-  apply path once drivers/rtc_ds3232 and network stack are available.
+  Stub implementation.
 
   Boot hook (TimeSyncBootTryRtc) must be called from BootInit() after
   ConfigInit() and PinmapInit() so that driver bus bindings are resolved

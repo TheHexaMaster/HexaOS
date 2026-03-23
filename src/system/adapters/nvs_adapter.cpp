@@ -136,7 +136,7 @@ bool HxNvsOpen(HxNvsStore store) {
 
 bool HxNvsOpenConfig() {
   if (!HxNvsOpen(HX_NVS_STORE_CONFIG)) {
-    Panic("Config NVS init failed");
+    HX_PANIC(HX_PANIC_NVS, "Config NVS init failed");
     return false;
   }
 
@@ -146,7 +146,7 @@ bool HxNvsOpenConfig() {
 
 bool HxNvsOpenState() {
   if (!HxNvsOpen(HX_NVS_STORE_STATE)) {
-    Panic("State NVS init failed");
+    HX_PANIC(HX_PANIC_NVS, "State NVS init failed");
     return false;
   }
 
