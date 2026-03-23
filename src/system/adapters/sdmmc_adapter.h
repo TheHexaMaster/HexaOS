@@ -60,6 +60,11 @@ bool SdmmcList(const char* path, SdmmcListCallback callback, void* user);
 
 bool SdmmcReadBytes(const char* path, uint8_t* out, size_t out_size, size_t* out_len);
 
+// Reads up to max_len bytes from path. Succeeds even when the file is larger
+// than max_len — content is silently capped. Returns false only on open or
+// read error. Sets *out_len to the number of bytes actually read.
+bool SdmmcReadBytesCapped(const char* path, uint8_t* out, size_t max_len, size_t* out_len);
+
 // If append is true, appends to the file; otherwise overwrites.
 bool SdmmcWriteBytes(const char* path, const uint8_t* data, size_t len, bool append);
 

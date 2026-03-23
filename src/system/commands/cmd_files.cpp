@@ -10,13 +10,11 @@
              files rm, files mkdir, files rmdir, files write, files append,
              files format.
 
-  Active backend selection (flash or sd) is a session-level flag that resets
-  to flash on every boot. All file operations are dispatched to the currently
-  selected backend. The selection is independent from the underlying mount
-  state — commands report an error when the selected backend is not mounted.
+  All operations are dispatched through files_handler — no adapter is
+  accessed directly. Backend selection is owned by files_handler;
+  commands read and set it via FilesGetActiveBackend / FilesSetActiveBackend.
 
-  Gated by HX_ENABLE_MODULE_STORAGE. Individual flash/SD branches are further
-  gated by HX_ENABLE_FEATURE_LITTLEFS and HX_ENABLE_FEATURE_SD respectively.
+  Gated by HX_ENABLE_MODULE_STORAGE.
 */
 
 #include <stdio.h>
@@ -30,49 +28,13 @@
 
 #if HX_ENABLE_MODULE_STORAGE
 
-#if HX_ENABLE_FEATURE_LITTLEFS
-  #include "system/handlers/files_handler.h"
-#endif
-
-#if HX_ENABLE_FEATURE_SD
-  #include "system/adapters/sdmmc_adapter.h"
-#endif
-
-// ---------------------------------------------------------------------------
-// Active backend selection
-// ---------------------------------------------------------------------------
-
-typedef enum : uint8_t {
-  HX_FILES_ACTIVE_FLASH = 0,
-  HX_FILES_ACTIVE_SD    = 1
-} HxFilesActive;
-
-// Defaults to flash on every boot.
-static HxFilesActive g_active = HX_FILES_ACTIVE_FLASH;
-
-static const char* ActiveName() {
-  return (g_active == HX_FILES_ACTIVE_SD) ? "sd" : "flash";
-}
-
-static bool ActiveMounted() {
-#if HX_ENABLE_FEATURE_SD
-  if (g_active == HX_FILES_ACTIVE_SD) {
-    return Hx.sd_mounted;
-  }
-#endif
-#if HX_ENABLE_FEATURE_LITTLEFS
-  return Hx.files_mounted;
-#else
-  return false;
-#endif
-}
+#include "system/handlers/files_handler.h"
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-static constexpr size_t      FILES_CAT_MAX = HX_FILES_CAT_MAX;
-static constexpr const char* FILES_SD_VFS  = "/sd";
+static constexpr size_t FILES_CAT_MAX = HX_FILES_CAT_MAX;
 
 static void PrintStorageSize(HxCmdOutput* out, const char* label, size_t bytes) {
   if (bytes >= 1024UL * 1024UL) {
@@ -96,7 +58,7 @@ static HxCmdStatus CmdFilesStatus(const char* args, HxCmdOutput* out) {
     return HX_CMD_USAGE;
   }
 
-  CmdOutPrintfLine(out, "active = %s", ActiveName());
+  CmdOutPrintfLine(out, "active = %s", FilesActiveBackendName());
   CmdOutWriteLine(out, "backends:");
 
 #if HX_ENABLE_FEATURE_LITTLEFS
@@ -115,11 +77,11 @@ static HxCmdStatus CmdFilesStatus(const char* args, HxCmdOutput* out) {
 #endif
 
 #if HX_ENABLE_FEATURE_SD
-  CmdOutPrintfLine(out, "  sd     mounted=%s", Hx.sd_mounted ? "true" : "false");
-  if (Hx.sd_mounted) {
+  CmdOutPrintfLine(out, "  sd     mounted=%s", FilesSdIsMounted() ? "true" : "false");
+  if (FilesSdIsMounted()) {
     uint64_t total = 0;
     uint64_t used  = 0;
-    if (SdmmcGetStorageInfo(&total, &used)) {
+    if (FilesSdGetStorageInfo(&total, &used)) {
       uint64_t free_b = (total > used) ? total - used : 0;
       CmdOutPrintfLine(out, "         total=%lu MB  used=%lu MB  free=%lu MB",
                        (unsigned long)(total  / (1024ULL * 1024ULL)),
@@ -147,9 +109,9 @@ static HxCmdStatus CmdFilesUse(const char* args, HxCmdOutput* out) {
 
   if (strcmp(target, "flash") == 0) {
 #if HX_ENABLE_FEATURE_LITTLEFS
-    g_active = HX_FILES_ACTIVE_FLASH;
+    FilesSetActiveBackend(HX_FILES_BACKEND_FLASH);
     CmdOutPrintfLine(out, "active backend: flash (mounted=%s)",
-                     Hx.files_mounted ? "true" : "false");
+                     FilesActiveIsMounted() ? "true" : "false");
     return HX_CMD_OK;
 #else
     CmdOutWriteLine(out, "flash not available in this build");
@@ -159,9 +121,9 @@ static HxCmdStatus CmdFilesUse(const char* args, HxCmdOutput* out) {
 
   if (strcmp(target, "sd") == 0) {
 #if HX_ENABLE_FEATURE_SD
-    g_active = HX_FILES_ACTIVE_SD;
+    FilesSetActiveBackend(HX_FILES_BACKEND_SD);
     CmdOutPrintfLine(out, "active backend: sd (mounted=%s)",
-                     Hx.sd_mounted ? "true" : "false");
+                     FilesActiveIsMounted() ? "true" : "false");
     return HX_CMD_OK;
 #else
     CmdOutWriteLine(out, "sd not available in this build");
@@ -182,8 +144,7 @@ struct FilesLsCtx {
   size_t       count;
 };
 
-#if HX_ENABLE_FEATURE_LITTLEFS
-static bool FlashLsCb(const HxFileInfo* entry, void* user) {
+static bool LsCb(const HxFileInfo* entry, void* user) {
   auto* ctx = static_cast<FilesLsCtx*>(user);
   if (entry->is_dir) {
     CmdOutPrintfLine(ctx->out, "  [DIR]  %s", entry->path);
@@ -193,20 +154,6 @@ static bool FlashLsCb(const HxFileInfo* entry, void* user) {
   ctx->count++;
   return true;
 }
-#endif
-
-#if HX_ENABLE_FEATURE_SD
-static bool SdLsCb(const char* name, bool is_dir, size_t size_bytes, void* user) {
-  auto* ctx = static_cast<FilesLsCtx*>(user);
-  if (is_dir) {
-    CmdOutPrintfLine(ctx->out, "  [DIR]  %s", name);
-  } else {
-    CmdOutPrintfLine(ctx->out, "  [FILE] %-32s  %u B", name, (unsigned)size_bytes);
-  }
-  ctx->count++;
-  return true;
-}
-#endif
 
 static HxCmdStatus CmdFilesLs(const char* args, HxCmdOutput* out) {
   char path[256];
@@ -218,26 +165,13 @@ static HxCmdStatus CmdFilesLs(const char* args, HxCmdOutput* out) {
     return HX_CMD_USAGE;
   }
 
-  if (!ActiveMounted()) {
-    CmdOutPrintfLine(out, "%s not mounted", ActiveName());
+  if (!FilesActiveIsMounted()) {
+    CmdOutPrintfLine(out, "%s not mounted", FilesActiveBackendName());
     return HX_CMD_ERROR;
   }
 
   FilesLsCtx ctx = { out, 0 };
-  bool ok = false;
-
-#if HX_ENABLE_FEATURE_LITTLEFS
-  if (g_active == HX_FILES_ACTIVE_FLASH) {
-    ok = FilesList(path, FlashLsCb, &ctx);
-  }
-#endif
-#if HX_ENABLE_FEATURE_SD
-  if (g_active == HX_FILES_ACTIVE_SD) {
-    ok = SdmmcList(path, SdLsCb, &ctx);
-  }
-#endif
-
-  if (!ok) {
+  if (!FilesActiveList(path, LsCb, &ctx)) {
     CmdOutPrintfLine(out, "ls failed: %s", path);
     return HX_CMD_ERROR;
   }
@@ -260,90 +194,50 @@ static HxCmdStatus CmdFilesCat(const char* args, HxCmdOutput* out) {
     return HX_CMD_USAGE;
   }
 
-  if (!ActiveMounted()) {
-    CmdOutPrintfLine(out, "%s not mounted", ActiveName());
+  if (!FilesActiveIsMounted()) {
+    CmdOutPrintfLine(out, "%s not mounted", FilesActiveBackendName());
     return HX_CMD_ERROR;
   }
 
-#if HX_ENABLE_FEATURE_LITTLEFS
-  if (g_active == HX_FILES_ACTIVE_FLASH) {
-    if (!FilesIsFile(path)) {
-      CmdOutWriteLine(out, "not a file");
-      return HX_CMD_ERROR;
-    }
-    size_t fsize   = FilesSize(path);
-    size_t to_read = (fsize < FILES_CAT_MAX) ? fsize : FILES_CAT_MAX;
+  HxFileInfo info{};
+  if (!FilesActiveStat(path, &info) || !info.exists || info.is_dir) {
+    CmdOutWriteLine(out, "not a file");
+    return HX_CMD_ERROR;
+  }
 
-    if (to_read == 0) {
-      CmdOutWriteLine(out, "(empty)");
-      return HX_CMD_OK;
-    }
+  size_t to_read = (info.size_bytes < FILES_CAT_MAX) ? info.size_bytes : FILES_CAT_MAX;
 
-    uint8_t* buf = static_cast<uint8_t*>(malloc(to_read + 1));
-    if (!buf) {
-      CmdOutWriteLine(out, "out of memory");
-      return HX_CMD_ERROR;
-    }
-    size_t read_len = 0;
-    bool   ok       = FilesReadBytes(path, buf, to_read, &read_len);
-    if (ok && read_len > 0) {
-      buf[read_len] = '\0';
-      CmdOutWriteRaw(out, reinterpret_cast<const char*>(buf));
-      CmdOutWriteRaw(out, "\n");
-      if (fsize > FILES_CAT_MAX) {
-        CmdOutPrintfLine(out, "(truncated — %u of %u B shown)",
-                         (unsigned)FILES_CAT_MAX, (unsigned)fsize);
-      }
-    }
-    free(buf);
-    if (!ok) {
-      CmdOutWriteLine(out, "read failed");
-      return HX_CMD_ERROR;
-    }
+  if (to_read == 0) {
+    CmdOutWriteLine(out, "(empty)");
     return HX_CMD_OK;
   }
-#endif
 
-#if HX_ENABLE_FEATURE_SD
-  if (g_active == HX_FILES_ACTIVE_SD) {
-    // SdmmcReadBytes fails when file > buffer, so use POSIX fopen on the VFS
-    // path directly to support partial reads on large files.
-    char full[300];
-    snprintf(full, sizeof(full), "%s%s", FILES_SD_VFS, path);
-
-    FILE* f = fopen(full, "rb");
-    if (!f) {
-      CmdOutWriteLine(out, "not a file or open failed");
-      return HX_CMD_ERROR;
-    }
-
-    uint8_t* buf = static_cast<uint8_t*>(malloc(FILES_CAT_MAX + 1));
-    if (!buf) {
-      fclose(f);
-      CmdOutWriteLine(out, "out of memory");
-      return HX_CMD_ERROR;
-    }
-
-    size_t read_len = fread(buf, 1, FILES_CAT_MAX, f);
-    bool   truncated = !feof(f);
-    fclose(f);
-
-    if (read_len > 0) {
-      buf[read_len] = '\0';
-      CmdOutWriteRaw(out, reinterpret_cast<const char*>(buf));
-      CmdOutWriteRaw(out, "\n");
-      if (truncated) {
-        CmdOutPrintfLine(out, "(truncated — first %u B shown)", (unsigned)FILES_CAT_MAX);
-      }
-    } else {
-      CmdOutWriteLine(out, "(empty)");
-    }
-    free(buf);
-    return HX_CMD_OK;
+  uint8_t* buf = static_cast<uint8_t*>(malloc(to_read + 1));
+  if (!buf) {
+    CmdOutWriteLine(out, "out of memory");
+    return HX_CMD_ERROR;
   }
-#endif
 
-  return HX_CMD_ERROR;
+  size_t read_len = 0;
+  bool   ok       = FilesActiveReadBytes(path, buf, to_read, &read_len);
+  if (ok && read_len > 0) {
+    buf[read_len] = '\0';
+    CmdOutWriteRaw(out, reinterpret_cast<const char*>(buf));
+    CmdOutWriteRaw(out, "\n");
+    if (info.size_bytes > FILES_CAT_MAX) {
+      CmdOutPrintfLine(out, "(truncated — %u of %u B shown)",
+                       (unsigned)FILES_CAT_MAX, (unsigned)info.size_bytes);
+    }
+  } else if (ok) {
+    CmdOutWriteLine(out, "(empty)");
+  }
+  free(buf);
+
+  if (!ok) {
+    CmdOutWriteLine(out, "read failed");
+    return HX_CMD_ERROR;
+  }
+  return HX_CMD_OK;
 }
 
 // ---------------------------------------------------------------------------
@@ -357,45 +251,23 @@ static HxCmdStatus CmdFilesInfo(const char* args, HxCmdOutput* out) {
     return HX_CMD_USAGE;
   }
 
-  if (!ActiveMounted()) {
-    CmdOutPrintfLine(out, "%s not mounted", ActiveName());
+  if (!FilesActiveIsMounted()) {
+    CmdOutPrintfLine(out, "%s not mounted", FilesActiveBackendName());
     return HX_CMD_ERROR;
   }
 
-#if HX_ENABLE_FEATURE_LITTLEFS
-  if (g_active == HX_FILES_ACTIVE_FLASH) {
-    HxFileInfo info{};
-    if (!FilesStat(path, &info) || !info.exists) {
-      CmdOutWriteLine(out, "not found");
-      return HX_CMD_ERROR;
-    }
-    CmdOutPrintfLine(out, "  path         = %s", info.path);
-    CmdOutPrintfLine(out, "  type         = %s", info.is_dir ? "dir" : "file");
-    if (!info.is_dir) {
-      PrintStorageSize(out, "size", info.size_bytes);
-    }
-    return HX_CMD_OK;
+  HxFileInfo info{};
+  if (!FilesActiveStat(path, &info) || !info.exists) {
+    CmdOutWriteLine(out, "not found");
+    return HX_CMD_ERROR;
   }
-#endif
 
-#if HX_ENABLE_FEATURE_SD
-  if (g_active == HX_FILES_ACTIVE_SD) {
-    bool   is_dir = false;
-    size_t size   = 0;
-    if (!SdmmcStat(path, &is_dir, &size)) {
-      CmdOutWriteLine(out, "not found");
-      return HX_CMD_ERROR;
-    }
-    CmdOutPrintfLine(out, "  path         = %s", path);
-    CmdOutPrintfLine(out, "  type         = %s", is_dir ? "dir" : "file");
-    if (!is_dir) {
-      PrintStorageSize(out, "size", size);
-    }
-    return HX_CMD_OK;
+  CmdOutPrintfLine(out, "  path         = %s", info.path);
+  CmdOutPrintfLine(out, "  type         = %s", info.is_dir ? "dir" : "file");
+  if (!info.is_dir) {
+    PrintStorageSize(out, "size", info.size_bytes);
   }
-#endif
-
-  return HX_CMD_ERROR;
+  return HX_CMD_OK;
 }
 
 // ---------------------------------------------------------------------------
@@ -409,20 +281,12 @@ static HxCmdStatus CmdFilesRm(const char* args, HxCmdOutput* out) {
     return HX_CMD_USAGE;
   }
 
-  if (!ActiveMounted()) {
-    CmdOutPrintfLine(out, "%s not mounted", ActiveName());
+  if (!FilesActiveIsMounted()) {
+    CmdOutPrintfLine(out, "%s not mounted", FilesActiveBackendName());
     return HX_CMD_ERROR;
   }
 
-  bool ok = false;
-#if HX_ENABLE_FEATURE_LITTLEFS
-  if (g_active == HX_FILES_ACTIVE_FLASH) { ok = FilesRemove(path); }
-#endif
-#if HX_ENABLE_FEATURE_SD
-  if (g_active == HX_FILES_ACTIVE_SD)    { ok = SdmmcRemove(path); }
-#endif
-
-  if (!ok) {
+  if (!FilesActiveRemove(path)) {
     CmdOutPrintfLine(out, "rm failed: %s", path);
     return HX_CMD_ERROR;
   }
@@ -441,20 +305,12 @@ static HxCmdStatus CmdFilesMkdir(const char* args, HxCmdOutput* out) {
     return HX_CMD_USAGE;
   }
 
-  if (!ActiveMounted()) {
-    CmdOutPrintfLine(out, "%s not mounted", ActiveName());
+  if (!FilesActiveIsMounted()) {
+    CmdOutPrintfLine(out, "%s not mounted", FilesActiveBackendName());
     return HX_CMD_ERROR;
   }
 
-  bool ok = false;
-#if HX_ENABLE_FEATURE_LITTLEFS
-  if (g_active == HX_FILES_ACTIVE_FLASH) { ok = FilesMkdir(path); }
-#endif
-#if HX_ENABLE_FEATURE_SD
-  if (g_active == HX_FILES_ACTIVE_SD)    { ok = SdmmcMkdir(path); }
-#endif
-
-  if (!ok) {
+  if (!FilesActiveMkdir(path)) {
     CmdOutPrintfLine(out, "mkdir failed: %s", path);
     return HX_CMD_ERROR;
   }
@@ -473,20 +329,12 @@ static HxCmdStatus CmdFilesRmdir(const char* args, HxCmdOutput* out) {
     return HX_CMD_USAGE;
   }
 
-  if (!ActiveMounted()) {
-    CmdOutPrintfLine(out, "%s not mounted", ActiveName());
+  if (!FilesActiveIsMounted()) {
+    CmdOutPrintfLine(out, "%s not mounted", FilesActiveBackendName());
     return HX_CMD_ERROR;
   }
 
-  bool ok = false;
-#if HX_ENABLE_FEATURE_LITTLEFS
-  if (g_active == HX_FILES_ACTIVE_FLASH) { ok = FilesRmdir(path); }
-#endif
-#if HX_ENABLE_FEATURE_SD
-  if (g_active == HX_FILES_ACTIVE_SD)    { ok = SdmmcRmdir(path); }
-#endif
-
-  if (!ok) {
+  if (!FilesActiveRmdir(path)) {
     CmdOutPrintfLine(out, "rmdir failed: %s", path);
     return HX_CMD_ERROR;
   }
@@ -511,23 +359,12 @@ static HxCmdStatus CmdFilesWriteOrAppend(const char* args, HxCmdOutput* out, boo
   // Everything after the path (may be empty string) is the text content.
   const char* text = CmdSkipWs(cursor);
 
-  if (!ActiveMounted()) {
-    CmdOutPrintfLine(out, "%s not mounted", ActiveName());
+  if (!FilesActiveIsMounted()) {
+    CmdOutPrintfLine(out, "%s not mounted", FilesActiveBackendName());
     return HX_CMD_ERROR;
   }
 
-  bool ok = false;
-#if HX_ENABLE_FEATURE_LITTLEFS
-  if (g_active == HX_FILES_ACTIVE_FLASH) {
-    ok = append ? FilesAppendText(path, text) : FilesWriteText(path, text);
-  }
-#endif
-#if HX_ENABLE_FEATURE_SD
-  if (g_active == HX_FILES_ACTIVE_SD) {
-    ok = SdmmcWriteBytes(path, reinterpret_cast<const uint8_t*>(text), strlen(text), append);
-  }
-#endif
-
+  bool ok = append ? FilesActiveAppendText(path, text) : FilesActiveWriteText(path, text);
   if (!ok) {
     CmdOutPrintfLine(out, "%s failed: %s", append ? "append" : "write", path);
     return HX_CMD_ERROR;
@@ -553,28 +390,21 @@ static HxCmdStatus CmdFilesFormat(const char* args, HxCmdOutput* out) {
   char confirm[16];
   if (!CmdExtractSingleKey(args, confirm, sizeof(confirm))
       || strcmp(confirm, "confirm") != 0) {
-    CmdOutPrintfLine(out, "usage: files format confirm  (erases all data on %s)", ActiveName());
+    CmdOutPrintfLine(out, "usage: files format confirm  (erases all data on %s)",
+                     FilesActiveBackendName());
     return HX_CMD_USAGE;
   }
 
-  if (!ActiveMounted()) {
-    CmdOutPrintfLine(out, "%s not mounted", ActiveName());
+  if (!FilesActiveIsMounted()) {
+    CmdOutPrintfLine(out, "%s not mounted", FilesActiveBackendName());
     return HX_CMD_ERROR;
   }
 
-  bool ok = false;
-#if HX_ENABLE_FEATURE_LITTLEFS
-  if (g_active == HX_FILES_ACTIVE_FLASH) { ok = FilesFormat(); }
-#endif
-#if HX_ENABLE_FEATURE_SD
-  if (g_active == HX_FILES_ACTIVE_SD)    { ok = SdmmcFormat(); }
-#endif
-
-  if (!ok) {
-    CmdOutPrintfLine(out, "format failed on %s (not supported or error)", ActiveName());
+  if (!FilesActiveFormat()) {
+    CmdOutPrintfLine(out, "format failed on %s (not supported or error)", FilesActiveBackendName());
     return HX_CMD_ERROR;
   }
-  CmdOutPrintfLine(out, "format OK: %s", ActiveName());
+  CmdOutPrintfLine(out, "format OK: %s", FilesActiveBackendName());
   return HX_CMD_OK;
 }
 

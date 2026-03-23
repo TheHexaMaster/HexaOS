@@ -13,7 +13,7 @@
   Backends managed here:
     - LittleFS (internal flash): via files_handler.
       Gated by HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS.
-    - SDMMC + FatFS (SD card): via sdmmc_adapter.
+    - SDMMC + FatFS (SD card): via files_handler (FilesSd* API).
       Gated by HX_ENABLE_FEATURE_SD.
       Mount failure is expected when no card is inserted.
 */
@@ -24,12 +24,8 @@
 
 #include "headers/hx_build.h"
 
-#if HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS
+#if HX_ENABLE_MODULE_STORAGE
   #include "system/handlers/files_handler.h"
-#endif
-
-#if HX_ENABLE_FEATURE_SD
-  #include "system/adapters/sdmmc_adapter.h"
 #endif
 
 static constexpr const char* HX_STO_TAG = "STO";
@@ -49,7 +45,7 @@ static bool StorageInit() {
 #endif
 
 #if HX_ENABLE_FEATURE_SD
-  if (!SdmmcInit()) {
+  if (!FilesSdInit()) {
     // Not a hard failure — missing or unconnected SD card is normal.
     HX_LOGE(HX_STO_TAG, "SDMMC init failed (no card or pinmap incomplete)");
   }
@@ -67,7 +63,7 @@ static void StorageStart() {
 
 #if HX_ENABLE_FEATURE_SD
   HxSchedulerInit(&g_sd_check_sched, HX_STORAGE_SD_CHECK_INTERVAL_MS, 0);
-  if (!SdmmcMount()) {
+  if (!FilesSdMount()) {
     HX_LOGW(HX_STO_TAG, "SDMMC mount failed (card may not be inserted)");
   }
 #endif
@@ -86,17 +82,17 @@ static void StorageEverySecond() {
 #if HX_ENABLE_FEATURE_SD
   if (!HxSchedulerDue(&g_sd_check_sched)) { return; }
 
-  if (SdmmcIsMounted()) {
+  if (FilesSdIsMounted()) {
     HX_LOGLL(HX_STO_TAG, "SD check: mounted");
     // Health check: send CMD13 to the physical card; unmount if it no longer responds.
-    if (!SdmmcCheckHealth()) {
+    if (!FilesSdCheckHealth()) {
       HX_LOGW(HX_STO_TAG, "SD card removed — unmounting");
-      SdmmcUnmount();
+      FilesSdUnmount();
     }
   } else {
     HX_LOGLL(HX_STO_TAG, "SD check: not mounted — attempting mount");
     // Card not mounted — try to bring it up.
-    if (SdmmcMount()) {
+    if (FilesSdMount()) {
       HX_LOGI(HX_STO_TAG, "SD card mounted");
     }
   }

@@ -5,15 +5,15 @@
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  LittleFS filesystem handler for HexaOS internal flash storage.
-  Owns the lifecycle, mutex protection, path validation and atomic-write
-  orchestration for the internal flash filesystem. Delegates all raw I/O to
-  the LittleFS adapter.
+  Unified filesystem domain handler for HexaOS.
+  Owns the Files domain for all enabled storage backends. Manages lifecycle,
+  mutex protection, path validation and atomic-write orchestration for the
+  LittleFS flash backend. Provides SD card lifecycle delegation and a uniform
+  active-backend dispatch layer so callers never deal with adapter selection.
 
-  SD card storage is a separate backend. It is initialized independently by
-  mod_storage via sdmmc_adapter and is accessible through POSIX VFS at /sd.
-
-  Gated by HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS.
+  Flash backend gated by HX_ENABLE_FEATURE_LITTLEFS.
+  SD backend gated by HX_ENABLE_FEATURE_SD.
+  The entire handler is gated by HX_ENABLE_MODULE_STORAGE.
 */
 
 #include "files_handler.h"
@@ -510,3 +510,264 @@ bool FilesWriteBytesAtomic(const char* path, const uint8_t* data, size_t len) {
 }
 
 #endif // HX_ENABLE_MODULE_STORAGE && HX_ENABLE_FEATURE_LITTLEFS
+
+// ---------------------------------------------------------------------------
+// SD card backend lifecycle + backend selection + active-backend dispatch
+// All gated by HX_ENABLE_MODULE_STORAGE.
+// ---------------------------------------------------------------------------
+
+#if HX_ENABLE_MODULE_STORAGE
+
+#include <string.h>
+
+#if HX_ENABLE_FEATURE_SD
+  #include "system/adapters/sdmmc_adapter.h"
+#endif
+
+#include "system/core/runtime.h"
+
+// ---------------------------------------------------------------------------
+// SD card backend lifecycle
+// ---------------------------------------------------------------------------
+
+#if HX_ENABLE_FEATURE_SD
+
+bool FilesSdInit() {
+  return SdmmcInit();
+}
+
+bool FilesSdMount() {
+  return SdmmcMount();
+}
+
+bool FilesSdUnmount() {
+  return SdmmcUnmount();
+}
+
+bool FilesSdIsMounted() {
+  return SdmmcIsMounted();
+}
+
+bool FilesSdCheckHealth() {
+  return SdmmcCheckHealth();
+}
+
+bool FilesSdGetStorageInfo(uint64_t* out_total, uint64_t* out_used) {
+  return SdmmcGetStorageInfo(out_total, out_used);
+}
+
+#endif // HX_ENABLE_FEATURE_SD
+
+// ---------------------------------------------------------------------------
+// Backend selection
+// ---------------------------------------------------------------------------
+
+static HxFilesBackend g_active_backend = HX_FILES_BACKEND_FLASH;
+
+void FilesSetActiveBackend(HxFilesBackend backend) {
+  g_active_backend = backend;
+}
+
+HxFilesBackend FilesGetActiveBackend() {
+  return g_active_backend;
+}
+
+bool FilesActiveIsMounted() {
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD) {
+    return SdmmcIsMounted();
+  }
+#endif
+  return Hx.files_mounted;
+}
+
+const char* FilesActiveBackendName() {
+  return (g_active_backend == HX_FILES_BACKEND_SD) ? "sd" : "flash";
+}
+
+// ---------------------------------------------------------------------------
+// Active-backend file operations
+// ---------------------------------------------------------------------------
+
+bool FilesActiveExists(const char* path) {
+  if (!FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesExists(path); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD)    { return SdmmcExists(path); }
+#endif
+  return false;
+}
+
+bool FilesActiveRemove(const char* path) {
+  if (!FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesRemove(path); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD)    { return SdmmcRemove(path); }
+#endif
+  return false;
+}
+
+bool FilesActiveRename(const char* old_path, const char* new_path) {
+  if (!FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesRename(old_path, new_path); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD)    { return SdmmcRename(old_path, new_path); }
+#endif
+  return false;
+}
+
+bool FilesActiveMkdir(const char* path) {
+  if (!FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesMkdir(path); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD)    { return SdmmcMkdir(path); }
+#endif
+  return false;
+}
+
+bool FilesActiveRmdir(const char* path) {
+  if (!FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesRmdir(path); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD)    { return SdmmcRmdir(path); }
+#endif
+  return false;
+}
+
+bool FilesActiveStat(const char* path, HxFileInfo* out_info) {
+  if (out_info) {
+    memset(out_info, 0, sizeof(*out_info));
+    if (path && path[0]) {
+      snprintf(out_info->path, sizeof(out_info->path), "%s", path);
+    }
+  }
+  if (!out_info || !FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesStat(path, out_info); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD) {
+    bool   is_dir = false;
+    size_t size   = 0;
+    if (!SdmmcStat(path, &is_dir, &size)) { return false; }
+    out_info->exists     = true;
+    out_info->is_dir     = is_dir;
+    out_info->size_bytes = size;
+    snprintf(out_info->path, sizeof(out_info->path), "%s", path);
+    return true;
+  }
+#endif
+  return false;
+}
+
+bool FilesActiveList(const char* path, HxFilesListCallback callback, void* user) {
+  if (!FilesActiveIsMounted() || !callback) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesList(path, callback, user); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD) {
+    struct SdListBridge {
+      HxFilesListCallback fn;
+      void*               user;
+    };
+    SdListBridge bridge = { callback, user };
+    auto sd_cb = [](const char* name, bool is_dir, size_t size_bytes, void* u) -> bool {
+      auto* b = static_cast<SdListBridge*>(u);
+      HxFileInfo info = {};
+      snprintf(info.path, sizeof(info.path), "%s", name ? name : "");
+      info.exists     = true;
+      info.is_dir     = is_dir;
+      info.size_bytes = size_bytes;
+      return b->fn(&info, b->user);
+    };
+    return SdmmcList(path, sd_cb, &bridge);
+  }
+#endif
+  return false;
+}
+
+bool FilesActiveReadBytes(const char* path, uint8_t* out, size_t out_size, size_t* out_len) {
+  if (out_len) { *out_len = 0; }
+  if (!out || (out_size == 0) || !FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesReadBytes(path, out, out_size, out_len); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD)    { return SdmmcReadBytesCapped(path, out, out_size, out_len); }
+#endif
+  return false;
+}
+
+bool FilesActiveWriteText(const char* path, const char* text) {
+  if (!FilesActiveIsMounted()) { return false; }
+  const char* safe = text ? text : "";
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesWriteText(path, safe); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD) {
+    return SdmmcWriteBytes(path, reinterpret_cast<const uint8_t*>(safe), strlen(safe), false);
+  }
+#endif
+  return false;
+}
+
+bool FilesActiveAppendText(const char* path, const char* text) {
+  if (!FilesActiveIsMounted()) { return false; }
+  const char* safe = text ? text : "";
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesAppendText(path, safe); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD) {
+    return SdmmcWriteBytes(path, reinterpret_cast<const uint8_t*>(safe), strlen(safe), true);
+  }
+#endif
+  return false;
+}
+
+bool FilesActiveWriteBytes(const char* path, const uint8_t* data, size_t len) {
+  if (!FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesWriteBytes(path, data, len); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD)    { return SdmmcWriteBytes(path, data, len, false); }
+#endif
+  return false;
+}
+
+bool FilesActiveAppendBytes(const char* path, const uint8_t* data, size_t len) {
+  if (!FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesAppendBytes(path, data, len); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD)    { return SdmmcWriteBytes(path, data, len, true); }
+#endif
+  return false;
+}
+
+bool FilesActiveFormat() {
+  if (!FilesActiveIsMounted()) { return false; }
+#if HX_ENABLE_FEATURE_LITTLEFS
+  if (g_active_backend == HX_FILES_BACKEND_FLASH) { return FilesFormat(); }
+#endif
+#if HX_ENABLE_FEATURE_SD
+  if (g_active_backend == HX_FILES_BACKEND_SD)    { return SdmmcFormat(); }
+#endif
+  return false;
+}
+
+#endif // HX_ENABLE_MODULE_STORAGE

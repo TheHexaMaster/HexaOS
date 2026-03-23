@@ -520,6 +520,28 @@ bool SdmmcReadBytes(const char* path, uint8_t* out, size_t out_size, size_t* out
   return (read_len == to_read);
 }
 
+bool SdmmcReadBytesCapped(const char* path, uint8_t* out, size_t max_len, size_t* out_len) {
+  if (out_len) {
+    *out_len = 0;
+  }
+
+  char full[SDMMC_PATH_MAX];
+  if (!SdmmcBuildPath(path, full, sizeof(full))) {
+    return false;
+  }
+
+  FILE* f = fopen(full, "rb");
+  if (!f) {
+    return false;
+  }
+
+  size_t read_len = (max_len > 0) ? fread(out, 1, max_len, f) : 0;
+  fclose(f);
+
+  if (out_len) { *out_len = read_len; }
+  return true;
+}
+
 bool SdmmcWriteBytes(const char* path, const uint8_t* data, size_t len, bool append) {
   char full[SDMMC_PATH_MAX];
   if (!SdmmcBuildPath(path, full, sizeof(full))) {
