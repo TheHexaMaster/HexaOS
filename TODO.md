@@ -1,38 +1,58 @@
-## Sketch of goals for V0.1.0 
+## V0.1.0 — Chronological plan
 
-## Network Features backed up by mod_network
+### 1. Network foundation
+- [ ] Define `mod_network` architecture — abstraction over transport (WiFi / ESP-Hosted / ETH same API)
+- [ ] WiFi driver — init, connect, disconnect, event callbacks (connected, lost, IP acquired)
+- [ ] ESP-Hosted integration as transport backend behind `mod_network` (P4 path, mandatory)
+- [ ] Config persistence for network settings (SSID, password, mode) via existing config handler
 
-- Alpha omega - WIFI and settings. Also from start integration of ESP Hosted 
-- Define the main WebClient provider (async might use self-developed AsyncHttpClientLight) - crucial ASYNC
-- ETHERNET Driver
-- Workshop around Wifi Provisioning, fallbacks etc from begin
+### 2. WiFi provisioning
+- [ ] AP fallback mode (if credentials missing or connection fails N times)
+- [ ] Provisioning flow (setup via AP + captive portal or serial console command)
+- [ ] Fallback policy: retry order, timeout, reset to AP
 
-## WebServer INITIAL Feature
+### 3. Ethernet driver
+- [ ] Ethernet driver under `mod_network` (same interface as WiFi)
+- [ ] Link-up / link-down event handling
+- [ ] WiFi + ETH coexistence (prioritization, failover)
 
-- Define webserver client (self-developed or external library), ASYNC variant only - crucial
-- define mod_webserver and handlers or move management under mod_network as service ()
-- Define "Hello World" layout for Web Management
-- Define the Webserver structure for system management (settings, pinouts, drivers, webconsole etc)
+### 4. Async Central Sensoric Database (IRAM / PSRAM)
+- [ ] Define schema: variable type, timestamp, source, TTL
+- [ ] IRAM / PSRAM allocation — size and layout decision
+- [ ] Write API (task context, lock-free where possible)
+- [ ] Read API (copy-only, no pointers out)
+- [ ] RTOS task for input scheduling (no busy loop)
+- [ ] ISR-safe write bridge (stage 1: basic, ISR queue in stage 2)
 
-## Async Central Sensoric real-time Database placed in IRAM / PSRAM
+### 5. Central event handler / dispatcher
+- [ ] Define event types and priority classes
+- [ ] Async command execution buffer (RTOS queue)
+- [ ] Subscribe/callback registration for consumers
+- [ ] Sync → async bridge (caller submits event, does not block)
 
-- The key - heart engine / service for storing runtime variables pooled from various sensors around system
-- Inputs from various services / drivers in infinite pooling state (i2c, UART, internal etc)
-- Output to various processing engines / services / protocols (MQTT, WebAPI, HASS, ..)
-- Database is NOT a HANDLER. Its owns domain and I/O rules and timming (need to be RTOS driven)
-- Input - direct writes, outputs - pointers prohibited, copy allowed, need to handle ISR
-- in later stage of development might replace all runtime statistics handling 
+### 6. MQTT
+- [ ] MQTT client under event handler (publish = queue event → async send)
+- [ ] Connect/disconnect with retry logic
+- [ ] Subscribe handling via event dispatcher
+- [ ] Sensoric DB → MQTT bridge (periodic export)
+- [ ] Config for broker, port, credentials, topic prefix
 
-## Central event handler / dispatcher for asynchronously managed operations
+### 7. AsyncHttpClient integration
+- [ ] Port own AsyncHttpClient from Tasmota into HexaOS structure
+- [ ] Adapt to `mod_network` abstraction (not directly WiFiClient)
+- [ ] Smoke test — GET/POST request
 
-- crucial bridge between sync and async states / events
-- actually in idea stage. Might not replace primitive offset handlers
-- event / callback dispatcher
+### 8. WebServer — foundation
+- [ ] Confirm library (ESPAsyncWebServer or custom)
+- [ ] `mod_webserver` module — init, start, stop under `mod_network`
+- [ ] Hello World endpoint — `/` returns "HexaOS is alive" + version
 
+### 9. WebServer — management structure
+- [ ] Define URL scheme (`/api/`, `/ui/`, `/console/` etc.)
+- [ ] System settings page (network, pinmap read-only view)
+- [ ] WebConsole — WebSocket bridge to command engine
+- [ ] Sensoric DB live view endpoint (`/api/sensors`)
 
-
-- full webserver implementation,
-- OTA implementation,
-- command priorities / async command execution buffer,
-- low-level memory debugger,
-- Wi-Fi and Ethernet full runtime stack,
+### LATER
+- [ ] OTA — decision: IDF atomic OTA vs. custom (affects partition scheme)
+- [ ] Low-level memory debugger
