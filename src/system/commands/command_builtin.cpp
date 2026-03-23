@@ -19,6 +19,7 @@ bool CommandRegisterConfig();
 bool CommandRegisterState();
 bool CommandRegisterPinmap();
 bool CommandRegisterRuntime();
+bool CommandRegisterFiles();
 
 bool CommandRegisterBuiltins() {
   return CommandRegisterHelp()
@@ -27,5 +28,6 @@ bool CommandRegisterBuiltins() {
       && CommandRegisterConfig()
       && CommandRegisterState()
       && CommandRegisterPinmap()
-      && CommandRegisterRuntime();
+      && CommandRegisterRuntime()
+      && CommandRegisterFiles();
 }

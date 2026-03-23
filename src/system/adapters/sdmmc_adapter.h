@@ -48,7 +48,7 @@ bool SdmmcRmdir(const char* path);
 
 // Returns basic metadata. Pass nullptr for out parameters you do not need.
 bool SdmmcStat(const char* path, bool* out_is_dir, size_t* out_size);
-bool SdmmcGetStorageInfo(size_t* out_total, size_t* out_used);
+bool SdmmcGetStorageInfo(uint64_t* out_total, uint64_t* out_used);
 bool SdmmcList(const char* path, SdmmcListCallback callback, void* user);
 
 bool SdmmcReadBytes(const char* path, uint8_t* out, size_t out_size, size_t* out_len);

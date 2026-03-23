@@ -54,7 +54,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/statvfs.h>
 #include <unistd.h>
 
 #include "headers/hx_pinfunc.h"
@@ -401,15 +400,14 @@ bool SdmmcStat(const char* path, bool* out_is_dir, size_t* out_size) {
   return true;
 }
 
-bool SdmmcGetStorageInfo(size_t* out_total, size_t* out_used) {
-  struct statvfs sv;
-  if (statvfs(SDMMC_MOUNT_PT, &sv) != 0) {
+bool SdmmcGetStorageInfo(uint64_t* out_total, uint64_t* out_used) {
+  uint64_t total  = 0;
+  uint64_t free_b = 0;
+  if (esp_vfs_fat_info(SDMMC_MOUNT_PT, &total, &free_b) != ESP_OK) {
     return false;
   }
-  uint64_t total  = (uint64_t)sv.f_bsize * (uint64_t)sv.f_blocks;
-  uint64_t free_b = (uint64_t)sv.f_bsize * (uint64_t)sv.f_bfree;
-  if (out_total) { *out_total = (size_t)total; }
-  if (out_used)  { *out_used  = (size_t)(total > free_b ? total - free_b : 0); }
+  if (out_total) { *out_total = total; }
+  if (out_used)  { *out_used  = (total > free_b) ? (total - free_b) : 0; }
   return true;
 }
 
