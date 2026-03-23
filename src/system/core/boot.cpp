@@ -28,6 +28,7 @@
 #include "system/core/config.h"
 #include "system/core/pinmap.h"
 #include "system/core/state.h"
+#include "system/services/time_sync_service.h"
 
 static const char* EspResetReasonText(uint32_t reason) {
   switch ((esp_reset_reason_t)reason) {
@@ -106,6 +107,8 @@ void BootInit() {
   if (!PinmapInit()) {
     LogWarn("PIN: init failed");
   }
+
+  TimeSyncBootTryRtc();
 
   if (!StateInit()) {
     LogWarn("STA: init failed");
