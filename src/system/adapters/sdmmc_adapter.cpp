@@ -205,6 +205,13 @@ bool SdmmcInit() {
   return SdmmcResolvePins();
 }
 
+bool SdmmcIsMounted() { return g_mounted; }
+
+bool SdmmcCheckHealth() {
+  if (!g_mounted || !g_card) { return false; }
+  return (sdmmc_get_status(g_card) == ESP_OK);
+}
+
 bool SdmmcMount() {
   if (g_mounted) {
     return true;
@@ -232,7 +239,6 @@ bool SdmmcMount() {
       return false;
     }
     host.pwr_ctrl_handle = g_pwr_ctrl_handle;
-    HX_LOGI(HX_SDMMC_TAG, "LDO power channel=%d enabled", HX_SDMMC_POWER_CHANNEL);
   }
 #endif
 
@@ -244,8 +250,6 @@ bool SdmmcMount() {
     vTaskDelay(pdMS_TO_TICKS(10));
     gpio_set_level((gpio_num_t)g_pin_power, HX_SDMMC_POWER_ON_LEVEL);           // assert
     vTaskDelay(pdMS_TO_TICKS(50));  // allow card to complete power-up
-    HX_LOGI(HX_SDMMC_TAG, "power pin gpio=%d asserted (level=%d)",
-            g_pin_power, HX_SDMMC_POWER_ON_LEVEL);
   }
 
   sdmmc_slot_config_t slot = SDMMC_SLOT_CONFIG_DEFAULT();
@@ -278,9 +282,24 @@ bool SdmmcMount() {
 
   esp_err_t err = esp_vfs_fat_sdmmc_mount(SDMMC_MOUNT_PT, &host, &slot, &mount_cfg, &g_card);
   if (err != ESP_OK) {
-    HX_LOGE(HX_SDMMC_TAG, "mount failed at %s err=%d width=%d-bit",
-            SDMMC_MOUNT_PT, (int)err, g_bus_width);
+    // ESP_ERR_TIMEOUT = no card response = normal "not inserted" state → silent.
+    if (err != ESP_ERR_TIMEOUT) {
+      HX_LOGE(HX_SDMMC_TAG, "mount failed at %s err=%d width=%d-bit",
+              SDMMC_MOUNT_PT, (int)err, g_bus_width);
+    }
     g_card = nullptr;
+
+    // Release LDO and power pin so the next attempt starts from a clean state.
+#ifdef SOC_SDMMC_IO_POWER_EXTERNAL
+    if (g_pwr_ctrl_handle != nullptr) {
+      sd_pwr_ctrl_del_on_chip_ldo(g_pwr_ctrl_handle);
+      g_pwr_ctrl_handle = nullptr;
+    }
+#endif
+    if (g_pin_power >= 0) {
+      gpio_set_level((gpio_num_t)g_pin_power, HX_SDMMC_POWER_ON_LEVEL ? 0 : 1);  // deassert
+    }
+
     return false;
   }
 
@@ -291,10 +310,10 @@ bool SdmmcMount() {
                      * (uint32_t)g_card->csd.sector_size)
                     / (1024ULL * 1024ULL);
 
-  HX_LOGI(HX_SDMMC_TAG, "mount OK at %s width=%d-bit capacity=%lluMB speed=%lukHz",
+  HX_LOGI(HX_SDMMC_TAG, "mount OK at %s width=%d-bit capacity=%luMB speed=%lukHz",
           SDMMC_MOUNT_PT,
           g_bus_width,
-          (unsigned long long)cap_mb,
+          (unsigned long)cap_mb,
           (unsigned long)g_card->real_freq_khz);
 
   return true;

@@ -30,6 +30,13 @@ typedef bool (*SdmmcListCallback)(const char* name, bool is_dir, size_t size_byt
 // Must be called before SdmmcMount. Does not touch hardware.
 bool SdmmcInit();
 
+// Returns true when the SD card is currently mounted.
+bool SdmmcIsMounted();
+
+// Sends CMD13 to the physical card and returns true when it responds correctly.
+// Returns false when the card is not mounted or no longer responds (e.g. removed).
+bool SdmmcCheckHealth();
+
 // Mount the SD card via SDMMC host + FatFS VFS. Configures the SDMMC
 // peripheral using pins resolved in SdmmcInit.
 bool SdmmcMount();

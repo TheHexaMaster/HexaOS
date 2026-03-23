@@ -132,7 +132,7 @@ A clean build selector model where architecture, build flags, and binary content
 
 ---
 
-## 2. Align the Source Tree with the Architectural Layer Model
+## 2. ✅ Align the Source Tree with the Architectural Layer Model
 
 **Goal:** make the real source tree reflect the permanent whitepaper structure.
 
@@ -238,7 +238,7 @@ A lifecycle model in code that matches the architecture and is ready for future 
 
 ---
 
-## 5. Introduce the Shared Domain Scheduler Primitive
+## 5. ✅ Introduce the Shared Domain Scheduler Primitive
 
 **Goal:** avoid both extremes:
 
@@ -332,7 +332,7 @@ A consciously hybrid but still disciplined NVS backend aligned with the architec
 
 ---
 
-## 8. Complete the LittleFS Boundary Refactor
+## 8. ✅ Complete the LittleFS Boundary Refactor
 
 **Goal:** make filesystem ownership follow the architecture.
 
@@ -358,7 +358,7 @@ A real Files domain with a backend adapter, ready for future web file manager, s
 
 ---
 
-## 9. Introduce the First Real Passive Service: Time Synchronization Service
+## 9. ✅ Introduce the First Real Passive Service: Time Synchronization Service
 
 **Goal:** turn the architecture’s timesync model into a real service boundary before RTC and NTP features arrive.
 
@@ -388,7 +388,7 @@ A concrete service example in the codebase that proves the architecture’s earl
 
 ---
 
-## 10. Split `command_builtin.cpp` Before It Becomes the Next Monolith
+## 10. ✅ Split `command_builtin.cpp` Before It Becomes the Next Monolith
 
 **Goal:** keep the command layer maintainable before more command families arrive.
 
@@ -417,7 +417,7 @@ A command layer that stays clean when web terminal, file commands, and future se
 
 ---
 
-## 11. Add Minimal Files Command Surface
+## 11. ✅ Add Minimal Files Command Surface
 
 **Goal:** prove the Files domain is usable through the shared command architecture before web UI arrives.
 

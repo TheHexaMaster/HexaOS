@@ -20,6 +20,7 @@
 
 #include "system/core/log.h"
 #include "system/core/module_registry.h"
+#include "system/core/scheduler.h"
 
 #include "headers/hx_build.h"
 
@@ -32,6 +33,10 @@
 #endif
 
 static constexpr const char* HX_STO_TAG = "STO";
+
+#if HX_ENABLE_FEATURE_SD
+static HxScheduler g_sd_check_sched;
+#endif
 
 static bool StorageInit() {
   bool ok = true;
@@ -61,6 +66,7 @@ static void StorageStart() {
 #endif
 
 #if HX_ENABLE_FEATURE_SD
+  HxSchedulerInit(&g_sd_check_sched, HX_STORAGE_SD_CHECK_INTERVAL_MS, 0);
   if (!SdmmcMount()) {
     HX_LOGW(HX_STO_TAG, "SDMMC mount failed (card may not be inserted)");
   }
@@ -77,6 +83,24 @@ static void StorageEvery100ms() {
 }
 
 static void StorageEverySecond() {
+#if HX_ENABLE_FEATURE_SD
+  if (!HxSchedulerDue(&g_sd_check_sched)) { return; }
+
+  if (SdmmcIsMounted()) {
+    HX_LOGLL(HX_STO_TAG, "SD check: mounted");
+    // Health check: send CMD13 to the physical card; unmount if it no longer responds.
+    if (!SdmmcCheckHealth()) {
+      HX_LOGW(HX_STO_TAG, "SD card removed — unmounting");
+      SdmmcUnmount();
+    }
+  } else {
+    HX_LOGLL(HX_STO_TAG, "SD check: not mounted — attempting mount");
+    // Card not mounted — try to bring it up.
+    if (SdmmcMount()) {
+      HX_LOGI(HX_STO_TAG, "SD card mounted");
+    }
+  }
+#endif
 }
 
 const HxModule ModuleStorage = {

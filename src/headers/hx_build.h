@@ -70,6 +70,11 @@
     #define HX_SDMMC_POWER_CHANNEL (-1)  // -1 = no on-chip LDO channel
   #endif
 #endif
+// SD card presence check interval used by the storage module scheduler.
+#ifndef HX_STORAGE_SD_CHECK_INTERVAL_MS
+  #define HX_STORAGE_SD_CHECK_INTERVAL_MS  3000
+#endif
+
 #define HX_CONFIG_DEFAULT_LOG_LEVEL        3                 // 0-err, 1-warn, 2-info, 3-debug, 4-lld
 #define HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE  false
 #define HX_CONFIG_DEFAULT_STATE_DELAY     2000
