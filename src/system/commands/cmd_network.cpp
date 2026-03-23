@@ -21,6 +21,7 @@
 
 #if HX_ENABLE_MODULE_NETWORK
 
+#include "system/adapters/wifi_adapter.h"
 #include "system/core/config.h"
 #include "system/handlers/network_handler.h"
 
@@ -36,14 +37,19 @@ static HxCmdStatus CmdNetStatus(const char* args, HxCmdOutput* out) {
 
   HxNetworkState state = NetworkGetState();
   CmdOutWriteLine(out, "network:");
-  CmdOutPrintfLine(out, "  state      = %s", NetworkStateStr(state));
+  CmdOutPrintfLine(out, "  wifi       = %s", NetworkStateStr(state));
+#if HX_ENABLE_FEATURE_ETH
+  CmdOutPrintfLine(out, "  eth        = %s", NetworkEthIsUp() ? "up" : "down");
+#endif
 
-  if (state == HX_NETWORK_STATE_CONNECTED) {
+  if (NetworkIsConnected()) {
     char ip[32];
     if (NetworkGetIp(ip, sizeof(ip))) {
       CmdOutPrintfLine(out, "  ip         = %s", ip);
     }
-    CmdOutPrintfLine(out, "  rssi       = %d dBm", (int)NetworkGetRssi());
+    if (state == HX_NETWORK_STATE_CONNECTED) {
+      CmdOutPrintfLine(out, "  rssi       = %d dBm", (int)NetworkGetRssi());
+    }
   }
 
   return HX_CMD_OK;
@@ -119,11 +125,21 @@ static HxCmdStatus CmdNetInfo(const char* args, HxCmdOutput* out) {
 
   if (state == HX_NETWORK_STATE_CONNECTED) {
     char ip[32];
-    if (NetworkGetIp(ip, sizeof(ip))) {
-      CmdOutPrintfLine(out, "  ip           = %s", ip);
+    if (WifiAdapterGetIp(ip, sizeof(ip))) {
+      CmdOutPrintfLine(out, "  wifi_ip      = %s", ip);
     }
     CmdOutPrintfLine(out, "  rssi         = %d dBm", (int)NetworkGetRssi());
   }
+
+#if HX_ENABLE_FEATURE_ETH
+  CmdOutPrintfLine(out, "  eth_link     = %s", NetworkEthIsUp() ? "up" : "down");
+  if (NetworkEthIsUp()) {
+    char eth_ip[32];
+    if (NetworkEthGetIp(eth_ip, sizeof(eth_ip))) {
+      CmdOutPrintfLine(out, "  eth_ip       = %s", eth_ip);
+    }
+  }
+#endif
 
   return HX_CMD_OK;
 }

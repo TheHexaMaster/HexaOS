@@ -90,6 +90,36 @@
     #define HX_SDMMC_POWER_CHANNEL (-1)  // -1 = no on-chip LDO channel
   #endif
 #endif
+// ETHERNET PHY configuration.
+// PHY type, clock mode and MDIO address are board-specific and not
+// derivable from the pinmap — they must be declared here.
+// HX_ETH_PHY_TYPE uses HexaOS-internal identifiers (independent of Arduino ETH.h)
+// so eth_adapter.cpp can select the IDF PHY constructor at compile time.
+// HX_ETH_CLK_MODE and HX_ETH_PHY_ADDR pick up board file definitions when present.
+#define HX_ETH_PHY_GENERIC  0   // Generic IEEE 802.3 (works for TLK110 on P4, fallback)
+#define HX_ETH_PHY_TLK110   1
+#define HX_ETH_PHY_LAN8720  2
+#define HX_ETH_PHY_KSZ8081  3
+#define HX_ETH_PHY_DP83848  4
+
+#ifndef HX_ETH_PHY_TYPE
+  #define HX_ETH_PHY_TYPE HX_ETH_PHY_TLK110
+#endif
+#ifndef HX_ETH_CLK_MODE
+  #ifdef ETH_CLK_MODE
+    #define HX_ETH_CLK_MODE ETH_CLK_MODE
+  #else
+    #define HX_ETH_CLK_MODE EMAC_CLK_EXT_IN
+  #endif
+#endif
+#ifndef HX_ETH_PHY_ADDR
+  #ifdef ETH_PHY_ADDR
+    #define HX_ETH_PHY_ADDR ETH_PHY_ADDR
+  #else
+    #define HX_ETH_PHY_ADDR 1
+  #endif
+#endif
+
 // I2C BUS CONFIG
 // SCL glitch filter pulse count. Filters spikes shorter than this many
 // APB clock cycles. IDF default is 7; lower values reduce noise immunity.

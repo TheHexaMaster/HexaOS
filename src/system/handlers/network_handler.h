@@ -6,10 +6,13 @@
 
   Description
   Network domain handler for HexaOS.
-  Owns the WiFi connection state machine, automatic retry policy and the
-  public network API consumed by the command layer and other modules.
-  Delegates physical WiFi operations to wifi_adapter; callers never touch
-  the adapter directly.
+  Owns the WiFi state machine, ETH link tracking, Hx.net_* runtime flags,
+  automatic WiFi retry policy, and the public network API consumed by the
+  command layer and other modules.
+  Delegates physical operations to wifi_adapter and eth_adapter; callers
+  never touch the adapters directly.
+  Dual-active mode: both WiFi STA and ETH netifs are active simultaneously.
+  ETH has routing priority — when ETH has an IP it is set as the default netif.
   Config persistence: wifi.ssid / wifi.password are read on auto-connect
   and written back when NetworkConnect() is called with new credentials.
   Gated by HX_ENABLE_MODULE_NETWORK.
@@ -78,9 +81,21 @@ bool NetworkAutoConnect();
 
 HxNetworkState NetworkGetState();
 const char*    NetworkStateStr(HxNetworkState state);
+
+// Returns true when any interface (WiFi or ETH) has an IP address.
 bool           NetworkIsConnected();
+
+// Writes the active IP to out. Prefers ETH over WiFi when both are up.
 bool           NetworkGetIp(char* out, size_t out_size);
+
+// WiFi-specific RSSI; 0 when not associated.
 int8_t         NetworkGetRssi();
+
+// Returns true when ETH has an IP address.
+bool           NetworkEthIsUp();
+
+// Writes the ETH IP to out; returns false when ETH has no IP.
+bool           NetworkEthGetIp(char* out, size_t out_size);
 
 // ---------------------------------------------------------------------------
 // Event subscription (single subscriber)

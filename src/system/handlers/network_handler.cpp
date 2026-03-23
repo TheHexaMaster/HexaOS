@@ -7,14 +7,27 @@
   Description
   Network domain handler implementation.
 
-  State machine transitions:
-    IDLE        → NetworkConnect() issued                  → CONNECTING
-    CONNECTING  → adapter IP_ACQUIRED                      → CONNECTED
-    CONNECTING  → adapter DISCONNECTED                     → FAILED (retry armed)
-    CONNECTED   → adapter DISCONNECTED                     → FAILED (retry armed)
-    FAILED      → retry interval elapsed, retry < max      → CONNECTING
-    FAILED      → retry count == HX_WIFI_RETRY_MAX         → stays FAILED, no more retries
-    any         → NetworkDisconnect() called               → IDLE
+  WiFi state machine transitions:
+    IDLE        → NetworkConnect() issued              → CONNECTING
+    CONNECTING  → WiFi IP_ACQUIRED                     → CONNECTED
+    CONNECTING  → WiFi DISCONNECTED                    → FAILED (retry armed)
+    CONNECTED   → WiFi DISCONNECTED                    → FAILED (retry armed)
+    FAILED      → retry interval elapsed, retry < max  → CONNECTING
+    FAILED      → retry count == HX_WIFI_RETRY_MAX     → stays FAILED, no more retries
+    any         → NetworkDisconnect() called           → IDLE
+
+  ETH handling (dual-active):
+    ETH link and IP state are tracked independently via g_eth_has_ip.
+    When ETH acquires an IP it is promoted to the IDF default netif, giving
+    it routing priority over WiFi. When ETH loses its IP the WiFi STA netif
+    is restored as default (if WiFi is up).
+    EthAdapterInit() is called from NetworkInit() and is gated by
+    HX_ENABLE_FEATURE_ETH so the rest of the logic is WiFi-only builds.
+
+  Hx.net_* ownership:
+    net_connected — true when any interface (WiFi or ETH) has an IP.
+    net_has_ip    — same as net_connected (kept aligned for runtime query).
+    Both are updated exclusively by this handler, never by the adapters.
 
   Retry policy:
     The retry counter increments on each DISCONNECTED event while in
@@ -38,7 +51,12 @@
 
 #include <string.h>
 
+#include "esp_netif.h"
+
 #include "system/adapters/wifi_adapter.h"
+#if HX_ENABLE_FEATURE_ETH
+#include "system/adapters/eth_adapter.h"
+#endif
 #include "system/core/config.h"
 #include "system/core/log.h"
 #include "system/core/runtime.h"
@@ -55,6 +73,7 @@ static int              g_retry_count    = 0;
 static HxScheduler      g_retry_sched;
 static HxNetworkEventCb g_event_cb       = nullptr;
 static void*            g_event_cb_user  = nullptr;
+static bool             g_eth_has_ip     = false;
 
 static char g_ssid[64];
 static char g_password[64];
@@ -69,6 +88,34 @@ static void FireEvent(HxNetworkEvent event) {
   }
 }
 
+// Recompute Hx.net_* from the combined WiFi + ETH state.
+// Must be called whenever either transport changes its IP state.
+static void UpdateRuntimeFlags() {
+  bool any_ip = (g_state == HX_NETWORK_STATE_CONNECTED) || g_eth_has_ip;
+  Hx.net_connected = any_ip;
+  Hx.net_has_ip    = any_ip;
+}
+
+#if HX_ENABLE_FEATURE_ETH
+// Set ETH as the IDF default netif (highest routing priority).
+static void EthSetDefault() {
+  esp_netif_t* eth_netif = EthAdapterGetNetif();
+  if (eth_netif) {
+    esp_netif_set_default_netif(eth_netif);
+    HX_LOGI(HX_NET_TAG, "ETH set as default netif");
+  }
+}
+
+// Restore WiFi STA as the IDF default netif (ETH unavailable).
+static void WifiSetDefault() {
+  esp_netif_t* wifi_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+  if (wifi_netif) {
+    esp_netif_set_default_netif(wifi_netif);
+    HX_LOGI(HX_NET_TAG, "WiFi set as default netif");
+  }
+}
+#endif // HX_ENABLE_FEATURE_ETH
+
 static void OnWifiAdapterEvent(WifiAdapterEvent event, void* user) {
   (void)user;
 
@@ -80,12 +127,20 @@ static void OnWifiAdapterEvent(WifiAdapterEvent event, void* user) {
     case WIFI_ADAPTER_EVENT_IP_ACQUIRED:
       g_state       = HX_NETWORK_STATE_CONNECTED;
       g_retry_count = 0;
-      HX_LOGI(HX_NET_TAG, "connected");
+      UpdateRuntimeFlags();
+#if HX_ENABLE_FEATURE_ETH
+      // ETH keeps priority if it already has an IP.
+      if (!g_eth_has_ip) {
+        WifiSetDefault();
+      }
+#endif
+      HX_LOGI(HX_NET_TAG, "WiFi connected");
       FireEvent(HX_NETWORK_EVENT_IP_ACQUIRED);
       FireEvent(HX_NETWORK_EVENT_CONNECTED);
       break;
 
     case WIFI_ADAPTER_EVENT_IP_LOST:
+      UpdateRuntimeFlags();
       FireEvent(HX_NETWORK_EVENT_IP_LOST);
       break;
 
@@ -95,12 +150,14 @@ static void OnWifiAdapterEvent(WifiAdapterEvent event, void* user) {
         g_retry_count++;
         if (g_retry_count >= HX_WIFI_RETRY_MAX) {
           g_state = HX_NETWORK_STATE_FAILED;
-          HX_LOGW(HX_NET_TAG, "max retries reached (%d), giving up", g_retry_count);
+          UpdateRuntimeFlags();
+          HX_LOGW(HX_NET_TAG, "WiFi max retries reached (%d), giving up", g_retry_count);
           FireEvent(HX_NETWORK_EVENT_CONNECT_FAILED);
         } else {
           g_state = HX_NETWORK_STATE_FAILED;
+          UpdateRuntimeFlags();
           HxSchedulerReset(&g_retry_sched);
-          HX_LOGW(HX_NET_TAG, "disconnected — retry %d/%d in %d ms",
+          HX_LOGW(HX_NET_TAG, "WiFi disconnected — retry %d/%d in %d ms",
                   g_retry_count, HX_WIFI_RETRY_MAX, HX_WIFI_RETRY_INTERVAL_MS);
           FireEvent(HX_NETWORK_EVENT_DISCONNECTED);
         }
@@ -108,6 +165,46 @@ static void OnWifiAdapterEvent(WifiAdapterEvent event, void* user) {
       break;
   }
 }
+
+#if HX_ENABLE_FEATURE_ETH
+static void OnEthAdapterEvent(EthAdapterEvent event, void* user) {
+  (void)user;
+
+  switch (event) {
+    case ETH_ADAPTER_EVENT_LINK_UP:
+      // Wait for IP_ACQUIRED before updating flags.
+      break;
+
+    case ETH_ADAPTER_EVENT_IP_ACQUIRED:
+      g_eth_has_ip = true;
+      UpdateRuntimeFlags();
+      EthSetDefault();
+      HX_LOGI(HX_NET_TAG, "ETH connected (default netif)");
+      FireEvent(HX_NETWORK_EVENT_IP_ACQUIRED);
+      FireEvent(HX_NETWORK_EVENT_CONNECTED);
+      break;
+
+    case ETH_ADAPTER_EVENT_IP_LOST:
+      g_eth_has_ip = false;
+      UpdateRuntimeFlags();
+      // Fall back to WiFi as default if it has an IP.
+      if (g_state == HX_NETWORK_STATE_CONNECTED) {
+        WifiSetDefault();
+      }
+      FireEvent(HX_NETWORK_EVENT_IP_LOST);
+      break;
+
+    case ETH_ADAPTER_EVENT_LINK_DOWN:
+      g_eth_has_ip = false;
+      UpdateRuntimeFlags();
+      if (g_state == HX_NETWORK_STATE_CONNECTED) {
+        WifiSetDefault();
+      }
+      FireEvent(HX_NETWORK_EVENT_DISCONNECTED);
+      break;
+  }
+}
+#endif // HX_ENABLE_FEATURE_ETH
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -118,11 +215,28 @@ bool NetworkInit() {
   memset(g_password, 0, sizeof(g_password));
   HxSchedulerInit(&g_retry_sched, HX_WIFI_RETRY_INTERVAL_MS, 0);
   HxSchedulerDisable(&g_retry_sched);
-  return WifiAdapterInit();
+
+  if (!WifiAdapterInit()) {
+    return false;
+  }
+
+#if HX_ENABLE_FEATURE_ETH
+  // Non-fatal: ETH failure does not prevent WiFi from working.
+  if (!EthAdapterInit()) {
+    HX_LOGW(HX_NET_TAG, "ETH init failed — continuing without Ethernet");
+  }
+#endif
+
+  return true;
 }
 
 void NetworkStart() {
   WifiAdapterSetEventCallback(OnWifiAdapterEvent, nullptr);
+
+#if HX_ENABLE_FEATURE_ETH
+  EthAdapterSetEventCallback(OnEthAdapterEvent, nullptr);
+#endif
+
   NetworkAutoConnect();
 }
 
@@ -226,15 +340,38 @@ const char* NetworkStateStr(HxNetworkState state) {
 }
 
 bool NetworkIsConnected() {
-  return g_state == HX_NETWORK_STATE_CONNECTED;
+  return (g_state == HX_NETWORK_STATE_CONNECTED) || g_eth_has_ip;
 }
 
 bool NetworkGetIp(char* out, size_t out_size) {
+  // ETH has priority; fall back to WiFi.
+#if HX_ENABLE_FEATURE_ETH
+  if (g_eth_has_ip && EthAdapterGetIp(out, out_size)) {
+    return true;
+  }
+#endif
   return WifiAdapterGetIp(out, out_size);
 }
 
 int8_t NetworkGetRssi() {
   return WifiAdapterGetRssi();
+}
+
+bool NetworkEthIsUp() {
+#if HX_ENABLE_FEATURE_ETH
+  return g_eth_has_ip;
+#else
+  return false;
+#endif
+}
+
+bool NetworkEthGetIp(char* out, size_t out_size) {
+#if HX_ENABLE_FEATURE_ETH
+  return EthAdapterGetIp(out, out_size);
+#else
+  if (out && out_size > 0) { out[0] = '\0'; }
+  return false;
+#endif
 }
 
 // ---------------------------------------------------------------------------

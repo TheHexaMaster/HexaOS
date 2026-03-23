@@ -22,7 +22,7 @@
 
   Event flow:
     IDF event loop → WifiEventHandler → updates g_connected / g_has_ip,
-    updates Hx.net_connected / Hx.net_has_ip, fires g_event_cb.
+    fires g_event_cb. Hx.net_* flags are managed by network_handler.
 
   The registered event callback is called from the IDF event-loop task.
   Consumers must not block or call WifiAdapterConnect from within it.
@@ -48,7 +48,6 @@
 #include "headers/hx_pinfunc.h"
 #include "system/core/log.h"
 #include "system/core/pinmap.h"
-#include "system/core/runtime.h"
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -82,10 +81,8 @@ static void WifiEventHandler(void* arg, esp_event_base_t event_base,
       FireEvent(WIFI_ADAPTER_EVENT_CONNECTED);
 
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
-      g_connected          = false;
-      g_has_ip             = false;
-      Hx.net_connected     = false;
-      Hx.net_has_ip        = false;
+      g_connected = false;
+      g_has_ip    = false;
       HX_LOGI(HX_WIFI_TAG, "STA disconnected");
       FireEvent(WIFI_ADAPTER_EVENT_DISCONNECTED);
     }
@@ -93,15 +90,12 @@ static void WifiEventHandler(void* arg, esp_event_base_t event_base,
   } else if (event_base == IP_EVENT) {
     if (event_id == IP_EVENT_STA_GOT_IP) {
       ip_event_got_ip_t* ev = static_cast<ip_event_got_ip_t*>(event_data);
-      g_has_ip             = true;
-      Hx.net_has_ip        = true;
-      Hx.net_connected     = true;
+      g_has_ip = true;
       HX_LOGI(HX_WIFI_TAG, "IP acquired: " IPSTR, IP2STR(&ev->ip_info.ip));
       FireEvent(WIFI_ADAPTER_EVENT_IP_ACQUIRED);
 
     } else if (event_id == IP_EVENT_STA_LOST_IP) {
-      g_has_ip      = false;
-      Hx.net_has_ip = false;
+      g_has_ip = false;
       HX_LOGW(HX_WIFI_TAG, "IP lost");
       FireEvent(WIFI_ADAPTER_EVENT_IP_LOST);
     }
