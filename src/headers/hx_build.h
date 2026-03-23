@@ -166,7 +166,7 @@
   #define HX_WIFI_RETRY_INTERVAL_MS  10000
 #endif
 
-#define HX_CONFIG_DEFAULT_LOG_LEVEL        3                 // 0-err, 1-warn, 2-info, 3-debug, 4-lld
+#define HX_CONFIG_DEFAULT_LOG_LEVEL        4                 // 0-err, 1-warn, 2-info, 3-debug, 4-lld
 #define HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE  false
 #define HX_CONFIG_DEFAULT_STATE_DELAY     2000
 

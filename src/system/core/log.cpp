@@ -33,8 +33,11 @@ static size_t g_log_tail = 0;
 static size_t g_log_used = 0;
 static uint32_t g_log_dropped_lines = 0;
 static uint32_t g_log_dropped_isr = 0;
-static HxLogSinkLineHook g_log_sink_pre_line_hook = nullptr;
-static HxLogSinkLineHook g_log_sink_post_line_hook = nullptr;
+static HxLogSinkLineHook     g_log_sink_pre_line_hook  = nullptr;
+static HxLogSinkLineHook     g_log_sink_post_line_hook = nullptr;
+static HxLogSecondaryLineCb  g_secondary_cb            = nullptr;
+static void*                 g_secondary_cb_user       = nullptr;
+static volatile HxLogLevel   g_secondary_level         = HX_LOG_INFO;
 
 static void LogStateEnter() {
   RtosCriticalEnter(&g_log_state_critical);
@@ -289,6 +292,31 @@ static void LogWriteV(HxLogLevel level, const char* tag, const char* fmt, va_lis
   line[sizeof(line) - 1] = '\0';
 
   LogEmitLine(line);
+
+  // Secondary sink — fires after the primary sink, outside any lock.
+  // Reads callback pointer atomically; safe to call from any task.
+  LogStateEnter();
+  HxLogSecondaryLineCb sec_cb   = g_secondary_cb;
+  void*                sec_user = g_secondary_cb_user;
+  HxLogLevel           sec_lvl  = g_secondary_level;
+  LogStateExit();
+
+  if (sec_cb && level <= sec_lvl) {
+    sec_cb(level, line, sec_user);
+  }
+}
+
+void LogSetSecondaryLineCb(HxLogSecondaryLineCb cb, void* user) {
+  LogStateEnter();
+  g_secondary_cb      = cb;
+  g_secondary_cb_user = user;
+  LogStateExit();
+}
+
+void LogSetSecondaryLevel(HxLogLevel level) {
+  LogStateEnter();
+  g_secondary_level = level;
+  LogStateExit();
 }
 
 void LogInit() {

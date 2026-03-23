@@ -46,6 +46,7 @@ enum HxSchemaValueType : uint8_t {
   XS(user_string_e,      "user.string_e",       32,                                 "",                                       true, true) \
   XS(device_name,        "device.name",         32,                                 HX_CONFIG_DEFAULT_DEVICE_NAME,            true, true) \
   XI(log_level,          "log.level",           0,        4,                        HX_CONFIG_DEFAULT_LOG_LEVEL,              true, true) \
+  XI(log_level_wc,       "log.level_wc",        0,        4,                        HX_CONFIG_DEFAULT_LOG_LEVEL,              true, true) \
   XB(safeboot_enable,    "safeboot.enable",                                         HX_CONFIG_DEFAULT_SAFEBOOT_ENABLE,        true, true) \
   XI(states_delay,       "states.delay",        0,        600000,                   HX_CONFIG_DEFAULT_STATE_DELAY,            true, true) \
   XS(board_pinmap,       "board.pinmap",        HX_BUILD_BOARD_PINMAP_MAX_LEN,      HX_BUILD_DEFAULT_BOARD_PINMAP_JSON,       true, false) \

@@ -911,5 +911,6 @@ void ConfigApply() {
   ConfigCopyCurrent(&snapshot);
 
   LogSetLevel((HxLogLevel)snapshot.log_level);
+  LogSetSecondaryLevel((HxLogLevel)snapshot.log_level_wc);
   Hx.safeboot = snapshot.safeboot_enable;
 }

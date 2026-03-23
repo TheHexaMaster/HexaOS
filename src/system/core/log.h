@@ -25,6 +25,7 @@ enum HxLogLevel : uint8_t {
 };
 
 typedef void (*HxLogSinkLineHook)();
+typedef void (*HxLogSecondaryLineCb)(HxLogLevel level, const char* line, void* user);
 
 typedef struct {
   size_t (*write_data)(const uint8_t* data, size_t len);
@@ -38,6 +39,8 @@ void LogSetSinkWriteOps(const HxLogSinkWriteOps* ops);
 void LogSetLevel(HxLogLevel level);
 HxLogLevel LogGetLevel();
 void LogSetSinkLineHooks(HxLogSinkLineHook pre_write_line, HxLogSinkLineHook post_write_line);
+void LogSetSecondaryLineCb(HxLogSecondaryLineCb cb, void* user);
+void LogSetSecondaryLevel(HxLogLevel level);
 
 void LogRaw(const char* text);
 void LogDebug(const char* fmt, ...);

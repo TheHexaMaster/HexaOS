@@ -56,7 +56,7 @@
 ### 9. WebServer — management structure
 - [ ] Define URL scheme (`/api/`, `/ui/`, `/console/` etc.)
 - [ ] System settings page (network, pinmap read-only view)
-- [ ] WebConsole — WebSocket bridge to command engine
+- [x] WebConsole — WebSocket bridge to command engine
 - [ ] Sensoric DB live view endpoint (`/api/sensors`)
 
 ### LATER
