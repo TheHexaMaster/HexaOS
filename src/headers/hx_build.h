@@ -33,7 +33,7 @@
 #define HX_ENABLE_MODULE_UART             true
 // Not yet implemented — shell only, disabled until functional
 #define HX_ENABLE_MODULE_BERRY            false
-#define HX_ENABLE_MODULE_WEB              false
+#define HX_ENABLE_MODULE_WEB              true
 #define HX_ENABLE_MODULE_LVGL             false
 
 // PANIC ACTION

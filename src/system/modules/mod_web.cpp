@@ -5,8 +5,14 @@
   SPDX-License-Identifier: GPL-3.0-only
 
   Description
-  Web service module stub.
-  Defines the lifecycle shell for future HTTP, web UI and remote service integration within the standard HexaOS module model.
+  Web service module.
+  Hosts the ESPAsyncWebServer instance and registers HTTP routes directly.
+  Gated by HX_ENABLE_MODULE_WEB.
+
+  Lifecycle:
+    WebInit  — instantiate AsyncWebServer, register routes.
+    WebStart — call server.begin(); server accepts connections once an IP
+               is acquired (lwIP is already up from network module init).
 */
 
 #include "headers/hx_build.h"
@@ -15,35 +21,60 @@
 
 #if HX_ENABLE_MODULE_WEB
 
+#include <ESPAsyncWebServer.h>
+
+#include "system/core/runtime.h"
+
+// ---------------------------------------------------------------------------
+// Module state
+// ---------------------------------------------------------------------------
+
+static constexpr const char* HX_WEB_TAG = "WEB";
+
+static AsyncWebServer* g_server = nullptr;
+
+// ---------------------------------------------------------------------------
+// Routes
+// ---------------------------------------------------------------------------
+
+static void RegisterRoutes() {
+  g_server->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send(200, "text/plain", HX_SYSTEM_NAME " v" HX_VERSION);
+  });
+
+  g_server->onNotFound([](AsyncWebServerRequest* request) {
+    request->send(404, "text/plain", "Not found");
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Module lifecycle
+// ---------------------------------------------------------------------------
+
 static bool WebInit() {
-  LogInfo("WEB: init");
+  g_server = new AsyncWebServer(80);
+  if (!g_server) {
+    HX_LOGE(HX_WEB_TAG, "server alloc failed");
+    return false;
+  }
+  RegisterRoutes();
+  HX_LOGI(HX_WEB_TAG, "init OK");
   return true;
 }
 
 static void WebStart() {
-  LogInfo("WEB: start");
-}
-
-static void WebLoop() {
-}
-
-static void WebEvery10ms() {
-}
-
-static void WebEvery100ms() {
-}
-
-static void WebEverySecond() {
+  g_server->begin();
+  HX_LOGI(HX_WEB_TAG, "listening on port 80");
 }
 
 const HxModule ModuleWeb = {
-  .name = "web",
-  .init = WebInit,
-  .start = WebStart,
-  .loop = WebLoop,
-  .every_10ms = WebEvery10ms,
-  .every_100ms = WebEvery100ms,
-  .every_1s = WebEverySecond
+  .name        = "web",
+  .init        = WebInit,
+  .start       = WebStart,
+  .loop        = nullptr,
+  .every_10ms  = nullptr,
+  .every_100ms = nullptr,
+  .every_1s    = nullptr
 };
 
-#endif
+#endif // HX_ENABLE_MODULE_WEB
